@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "milens-self": {
+      "type": "http",
+      "url": "http://localhost:3100/mcp",
+      "description": "Milens analyzing its own codebase"
+    }
+  }
+}

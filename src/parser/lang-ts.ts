@@ -1,0 +1,91 @@
+import { join, dirname, relative } from 'node:path';
+import { existsSync } from 'node:fs';
+import type { LangSpec } from './extract.js';
+
+const spec: LangSpec = {
+  id: 'typescript',
+  extensions: ['.ts', '.tsx'],
+  wasmName: 'tree-sitter-tsx',
+  queries: {
+    functions: `[
+      (function_declaration name: (identifier) @name) @def
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @name
+          value: (arrow_function)
+        )
+      ) @def
+    ]`,
+    classes: `(class_declaration name: (type_identifier) @name) @def`,
+    methods: `(method_definition name: (property_identifier) @name) @def`,
+    interfaces: `(interface_declaration name: (type_identifier) @name) @def`,
+    enums: `(enum_declaration name: (identifier) @name) @def`,
+    imports: `(import_statement
+      source: (string (string_fragment) @source)
+    ) @def`,
+    exports: `[
+      (export_statement
+        declaration: (function_declaration name: (identifier) @name)
+      )
+      (export_statement
+        declaration: (class_declaration name: (type_identifier) @name)
+      )
+      (export_statement
+        declaration: (interface_declaration name: (type_identifier) @name)
+      )
+      (export_statement
+        declaration: (enum_declaration name: (identifier) @name)
+      )
+      (export_statement
+        declaration: (lexical_declaration
+          (variable_declarator name: (identifier) @name)
+        )
+      )
+      (export_statement
+        (export_clause (export_specifier name: (identifier) @name))
+      )
+    ]`,
+    calls: `
+      (call_expression function: (identifier) @callee) @def
+      (call_expression function: (member_expression property: (property_identifier) @callee)) @def
+    `,
+    heritage: `[
+      (class_declaration
+        name: (type_identifier) @child
+        (class_heritage (extends_clause value: (identifier) @parent))
+      ) @def
+      (class_declaration
+        name: (type_identifier) @child
+        (class_heritage (implements_clause (type_identifier) @parent))
+      ) @def
+    ]`,
+  },
+  resolveImport(raw, fromFile, root, aliases) {
+    // Check aliases first (e.g. @ → src)
+    for (const [alias, target] of Object.entries(aliases)) {
+      if (raw.startsWith(alias + '/') || raw === alias) {
+        raw = raw.replace(alias, target);
+        break;
+      }
+    }
+
+    // Skip bare module specifiers (node_modules)
+    if (!raw.startsWith('.') && !raw.startsWith('/')) return null;
+
+    const dir = dirname(join(root, fromFile));
+    const base = join(dir, raw);
+    const candidates = [
+      base + '.ts', base + '.tsx',
+      base + '.js', base + '.jsx',
+      join(base, 'index.ts'), join(base, 'index.tsx'),
+      join(base, 'index.js'),
+    ];
+
+    for (const p of candidates) {
+      if (existsSync(p)) return relative(root, p).replace(/\\/g, '/');
+    }
+    return null;
+  },
+};
+
+export default spec;

@@ -1,0 +1,196 @@
+#!/usr/bin/env node
+import { Command } from 'commander';
+import { resolve, join } from 'node:path';
+import { mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+
+const program = new Command();
+
+program
+  .name('milens')
+  .description('Code intelligence engine — analyze codebases, build knowledge graphs, serve via MCP')
+  .version('0.2.0');
+
+program
+  .command('analyze')
+  .description('Index a codebase: parse symbols, resolve dependencies, build search index')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .option('-o, --output <dir>', 'Output directory for database')
+  .option('-v, --verbose', 'Show detailed progress')
+  .option('-f, --force', 'Force full re-index')
+  .action(async (opts) => {
+    const rootPath = resolve(opts.path);
+    const outDir = opts.output ?? join(rootPath, '.milens');
+    mkdirSync(outDir, { recursive: true });
+    const dbPath = join(outDir, 'milens.db');
+
+    // Load project aliases (tsconfig paths, etc.)
+    const aliases = loadAliases(rootPath);
+
+    const { analyze } = await import('./analyzer/engine.js');
+    const stats = await analyze({
+      rootPath,
+      dbPath,
+      verbose: opts.verbose,
+      force: opts.force,
+      aliases,
+    });
+
+    // Register in global registry
+    const contentHash = createHash('sha256').update(JSON.stringify(stats)).digest('hex').slice(0, 12);
+    const { RepoRegistry } = await import('./store/registry.js');
+    new RepoRegistry().register(rootPath, dbPath, contentHash);
+
+    console.log(`\n✓ Indexed ${stats.symbolCount} symbols, ${stats.linkCount} links across ${stats.filesParsed} files (${stats.durationMs}ms)`);
+  });
+
+program
+  .command('search <query>')
+  .description('Search symbols by name')
+  .option('-l, --limit <n>', 'Max results', '20')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .action(async (query, opts) => {
+    const { Database } = await import('./store/db.js');
+    const { RepoRegistry } = await import('./store/registry.js');
+    const dbPath = new RepoRegistry().findDbPath(resolve(opts.path));
+    if (!dbPath) { console.error('Not indexed. Run `milens analyze` first.'); process.exit(1); }
+    const db = new Database(dbPath);
+    const results = db.searchSymbols(query, parseInt(opts.limit));
+    for (const s of results) {
+      console.log(`${s.name} [${s.kind}] ${s.filePath}:${s.startLine}${s.exported ? ' (exported)' : ''}`);
+    }
+    db.close();
+  });
+
+program
+  .command('inspect <symbol>')
+  .description('360° view of a symbol: refs, deps, hierarchy')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .action(async (symbol, opts) => {
+    const { Database } = await import('./store/db.js');
+    const { RepoRegistry } = await import('./store/registry.js');
+    const dbPath = new RepoRegistry().findDbPath(resolve(opts.path));
+    if (!dbPath) { console.error('Not indexed. Run `milens analyze` first.'); process.exit(1); }
+    const db = new Database(dbPath);
+    const symbols = db.findSymbolByName(symbol);
+    for (const sym of symbols) {
+      console.log(`\n${sym.name} [${sym.kind}] ${sym.filePath}:${sym.startLine}`);
+      const incoming = db.getIncomingLinks(sym.id);
+      if (incoming.length) {
+        console.log('  incoming:');
+        for (const l of incoming) {
+          const from = db.findSymbolById(l.fromId);
+          console.log(`    ${l.type}: ${from?.name ?? l.fromId} (${from?.filePath ?? '?'})`);
+        }
+      }
+      const outgoing = db.getOutgoingLinks(sym.id);
+      if (outgoing.length) {
+        console.log('  outgoing:');
+        for (const l of outgoing) {
+          const to = db.findSymbolById(l.toId);
+          console.log(`    ${l.type}: ${to?.name ?? l.toId} (${to?.filePath ?? '?'})`);
+        }
+      }
+    }
+    db.close();
+  });
+
+program
+  .command('impact <symbol>')
+  .description('Blast radius: what breaks if this symbol changes?')
+  .option('-d, --direction <dir>', 'upstream or downstream', 'upstream')
+  .option('--depth <n>', 'Max traversal depth', '3')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .action(async (symbol, opts) => {
+    const { Database } = await import('./store/db.js');
+    const { RepoRegistry } = await import('./store/registry.js');
+    const dbPath = new RepoRegistry().findDbPath(resolve(opts.path));
+    if (!dbPath) { console.error('Not indexed. Run `milens analyze` first.'); process.exit(1); }
+    const db = new Database(dbPath);
+    const symbols = db.findSymbolByName(symbol);
+    const depth = parseInt(opts.depth);
+    for (const sym of symbols) {
+      console.log(`\nTARGET: ${sym.name} [${sym.kind}] ${sym.filePath}:${sym.startLine}`);
+      const refs = opts.direction === 'upstream'
+        ? db.findUpstream(sym.id, depth)
+        : db.findDownstream(sym.id, depth);
+      if (refs.length === 0) {
+        console.log(`  No ${opts.direction} dependencies.`);
+      }
+      for (const { symbol: ref, depth: d, via } of refs) {
+        console.log(`  [depth ${d}] ${ref.name} [${ref.kind}] ${ref.filePath}:${ref.startLine} (${via})`);
+      }
+    }
+    db.close();
+  });
+
+program
+  .command('serve')
+  .description('Start MCP server')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .option('--http', 'Use HTTP transport instead of stdio')
+  .option('--port <port>', 'HTTP port', '3100')
+  .action(async (opts) => {
+    if (opts.http) {
+      const { startHttp } = await import('./server/mcp.js');
+      await startHttp(parseInt(opts.port), resolve(opts.path));
+    } else {
+      const { startStdio } = await import('./server/mcp.js');
+      await startStdio(resolve(opts.path));
+    }
+  });
+
+program
+  .command('status')
+  .description('Show index status')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .action(async (opts) => {
+    const { Database } = await import('./store/db.js');
+    const { RepoRegistry } = await import('./store/registry.js');
+    const reg = new RepoRegistry();
+    const entry = reg.findByRoot(resolve(opts.path));
+    if (!entry) { console.log('Not indexed.'); return; }
+    const db = new Database(entry.dbPath);
+    const stats = db.getStats();
+    console.log(`Repository: ${entry.rootPath}`);
+    console.log(`Database:   ${entry.dbPath}`);
+    console.log(`Indexed:    ${entry.analyzedAt}`);
+    console.log(`Symbols:    ${stats.symbols}`);
+    console.log(`Links:      ${stats.links}`);
+    console.log(`Files:      ${stats.files}`);
+    db.close();
+  });
+
+program.parse();
+
+// ── Helpers ──
+
+function loadAliases(rootPath: string): Record<string, string> {
+  const aliases: Record<string, string> = {};
+  const tsconfigPath = join(rootPath, 'tsconfig.json');
+  if (existsSync(tsconfigPath)) {
+    try {
+      const raw = readFileSync(tsconfigPath, 'utf-8')
+        .replace(/\/\/.*$/gm, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+      const cfg = JSON.parse(raw);
+      const paths = cfg.compilerOptions?.paths ?? {};
+      for (const [alias, targets] of Object.entries(paths)) {
+        const clean = alias.replace('/*', '');
+        const target = (targets as string[])[0]?.replace('/*', '').replace('./', '') ?? '';
+        if (clean && target) aliases[clean] = target;
+      }
+    } catch { /* ignore */ }
+  }
+  // PSR-4 from composer.json
+  const composerPath = join(rootPath, 'composer.json');
+  if (existsSync(composerPath)) {
+    try {
+      const composer = JSON.parse(readFileSync(composerPath, 'utf-8'));
+      for (const [ns, dir] of Object.entries(composer.autoload?.['psr-4'] ?? {})) {
+        aliases[ns] = (dir as string).replace(/\/$/, '');
+      }
+    } catch { /* ignore */ }
+  }
+  return aliases;
+}

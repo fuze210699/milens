@@ -1,0 +1,118 @@
+import { describe, it, expect, beforeAll } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { getParser, loadLanguage } from '../../src/parser/loader.js';
+import { extractFromTree } from '../../src/parser/extract.js';
+import tsSpec from '../../src/parser/lang-ts.js';
+import pySpec from '../../src/parser/lang-py.js';
+import goSpec from '../../src/parser/lang-go.js';
+
+const FIXTURES = join(import.meta.dirname, '..', 'fixtures');
+
+describe('TypeScript extractor', () => {
+  it('extracts functions, classes, methods, and exports', async () => {
+    const source = readFileSync(join(FIXTURES, 'ts-project', 'src', 'auth.ts'), 'utf-8');
+    const parser = await getParser(tsSpec.wasmName);
+    const lang = await loadLanguage(tsSpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, tsSpec, 'src/auth.ts');
+
+    const names = result.symbols.map(s => s.name);
+    expect(names).toContain('AuthService');
+    expect(names).toContain('hashPassword');
+
+    // Methods inside class
+    const methods = result.symbols.filter(s => s.kind === 'method');
+    expect(methods.length).toBeGreaterThanOrEqual(2);
+    expect(methods.some(m => m.name === 'register')).toBe(true);
+    expect(methods.some(m => m.name === 'findByEmail')).toBe(true);
+
+    // Exports
+    expect(result.exportedNames.has('AuthService')).toBe(true);
+    expect(result.exportedNames.has('hashPassword')).toBe(true);
+
+    // Imports
+    expect(result.imports.length).toBeGreaterThan(0);
+    expect(result.imports.some(i => i.modulePath.includes('models'))).toBe(true);
+
+    // Calls
+    expect(result.calls.some(c => c.calleeName === 'createUser')).toBe(true);
+  });
+
+  it('extracts interfaces and types from models', async () => {
+    const source = readFileSync(join(FIXTURES, 'ts-project', 'src', 'models.ts'), 'utf-8');
+    const parser = await getParser(tsSpec.wasmName);
+    const lang = await loadLanguage(tsSpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, tsSpec, 'src/models.ts');
+
+    const names = result.symbols.map(s => s.name);
+    expect(names).toContain('User');
+    expect(names).toContain('createUser');
+  });
+});
+
+describe('Python extractor', () => {
+  it('extracts classes and functions', async () => {
+    const source = readFileSync(join(FIXTURES, 'py-project', 'models.py'), 'utf-8');
+    const parser = await getParser(pySpec.wasmName);
+    const lang = await loadLanguage(pySpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, pySpec, 'models.py');
+
+    const names = result.symbols.map(s => s.name);
+    expect(names).toContain('User');
+    expect(names).toContain('create_user');
+
+    const methods = result.symbols.filter(s => s.kind === 'method');
+    expect(methods.some(m => m.name === '__init__')).toBe(true);
+    expect(methods.some(m => m.name === 'display')).toBe(true);
+  });
+
+  it('extracts imports and calls', async () => {
+    const source = readFileSync(join(FIXTURES, 'py-project', 'service.py'), 'utf-8');
+    const parser = await getParser(pySpec.wasmName);
+    const lang = await loadLanguage(pySpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, pySpec, 'service.py');
+
+    expect(result.imports.some(i => i.modulePath === 'models')).toBe(true);
+    expect(result.calls.some(c => c.calleeName === 'create_user')).toBe(true);
+  });
+});
+
+describe('Go extractor', () => {
+  it('extracts structs, interfaces, and functions', async () => {
+    const source = readFileSync(join(FIXTURES, 'go-project', 'models', 'user.go'), 'utf-8');
+    const parser = await getParser(goSpec.wasmName);
+    const lang = await loadLanguage(goSpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, goSpec, 'models/user.go');
+
+    const names = result.symbols.map(s => s.name);
+    expect(names).toContain('User');
+    expect(names).toContain('UserRepository');
+    expect(names).toContain('NewUser');
+
+    const structs = result.symbols.filter(s => s.kind === 'struct');
+    expect(structs.some(s => s.name === 'User')).toBe(true);
+
+    const interfaces = result.symbols.filter(s => s.kind === 'interface');
+    expect(interfaces.some(i => i.name === 'UserRepository')).toBe(true);
+  });
+
+  it('extracts methods and calls', async () => {
+    const source = readFileSync(join(FIXTURES, 'go-project', 'service', 'handler.go'), 'utf-8');
+    const parser = await getParser(goSpec.wasmName);
+    const lang = await loadLanguage(goSpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, goSpec, 'service/handler.go');
+
+    const names = result.symbols.map(s => s.name);
+    expect(names).toContain('UserService');
+    expect(names).toContain('NewUserService');
+    expect(names).toContain('Register');
+
+    expect(result.calls.some(c => c.calleeName === 'NewUser')).toBe(true);
+  });
+});

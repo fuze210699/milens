@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { scanFiles } from './scanner.js';
 import { langForFile } from '../parser/languages.js';
 import { getParser, loadLanguage } from '../parser/loader.js';
-import { extractFromTree } from '../parser/extract.js';
+import { extractFromTree, clearQueryCache } from '../parser/extract.js';
 import { extractVueScript } from '../parser/lang-vue.js';
 import { resolveLinks } from './resolver.js';
 import { Database } from '../store/db.js';
@@ -30,7 +30,18 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const files = scanFiles(rootPath, opts.verbose);
   if (opts.verbose) console.log(`[scan] Found ${files.length} source files`);
 
-  // Phase 2: Parse & extract symbols per file
+  // Phase 2: Group files by language for cache-friendly processing
+  const langGroups = new Map<string, Array<{ relativePath: string; absolutePath: string; spec: LangSpec }>>();
+  for (const file of files) {
+    const spec = langForFile(file.relativePath);
+    if (!spec) continue;
+    const group = langGroups.get(spec.wasmName) ?? [];
+    group.push({ ...file, spec });
+    langGroups.set(spec.wasmName, group);
+  }
+
+  // Phase 3: Parse & extract — process each language group together
+  // This keeps the same parser/language/compiled queries hot in cache
   const symbolsByFile = new Map<string, CodeSymbol[]>();
   const allSymbols: CodeSymbol[] = [];
   const allImports: RawImport[] = [];
@@ -39,44 +50,48 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const resolvedImportPaths = new Map<string, string>();
   let filesParsed = 0;
 
-  for (const file of files) {
-    const spec = langForFile(file.relativePath);
-    if (!spec) continue;
+  for (const [wasmName, group] of langGroups) {
+    // Pre-load parser + language once per group
+    const parser = await getParser(wasmName);
+    const lang = await loadLanguage(wasmName);
 
-    // Check if file changed (skip if hash matches)
-    const source = readFileSync(file.absolutePath, 'utf-8');
-    if (!opts.force && db.isFileUpToDate(file.relativePath, source)) {
-      if (opts.verbose) console.log(`[skip] ${file.relativePath} (unchanged)`);
-      continue;
-    }
+    for (const file of group) {
+      const source = readFileSync(file.absolutePath, 'utf-8');
 
-    try {
-      const result = await parseFile(source, file.relativePath, spec);
-      if (!result) continue;
-
-      symbolsByFile.set(file.relativePath, result.symbols);
-      allSymbols.push(...result.symbols);
-      allImports.push(...result.imports);
-      allCalls.push(...result.calls);
-      allHeritage.push(...result.heritage);
-
-      // Resolve import paths eagerly
-      for (const imp of result.imports) {
-        const resolved = spec.resolveImport(imp.modulePath, imp.filePath, rootPath, aliases);
-        if (resolved) {
-          resolvedImportPaths.set(`${imp.filePath}::${imp.modulePath}`, resolved);
-        }
+      // Skip unchanged files (incremental)
+      if (!opts.force && db.isFileUpToDate(file.relativePath, source)) {
+        if (opts.verbose) console.log(`[skip] ${file.relativePath} (unchanged)`);
+        continue;
       }
 
-      db.upsertFileHash(file.relativePath, source);
-      filesParsed++;
-      if (opts.verbose) console.log(`[parse] ${file.relativePath}: ${result.symbols.length} symbols`);
-    } catch (err) {
-      if (opts.verbose) console.error(`[error] ${file.relativePath}: ${err}`);
+      try {
+        const result = parseFile(source, file.relativePath, file.spec, parser, lang);
+        if (!result) continue;
+
+        symbolsByFile.set(file.relativePath, result.symbols);
+        allSymbols.push(...result.symbols);
+        allImports.push(...result.imports);
+        allCalls.push(...result.calls);
+        allHeritage.push(...result.heritage);
+
+        // Resolve import paths eagerly
+        for (const imp of result.imports) {
+          const resolved = file.spec.resolveImport(imp.modulePath, imp.filePath, rootPath, aliases);
+          if (resolved) {
+            resolvedImportPaths.set(`${imp.filePath}::${imp.modulePath}`, resolved);
+          }
+        }
+
+        db.upsertFileHash(file.relativePath, source);
+        filesParsed++;
+        if (opts.verbose) console.log(`[parse] ${file.relativePath}: ${result.symbols.length} symbols`);
+      } catch (err) {
+        if (opts.verbose) console.error(`[error] ${file.relativePath}: ${err}`);
+      }
     }
   }
 
-  // Phase 3: Resolve cross-file links
+  // Phase 4: Resolve cross-file links
   const links = resolveLinks({
     symbolsByFile,
     allSymbols,
@@ -87,7 +102,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   });
   if (opts.verbose) console.log(`[link] Resolved ${links.length} relationships`);
 
-  // Phase 4: Persist to database
+  // Phase 5: Persist to database in single transaction
   db.transaction(() => {
     db.clearSymbolsAndLinks();
     for (const sym of allSymbols) db.insertSymbol(sym);
@@ -111,11 +126,13 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   return stats;
 }
 
-async function parseFile(
+function parseFile(
   source: string,
   filePath: string,
   spec: LangSpec,
-): Promise<ExtractionResult | null> {
+  parser: import('web-tree-sitter').default,
+  lang: import('web-tree-sitter').default.Language,
+): ExtractionResult | null {
   let code = source;
   let lineOffset = 0;
 
@@ -127,10 +144,7 @@ async function parseFile(
     lineOffset = script.lineOffset;
   }
 
-  const parser = await getParser(spec.wasmName);
-  const lang = await loadLanguage(spec.wasmName);
   const tree = parser.parse(code);
-
   const result = extractFromTree(tree, lang, spec, filePath);
 
   // Adjust line numbers for Vue offset

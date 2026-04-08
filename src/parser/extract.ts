@@ -23,6 +23,84 @@ export interface LangSpec {
   resolveImport(raw: string, fromFile: string, root: string, aliases: Record<string, string>): string | null;
 }
 
+// ── Compiled query cache: compile once per (language, queryString) ──
+// Key = langPtr + "|" + queryString, Value = compiled Query (or null if invalid)
+const queryCache = new Map<string, Parser.Query | null>();
+
+function getOrCompileQuery(lang: Parser.Language, queryStr: string): Parser.Query | null {
+  // Use the language pointer address as part of cache key (each Language instance is unique per WASM)
+  const cacheKey = `${(lang as any).ptr ?? lang.toString()}|${queryStr}`;
+  if (queryCache.has(cacheKey)) return queryCache.get(cacheKey)!;
+
+  try {
+    const q = lang.query(queryStr);
+    queryCache.set(cacheKey, q);
+    return q;
+  } catch {
+    queryCache.set(cacheKey, null);
+    return null;
+  }
+}
+
+export function clearQueryCache(): void {
+  queryCache.clear();
+}
+
+// ── Helpers (stateless, hoisted out of hot path) ──
+
+function captureText(match: Parser.QueryMatch, captureName: string): string | undefined {
+  const captures = match.captures;
+  for (let i = 0; i < captures.length; i++) {
+    if (captures[i].name === captureName) return captures[i].node.text;
+  }
+}
+
+function captureNode(match: Parser.QueryMatch, captureName: string): Parser.SyntaxNode | undefined {
+  const captures = match.captures;
+  for (let i = 0; i < captures.length; i++) {
+    if (captures[i].name === captureName) return captures[i].node;
+  }
+}
+
+// ── Enclosing symbol lookup via sorted spans + binary search ──
+
+interface Span { startLine: number; endLine: number; id: string }
+
+function buildSpanIndex(symbols: CodeSymbol[]): Span[] {
+  const spans: Span[] = [];
+  for (const s of symbols) {
+    if (s.kind === 'function' || s.kind === 'method' || s.kind === 'class' || s.kind === 'struct' || s.kind === 'trait') {
+      spans.push({ startLine: s.startLine, endLine: s.endLine, id: s.id });
+    }
+  }
+  // Sort by startLine desc so we find the innermost (tightest) enclosing first
+  spans.sort((a, b) => b.startLine - a.startLine);
+  return spans;
+}
+
+function findEnclosing(spans: Span[], line: number): string | undefined {
+  // Linear scan on pre-sorted array — tightest match wins (innermost symbol)
+  for (let i = 0; i < spans.length; i++) {
+    const sp = spans[i];
+    if (sp.startLine <= line && sp.endLine >= line) return sp.id;
+  }
+}
+
+// ── Symbol query type mapping (constant) ──
+
+const SYMBOL_QUERY_TYPES: ReadonlyArray<{ key: keyof LangSpec['queries']; kind: SymbolKind }> = [
+  { key: 'functions', kind: 'function' },
+  { key: 'classes', kind: 'class' },
+  { key: 'methods', kind: 'method' },
+  { key: 'interfaces', kind: 'interface' },
+  { key: 'enums', kind: 'enum' },
+  { key: 'structs', kind: 'struct' },
+  { key: 'traits', kind: 'trait' },
+];
+
+// Container kinds for method → parent resolution
+const CONTAINER_KINDS = new Set<SymbolKind>(['class', 'struct', 'trait']);
+
 // ── Universal symbol extractor ──
 
 export function extractFromTree(
@@ -37,23 +115,11 @@ export function extractFromTree(
   const heritage: RawHeritage[] = [];
   const exportedNames = new Set<string>();
 
-  // Helper: run a query and get matches
-  function runQuery(queryStr: string) {
-    try {
-      const q = lang.query(queryStr);
-      return q.matches(tree.rootNode);
-    } catch {
-      return [];
-    }
-  }
+  const root = tree.rootNode;
 
-  function captureText(match: Parser.QueryMatch, captureName: string): string | undefined {
-    const c = match.captures.find(c => c.name === captureName);
-    return c?.node.text;
-  }
-
-  function captureNode(match: Parser.QueryMatch, captureName: string): Parser.SyntaxNode | undefined {
-    return match.captures.find(c => c.name === captureName)?.node;
+  function runQuery(queryStr: string): Parser.QueryMatch[] {
+    const q = getOrCompileQuery(lang, queryStr);
+    return q ? q.matches(root) : [];
   }
 
   function makeSymbolId(kind: SymbolKind, name: string, line: number): string {
@@ -62,17 +128,7 @@ export function extractFromTree(
 
   // ── Extract symbol definitions ──
 
-  const symbolQueryTypes: Array<{ key: keyof typeof spec.queries; kind: SymbolKind }> = [
-    { key: 'functions', kind: 'function' },
-    { key: 'classes', kind: 'class' },
-    { key: 'methods', kind: 'method' },
-    { key: 'interfaces', kind: 'interface' },
-    { key: 'enums', kind: 'enum' },
-    { key: 'structs', kind: 'struct' },
-    { key: 'traits', kind: 'trait' },
-  ];
-
-  for (const { key, kind } of symbolQueryTypes) {
+  for (const { key, kind } of SYMBOL_QUERY_TYPES) {
     const queryStr = spec.queries[key];
     if (!queryStr) continue;
 
@@ -91,10 +147,10 @@ export function extractFromTree(
         exported: false,
       };
 
-      // For methods, find parent class
+      // For methods, find parent class/struct/trait
       if (kind === 'method') {
         const parentClass = symbols.find(
-          s => (s.kind === 'class' || s.kind === 'struct' || s.kind === 'trait') &&
+          s => CONTAINER_KINDS.has(s.kind) &&
                s.startLine <= sym.startLine && s.endLine >= sym.endLine
         );
         if (parentClass) sym.parentId = parentClass.id;
@@ -144,9 +200,11 @@ export function extractFromTree(
     }
   }
 
-  // ── Extract calls ──
+  // ── Extract calls (with span index for fast enclosing lookup) ──
 
   if (spec.queries.calls) {
+    const spans = buildSpanIndex(symbols);
+
     for (const match of runQuery(spec.queries.calls)) {
       const callee = captureText(match, 'callee');
       const defNode = captureNode(match, 'def');
@@ -155,14 +213,9 @@ export function extractFromTree(
       const callLine = defNode.startPosition.row + 1;
       const receiver = captureText(match, 'receiver');
 
-      // Find enclosing symbol
-      const enclosing = symbols.find(
-        s => s.startLine <= callLine && s.endLine >= callLine
-      );
-
       calls.push({
         filePath,
-        enclosingSymbolId: enclosing?.id ?? `${filePath}#module:_top:0`,
+        enclosingSymbolId: findEnclosing(spans, callLine) ?? `${filePath}#module:_top:0`,
         calleeName: callee,
         receiver,
         line: callLine,

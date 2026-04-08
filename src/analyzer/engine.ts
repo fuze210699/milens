@@ -8,6 +8,7 @@ import { extractVueScript } from '../parser/lang-vue.js';
 import { resolveLinks } from './resolver.js';
 import { Database } from '../store/db.js';
 import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, AnalysisStats } from '../types.js';
+import type Parser from 'web-tree-sitter';
 import type { LangSpec } from '../parser/extract.js';
 
 interface EngineOptions {
@@ -130,8 +131,8 @@ function parseFile(
   source: string,
   filePath: string,
   spec: LangSpec,
-  parser: import('web-tree-sitter').default,
-  lang: import('web-tree-sitter').default.Language,
+  parser: Parser,
+  lang: Parser.Language,
 ): ExtractionResult | null {
   let code = source;
   let lineOffset = 0;

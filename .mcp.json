@@ -3,7 +3,7 @@
     "milens": {
       "type": "stdio",
       "command": "npx",
-      "args": ["tsx", "src/cli.ts", "serve"]
+      "args": ["tsx", "src/cli.ts", "serve", "-p", "${workspaceFolder}"]
     }
   }
 }

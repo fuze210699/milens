@@ -49,28 +49,29 @@ npx milens analyze -p .
 
 # Or install globally
 npm install -g milens
+milens analyze -p .   # after global install, npx prefix is optional
 ```
 
 ## Quick Start
 
 ```bash
 # Index a codebase
-milens analyze -p /path/to/repo --verbose
+npx milens analyze -p /path/to/repo --verbose
 
 # Search for symbols
-milens search "UserService"
+npx milens search "UserService"
 
 # 360° symbol context
-milens inspect "AuthService"
+npx milens inspect "AuthService"
 
 # Blast radius — what breaks if this changes?
-milens impact "createUser" --depth 3
+npx milens impact "createUser" --depth 3
 
 # Start MCP server (stdio for editors)
-milens serve -p /path/to/repo
+npx milens serve -p /path/to/repo
 
 # Start MCP server (HTTP for remote agents)
-milens serve --http --port 3100
+npx milens serve --http --port 3100
 ```
 
 ## CLI Commands
@@ -89,7 +90,7 @@ milens serve --http --port 3100
 ### `analyze`
 
 ```bash
-milens analyze -p /path/to/repo --verbose --force --skills
+npx milens analyze -p /path/to/repo --verbose --force --skills
 ```
 
 Scans source files, parses symbols with tree-sitter, resolves imports/calls/inheritance, and stores everything in `.milens/milens.db`.
@@ -105,13 +106,13 @@ Scans source files, parses symbols with tree-sitter, resolves imports/calls/inhe
 ### `search`
 
 ```bash
-milens search "createUser" --limit 10
+npx milens search "createUser" --limit 10
 ```
 
 ### `inspect`
 
 ```bash
-milens inspect "AuthService"
+npx milens inspect "AuthService"
 ```
 
 Shows incoming references (who calls/uses it) and outgoing dependencies (what it calls/imports/extends).
@@ -119,7 +120,7 @@ Shows incoming references (who calls/uses it) and outgoing dependencies (what it
 ### `impact`
 
 ```bash
-milens impact "UserModel" --direction upstream --depth 3
+npx milens impact "UserModel" --direction upstream --depth 3
 ```
 
 *"What breaks if this symbol changes?"* — traverses the dependency graph via recursive CTEs.
@@ -132,21 +133,21 @@ milens impact "UserModel" --direction upstream --depth 3
 ### `serve`
 
 ```bash
-milens serve -p /path/to/repo              # stdio (for editors)
-milens serve -p /path/to/repo --http --port 3100  # HTTP
+npx milens serve -p /path/to/repo              # stdio (for editors)
+npx milens serve -p /path/to/repo --http --port 3100  # HTTP
 ```
 
 ### `list`
 
 ```bash
-milens list    # show all indexed repositories
+npx milens list    # show all indexed repositories
 ```
 
 ### `clean`
 
 ```bash
-milens clean -p /path/to/repo    # remove index for one repo
-milens clean --all               # remove all indexes
+npx milens clean -p /path/to/repo    # remove index for one repo
+npx milens clean --all               # remove all indexes
 ```
 
 ## MCP Server
@@ -210,8 +211,9 @@ Add to `.vscode/mcp.json`:
 {
   "servers": {
     "milens": {
+      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "milens", "serve", "-p", "."]
+      "args": ["-y", "milens", "serve", "-p", "${workspaceFolder}"]
     }
   }
 }
@@ -219,14 +221,14 @@ Add to `.vscode/mcp.json`:
 
 ### Cursor
 
-Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per-project):
+Add to `.cursor/mcp.json` (per-project):
 
 ```json
 {
   "mcpServers": {
     "milens": {
       "command": "npx",
-      "args": ["-y", "milens", "serve"]
+      "args": ["-y", "milens", "serve", "-p", "."]
     }
   }
 }
@@ -235,7 +237,7 @@ Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per-project):
 ### Claude Code
 
 ```bash
-claude mcp add milens -- npx -y milens serve
+claude mcp add milens -- npx -y milens serve -p .
 ```
 
 ### Codex
@@ -245,13 +247,13 @@ Add to `.codex/config.toml`:
 ```toml
 [mcp_servers.milens]
 command = "npx"
-args = ["-y", "milens", "serve"]
+args = ["-y", "milens", "serve", "-p", "."]
 ```
 
 ### HTTP Mode (remote agents)
 
 ```bash
-milens serve --http --port 3100
+npx milens serve --http --port 3100
 ```
 
 Endpoint: `POST http://localhost:3100/mcp`
@@ -261,7 +263,7 @@ Endpoint: `POST http://localhost:3100/mcp`
 Generate editor-specific context files from your codebase's knowledge graph:
 
 ```bash
-milens analyze -p . --skills
+npx milens analyze -p . --skills
 ```
 
 This creates:

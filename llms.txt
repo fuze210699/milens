@@ -55,4 +55,4 @@ npx tsx src/cli.ts analyze -p <path>
 
 ## License
 
-MIT
+PolyForm Noncommercial 1.0.0

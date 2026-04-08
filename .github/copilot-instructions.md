@@ -58,7 +58,7 @@ This project is indexed by **milens** — a lightweight code intelligence platfo
 - web-tree-sitter + tree-sitter-wasms
 - better-sqlite3 (WAL mode, FTS5, recursive CTEs)
 - @modelcontextprotocol/sdk
-- MIT License
+- PolyForm Noncommercial License 1.0.0
 
 ## Key Commands
 

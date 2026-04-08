@@ -12,7 +12,21 @@ interface ResolutionInput {
 export function resolveLinks(input: ResolutionInput): SymbolLink[] {
   const links: SymbolLink[] = [];
   const symbolByName = buildNameIndex(input.allSymbols);
-  const fileExports = buildExportIndex(input.symbolsByFile);
+
+  // Build imported names per file: file → (name → targetFile)
+  const importedNamesPerFile = new Map<string, Map<string, string>>();
+  for (const imp of input.imports) {
+    const targetFile = input.resolvedImportPaths.get(`${imp.filePath}::${imp.modulePath}`);
+    if (!targetFile) continue;
+    let fileImports = importedNamesPerFile.get(imp.filePath);
+    if (!fileImports) {
+      fileImports = new Map();
+      importedNamesPerFile.set(imp.filePath, fileImports);
+    }
+    for (const { name } of imp.names) {
+      fileImports.set(name, targetFile);
+    }
+  }
 
   // ── Resolve imports ──
   for (const imp of input.imports) {
@@ -41,16 +55,31 @@ export function resolveLinks(input: ResolutionInput): SymbolLink[] {
     }
   }
 
-  // ── Resolve calls ──
+  // ── Resolve calls (import-aware) ──
   for (const call of input.calls) {
     const candidates = symbolByName.get(call.calleeName);
     if (!candidates || candidates.length === 0) continue;
 
-    // Prefer symbols in same file, then imported files, then any
+    // Priority: same file > imported symbol > unique global > ambiguous
     const sameFile = candidates.filter(s => s.filePath === call.filePath);
-    const match = sameFile[0] ?? candidates[0];
-    const confidence = sameFile.length > 0 ? 0.9 : candidates.length === 1 ? 0.8 : 0.5;
+    if (sameFile.length > 0) {
+      links.push(makeLink(call.enclosingSymbolId, sameFile[0].id, 'calls', 0.9, call.line));
+      continue;
+    }
 
+    // Check if callee was imported into this file
+    const fileImports = importedNamesPerFile.get(call.filePath);
+    const importedFromFile = fileImports?.get(call.calleeName);
+    if (importedFromFile) {
+      const imported = candidates.find(s => s.filePath === importedFromFile);
+      if (imported) {
+        links.push(makeLink(call.enclosingSymbolId, imported.id, 'calls', 0.95, call.line));
+        continue;
+      }
+    }
+
+    const match = candidates[0];
+    const confidence = candidates.length === 1 ? 0.8 : 0.5;
     links.push(makeLink(call.enclosingSymbolId, match.id, 'calls', confidence, call.line));
   }
 
@@ -89,17 +118,6 @@ function buildNameIndex(symbols: CodeSymbol[]): Map<string, CodeSymbol[]> {
   return index;
 }
 
-function buildExportIndex(byFile: Map<string, CodeSymbol[]>): Map<string, Set<string>> {
-  const index = new Map<string, Set<string>>();
-  for (const [file, symbols] of byFile) {
-    const exported = new Set<string>();
-    for (const s of symbols) {
-      if (s.exported) exported.add(s.name);
-    }
-    index.set(file, exported);
-  }
-  return index;
-}
 
 function makeLink(fromId: string, toId: string, type: LinkType, confidence: number, line?: number): SymbolLink {
   return {

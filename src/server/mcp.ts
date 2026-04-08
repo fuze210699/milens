@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
+import { execSync } from 'node:child_process';
 import { Database } from '../store/db.js';
 import { RepoRegistry } from '../store/registry.js';
 
@@ -82,12 +83,12 @@ export function createMcpServer(rootPath?: string): McpServer {
     version: '0.2.0',
   });
 
-  // ── Tool: search ──
+  // ── Tool: query ──
   server.tool(
-    'search',
-    'Search symbols by name or concept. Returns compact results for token efficiency.',
+    'query',
+    'Search symbols by name, kind, or file path. Returns compact results for token efficiency.',
     {
-      query: z.string().describe('Symbol name or keyword to search'),
+      query: z.string().describe('Symbol name, kind, or keyword to search'),
       repo: z.string().optional().describe('Repository root path (optional if only one indexed)'),
       limit: z.number().optional().default(15).describe('Max results'),
     },
@@ -102,9 +103,9 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
-  // ── Tool: inspect ──
+  // ── Tool: context ──
   server.tool(
-    'inspect',
+    'context',
     'Get 360° context of a symbol: incoming refs, outgoing deps, parent, children.',
     {
       name: z.string().describe('Symbol name to inspect'),
@@ -197,6 +198,168 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
+  // ── Tool: detect_changes ──
+  server.tool(
+    'detect_changes',
+    'Detect changed files via git diff and find affected symbols with upstream impact.',
+    {
+      ref: z.string().optional().default('HEAD').describe('Git ref to diff against (default: HEAD)'),
+      repo: z.string().optional(),
+    },
+    async ({ ref, repo }) => {
+      const { db, root } = getDb(repo);
+      let changedFiles: string[];
+      try {
+        const output = execSync(`git diff --name-only ${ref}`, { cwd: root, encoding: 'utf-8' });
+        const staged = execSync(`git diff --cached --name-only`, { cwd: root, encoding: 'utf-8' });
+        changedFiles = [...new Set([...output.trim().split('\n'), ...staged.trim().split('\n')])].filter(Boolean);
+      } catch {
+        return { content: [{ type: 'text' as const, text: 'Not a git repository or git not available.' }] };
+      }
+
+      if (changedFiles.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No changed files detected.' }] };
+      }
+
+      const lines: string[] = [`${changedFiles.length} changed files:\n`];
+      let totalAffected = 0;
+      for (const file of changedFiles) {
+        const syms = db.getSymbolsByFile(file);
+        if (syms.length === 0) {
+          lines.push(`${file}: (not indexed)`);
+          continue;
+        }
+        lines.push(`${file}: ${syms.length} symbols`);
+        for (const sym of syms) {
+          const upstream = db.findUpstream(sym.id, 1);
+          if (upstream.length > 0) {
+            lines.push(`  ${sym.name} [${sym.kind}] → ${upstream.length} direct dependents`);
+            totalAffected += upstream.length;
+          }
+        }
+      }
+      lines.push(`\nTotal direct dependents affected: ${totalAffected}`);
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ── Tool: explain_relationship ──
+  server.tool(
+    'explain_relationship',
+    'Explain how two symbols are connected. Finds the shortest path in the dependency graph.',
+    {
+      from: z.string().describe('Source symbol name'),
+      to: z.string().describe('Target symbol name'),
+      repo: z.string().optional(),
+    },
+    async ({ from, to, repo }) => {
+      const { db } = getDb(repo);
+      const path = db.findPath(from, to);
+      if (!path) {
+        return { content: [{ type: 'text' as const, text: `No relationship found between "${from}" and "${to}"` }] };
+      }
+
+      const fromSym = db.findSymbolByName(from)[0];
+      const lines = [`FROM: ${fmtSymbol(fromSym)}`, ''];
+      for (const { symbol, depth, via } of path) {
+        lines.push(`  ${'→'.repeat(depth)} [${via}] ${fmtSymbol(symbol)}`);
+      }
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ── Tool: find_dead_code ──
+  server.tool(
+    'find_dead_code',
+    'Find exported symbols with zero incoming references (potentially unused code).',
+    {
+      kind: z.string().optional().describe('Filter by symbol kind (function, class, method, etc.)'),
+      limit: z.number().optional().default(30),
+      repo: z.string().optional(),
+    },
+    async ({ kind, limit, repo }) => {
+      const { db } = getDb(repo);
+      const dead = db.findDeadCode(kind, limit);
+      if (dead.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No unreferenced exported symbols found.' }] };
+      }
+      const lines = [`${dead.length} unreferenced exported symbols:\n`];
+      for (const sym of dead) {
+        lines.push(fmtSymbol(sym));
+      }
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ── Tool: get_file_symbols ──
+  server.tool(
+    'get_file_symbols',
+    'List all symbols defined in a specific file with their relationships.',
+    {
+      file: z.string().describe('File path (relative to repo root)'),
+      repo: z.string().optional(),
+    },
+    async ({ file, repo }) => {
+      const { db } = getDb(repo);
+      const symbols = db.getSymbolsByFile(file);
+      if (symbols.length === 0) {
+        return { content: [{ type: 'text' as const, text: `No symbols found in "${file}". Is the path relative to repo root?` }] };
+      }
+      const lines: string[] = [`${file}: ${symbols.length} symbols\n`];
+      for (const sym of symbols) {
+        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+        const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+        const exp = sym.exported ? ' (exported)' : '';
+        lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp} ← ${incoming.length} refs, → ${outgoing.length} deps`);
+      }
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ── Tool: get_type_hierarchy ──
+  server.tool(
+    'get_type_hierarchy',
+    'Show the inheritance/implementation hierarchy of a class, interface, or trait.',
+    {
+      name: z.string().describe('Symbol name to show hierarchy for'),
+      repo: z.string().optional(),
+    },
+    async ({ name, repo }) => {
+      const { db } = getDb(repo);
+      const symbols = db.findSymbolByName(name);
+      if (symbols.length === 0) {
+        return { content: [{ type: 'text' as const, text: `Symbol "${name}" not found` }] };
+      }
+
+      const lines: string[] = [];
+      for (const sym of symbols) {
+        const { ancestors, descendants } = db.getTypeHierarchy(sym.id);
+        lines.push(`## ${fmtSymbol(sym)}`);
+
+        if (ancestors.length > 0) {
+          lines.push('extends/implements:');
+          for (const { symbol: a, depth } of ancestors) {
+            lines.push(`  ${'↑'.repeat(depth)} ${fmtSymbol(a)}`);
+          }
+        }
+
+        if (descendants.length > 0) {
+          lines.push('implemented/extended by:');
+          for (const { symbol: d, depth } of descendants) {
+            lines.push(`  ${'↓'.repeat(depth)} ${fmtSymbol(d)}`);
+          }
+        }
+
+        if (ancestors.length === 0 && descendants.length === 0) {
+          lines.push('No inheritance relationships found.');
+        }
+        lines.push('');
+      }
+
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
   return server;
 }
 
@@ -216,25 +379,32 @@ export async function startHttp(port: number, rootPath?: string): Promise<void> 
 
   const httpServer = createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/mcp') {
-      const body = await readBody(req);
-      const parsed = JSON.parse(body);
+      try {
+        const body = await readBody(req);
+        const parsed = JSON.parse(body);
 
-      // Check for existing session or create new one
-      let sessionId = req.headers['mcp-session-id'] as string | undefined;
-      let transport = sessionId ? sessions.get(sessionId) : undefined;
+        // Check for existing session or create new one
+        let sessionId = req.headers['mcp-session-id'] as string | undefined;
+        let transport = sessionId ? sessions.get(sessionId) : undefined;
 
-      if (!transport) {
-        sessionId = randomUUID();
-        transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => sessionId!,
-          onsessioninitialized: (id) => {
-            sessions.set(id, transport!);
-          },
-        });
-        await server.connect(transport);
+        if (!transport) {
+          sessionId = randomUUID();
+          transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => sessionId!,
+            onsessioninitialized: (id) => {
+              sessions.set(id, transport!);
+            },
+          });
+          await server.connect(transport);
+        }
+
+        await transport.handleRequest(req, res, parsed);
+      } catch (err) {
+        if (!res.headersSent) {
+          res.writeHead(400);
+          res.end('Bad request');
+        }
       }
-
-      await transport.handleRequest(req, res, parsed);
     } else {
       res.writeHead(404);
       res.end('Not found');
@@ -247,9 +417,19 @@ export async function startHttp(port: number, rootPath?: string): Promise<void> 
 }
 
 function readBody(req: any): Promise<string> {
+  const MAX_BODY = 1024 * 1024; // 1MB
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
+    let size = 0;
+    req.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > MAX_BODY) {
+        req.destroy();
+        reject(new Error('Request body too large'));
+        return;
+      }
+      chunks.push(c);
+    });
     req.on('end', () => resolve(Buffer.concat(chunks).toString()));
     req.on('error', reject);
   });

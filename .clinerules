@@ -1,0 +1,45 @@
+# Milens MCP — Cline Rules
+
+This project uses **milens** MCP for code intelligence. Use the MCP tools to understand the codebase before making changes.
+
+## MCP Setup
+
+Configure milens as an MCP server in Cline settings:
+
+```json
+{
+  "mcpServers": {
+    "milens": {
+      "command": "npx",
+      "args": ["tsx", "src/cli.ts", "serve"]
+    }
+  }
+}
+```
+
+## Available Tools
+
+| Tool | Purpose | Example |
+|------|---------|---------|
+| `query` | Find symbols by name/keyword | `query({query: "auth"})` |
+| `context` | Full symbol context (refs, deps) | `context({name: "AuthService"})` |
+| `impact` | Blast radius analysis | `impact({target: "createUser", direction: "upstream"})` |
+| `status` | Index health check | `status()` |
+| `detect_changes` | Git diff → affected symbols | `detect_changes({ref: "HEAD"})` |
+| `explain_relationship` | Path between symbols | `explain_relationship({from: "A", to: "B"})` |
+| `find_dead_code` | Unused exported symbols | `find_dead_code({kind: "function"})` |
+| `get_file_symbols` | Symbols in a file | `get_file_symbols({file: "src/foo.ts"})` |
+| `get_type_hierarchy` | Inheritance tree | `get_type_hierarchy({name: "MyClass"})` |
+
+## Workflow
+
+1. **Before editing** — `inspect` the target symbol, then `impact` to check blast radius
+2. **When exploring** — `search` for concepts rather than grepping
+3. **After changes** — re-index if needed: `npx tsx src/cli.ts analyze -p .`
+
+## Project Context
+
+- TypeScript ESM project (Node.js ≥20)
+- 8 language parsers via tree-sitter WASM
+- SQLite storage with FTS5 search and recursive CTE graph traversal
+- MIT License

@@ -1,0 +1,13 @@
+# Milens MCP — Codex Configuration
+
+# Add to ~/.codex/config.toml (system scope) or .codex/config.toml (project scope)
+
+[mcp_servers.milens]
+command = "npx"
+args = ["tsx", "src/cli.ts", "serve"]
+
+# Instructions for Codex agent:
+# - Use search({query}) to find symbols by name
+# - Use inspect({name}) to see full symbol context
+# - Use impact({target, direction: "upstream"}) before modifying code
+# - Re-index after changes: npx tsx src/cli.ts analyze -p .

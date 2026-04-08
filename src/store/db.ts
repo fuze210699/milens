@@ -70,6 +70,10 @@ export class Database {
       countSymbols: this.db.prepare('SELECT COUNT(*) as c FROM symbols'),
       countLinks: this.db.prepare('SELECT COUNT(*) as c FROM links'),
       countFiles: this.db.prepare('SELECT COUNT(*) as c FROM file_hashes'),
+      deleteFileLinks: this.db.prepare(
+        'DELETE FROM links WHERE from_id IN (SELECT id FROM symbols WHERE file_path = ?)'
+      ),
+      deleteFileSymbols: this.db.prepare('DELETE FROM symbols WHERE file_path = ?'),
     };
   }
 
@@ -162,7 +166,103 @@ export class Database {
     return { symbols, links, files };
   }
 
+  getAllSymbols(): CodeSymbol[] {
+    const rows = this.db.prepare('SELECT * FROM symbols').all() as any[];
+    return rows.map(rowToSymbol);
+  }
+
+  getAllLinks(): SymbolLink[] {
+    const rows = this.db.prepare('SELECT * FROM links').all() as any[];
+    return rows.map(rowToLink);
+  }
+
+  findDeadCode(kind?: string, limit = 50): CodeSymbol[] {
+    const sql = kind
+      ? `SELECT s.* FROM symbols s
+         LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
+         WHERE s.exported = 1 AND s.kind = ? AND l.id IS NULL
+         LIMIT ?`
+      : `SELECT s.* FROM symbols s
+         LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
+         WHERE s.exported = 1 AND l.id IS NULL
+         LIMIT ?`;
+    const rows = kind
+      ? this.db.prepare(sql).all(kind, limit) as any[]
+      : this.db.prepare(sql).all(limit) as any[];
+    return rows.map(rowToSymbol);
+  }
+
+  getTypeHierarchy(symbolId: string): { ancestors: Array<{ symbol: CodeSymbol; depth: number }>; descendants: Array<{ symbol: CodeSymbol; depth: number }> } {
+    const ancestors = this.db.prepare(`
+      WITH RECURSIVE up(id, depth) AS (
+        SELECT to_id, 1 FROM links WHERE from_id = ? AND type IN ('extends', 'implements')
+        UNION
+        SELECT l.to_id, u.depth + 1
+        FROM links l JOIN up u ON l.from_id = u.id
+        WHERE l.type IN ('extends', 'implements') AND u.depth < 10
+      )
+      SELECT DISTINCT s.*, u.depth FROM up u JOIN symbols s ON s.id = u.id ORDER BY u.depth
+    `).all(symbolId) as any[];
+
+    const descendants = this.db.prepare(`
+      WITH RECURSIVE down(id, depth) AS (
+        SELECT from_id, 1 FROM links WHERE to_id = ? AND type IN ('extends', 'implements')
+        UNION
+        SELECT l.from_id, d.depth + 1
+        FROM links l JOIN down d ON l.to_id = d.id
+        WHERE l.type IN ('extends', 'implements') AND d.depth < 10
+      )
+      SELECT DISTINCT s.*, d.depth FROM down d JOIN symbols s ON s.id = d.id ORDER BY d.depth
+    `).all(symbolId) as any[];
+
+    return {
+      ancestors: ancestors.map(r => ({ symbol: rowToSymbol(r), depth: r.depth })),
+      descendants: descendants.map(r => ({ symbol: rowToSymbol(r), depth: r.depth })),
+    };
+  }
+
+  findPath(fromName: string, toName: string, maxDepth = 5): Array<{ symbol: CodeSymbol; depth: number; via: string }> | null {
+    const fromSyms = this.findSymbolByName(fromName);
+    const toSyms = this.findSymbolByName(toName);
+    if (fromSyms.length === 0 || toSyms.length === 0) return null;
+
+    const fromId = fromSyms[0].id;
+    const toIds = new Set(toSyms.map(s => s.id));
+
+    // BFS outgoing from source
+    const rows = this.db.prepare(`
+      WITH RECURSIVE path(id, depth, via) AS (
+        SELECT to_id, 1, type FROM links WHERE from_id = ? AND type != 'contains'
+        UNION
+        SELECT l.to_id, p.depth + 1, l.type
+        FROM links l JOIN path p ON l.from_id = p.id
+        WHERE l.type != 'contains' AND p.depth < ?
+      )
+      SELECT DISTINCT s.*, p.depth, p.via FROM path p JOIN symbols s ON s.id = p.id ORDER BY p.depth
+    `).all(fromId, maxDepth) as any[];
+
+    const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
+    for (const r of rows) {
+      result.push({ symbol: rowToSymbol(r), depth: r.depth, via: r.via });
+      if (toIds.has(r.id)) break;
+    }
+
+    const found = result.find(r => toIds.has(r.symbol.id));
+    if (!found) return null;
+    return result.filter(r => r.depth <= found.depth);
+  }
+
+  getChangedFiles(): string[] {
+    const rows = this.db.prepare('SELECT DISTINCT file_path FROM symbols').all() as any[];
+    return rows.map((r: any) => r.file_path);
+  }
+
   // ── Maintenance ──
+
+  deleteFileData(filePath: string): void {
+    this.stmts.deleteFileLinks.run(filePath);
+    this.stmts.deleteFileSymbols.run(filePath);
+  }
 
   rebuildSearch(): void {
     this.db.exec(`INSERT INTO symbol_fts(symbol_fts) VALUES('rebuild')`);

@@ -1,0 +1,43 @@
+# Milens MCP — Windsurf Rules
+
+This project uses **milens** MCP for code intelligence.
+
+## MCP Setup
+
+The milens MCP server provides 9 tools: `query`, `context`, `impact`, `status`, `detect_changes`, `explain_relationship`, `find_dead_code`, `get_file_symbols`, `get_type_hierarchy`.
+
+Configure in Windsurf MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "milens": {
+      "command": "npx",
+      "args": ["tsx", "src/cli.ts", "serve"]
+    }
+  }
+}
+```
+
+## Rules
+
+- Before editing any function/class/method, run `context` to understand its relationships
+- Before risky changes, run `impact` with `direction: "upstream"` to see blast radius
+- Use `query` to find symbols instead of text-grepping
+- Use `detect_changes` after git operations to find affected symbols
+- After significant refactors, re-index: `npx tsx src/cli.ts analyze -p . --force`
+- Check index health with `status`
+
+## Impact Depth Guide
+
+- Depth 1: Direct callers — will break. Must update.
+- Depth 2: Indirect deps — likely affected. Should test.
+- Depth 3: Transitive — may need testing.
+
+## Architecture
+
+- `src/parser/` — Declarative LangSpec configs for 8 languages (tree-sitter WASM)
+- `src/analyzer/` — Pipeline: scan → parse/extract → resolve links → persist
+- `src/store/` — SQLite with FTS5, recursive CTEs, WAL mode
+- `src/server/` — MCP server (stdio + HTTP)
+- `src/cli.ts` — CLI commands: analyze, search, inspect, impact, serve, status

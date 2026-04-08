@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { resolve, join } from 'node:path';
-import { mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { resolve, join, dirname, basename } from 'node:path';
+import { mkdirSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 const program = new Command();
@@ -18,6 +18,7 @@ program
   .option('-o, --output <dir>', 'Output directory for database')
   .option('-v, --verbose', 'Show detailed progress')
   .option('-f, --force', 'Force full re-index')
+  .option('-s, --skills', 'Generate SKILL.md files for each code area')
   .action(async (opts) => {
     const rootPath = resolve(opts.path);
     const outDir = opts.output ?? join(rootPath, '.milens');
@@ -42,6 +43,16 @@ program
     new RepoRegistry().register(rootPath, dbPath, contentHash);
 
     console.log(`\n✓ Indexed ${stats.symbolCount} symbols, ${stats.linkCount} links across ${stats.filesParsed} files (${stats.durationMs}ms)`);
+
+    if (opts.skills) {
+      const { Database } = await import('./store/db.js');
+      const { generateSkills } = await import('./skills.js');
+      const db = new Database(dbPath);
+      const result = generateSkills(db, rootPath);
+      db.close();
+      console.log(`✓ Generated ${result.count} skill files for each editor:`);
+      for (const d of result.dirs) console.log(`  ${d}`);
+    }
   });
 
 program
@@ -161,6 +172,53 @@ program
     db.close();
   });
 
+program
+  .command('list')
+  .description('List all indexed repositories')
+  .action(async () => {
+    const { RepoRegistry } = await import('./store/registry.js');
+    const entries = new RepoRegistry().listAll();
+    if (entries.length === 0) {
+      console.log('No indexed repositories.');
+      return;
+    }
+    console.log(`${entries.length} indexed repositories:\n`);
+    for (const entry of entries) {
+      console.log(`  ${entry.rootPath}`);
+      console.log(`    DB:      ${entry.dbPath}`);
+      console.log(`    Indexed: ${entry.analyzedAt}`);
+      console.log('');
+    }
+  });
+
+program
+  .command('clean')
+  .description('Remove index for a repository')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .option('--all', 'Remove all indexes')
+  .action(async (opts) => {
+    const { RepoRegistry } = await import('./store/registry.js');
+    const reg = new RepoRegistry();
+    if (opts.all) {
+      const entries = reg.listAll();
+      for (const e of entries) {
+        deleteIndex(e.dbPath);
+        reg.remove(e.rootPath);
+      }
+      console.log(`Cleaned ${entries.length} repositories.`);
+    } else {
+      const rootPath = resolve(opts.path);
+      const entry = reg.findByRoot(rootPath);
+      if (!entry) {
+        console.log('Not indexed.');
+        return;
+      }
+      deleteIndex(entry.dbPath);
+      reg.remove(rootPath);
+      console.log(`Cleaned index for ${rootPath}`);
+    }
+  });
+
 program.parse();
 
 // ── Helpers ──
@@ -193,4 +251,15 @@ function loadAliases(rootPath: string): Record<string, string> {
     } catch { /* ignore */ }
   }
   return aliases;
+}
+
+function deleteIndex(dbPath: string): void {
+  const dir = dirname(dbPath);
+  if (basename(dir) === '.milens') {
+    rmSync(dir, { recursive: true, force: true });
+  } else {
+    for (const suffix of ['', '-wal', '-shm']) {
+      try { rmSync(dbPath + suffix, { force: true }); } catch { /* ignore */ }
+    }
+  }
 }

@@ -49,6 +49,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const allCalls: RawCall[] = [];
   const allHeritage: RawHeritage[] = [];
   const resolvedImportPaths = new Map<string, string>();
+  const parsedFiles = new Set<string>();
   let filesParsed = 0;
 
   for (const [wasmName, group] of langGroups) {
@@ -84,6 +85,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
         }
 
         db.upsertFileHash(file.relativePath, source);
+        parsedFiles.add(file.relativePath);
         filesParsed++;
         if (opts.verbose) console.log(`[parse] ${file.relativePath}: ${result.symbols.length} symbols`);
       } catch (err) {
@@ -92,7 +94,22 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     }
   }
 
-  // Phase 4: Resolve cross-file links
+  // Phase 4: Load unchanged files' symbols for cross-file resolution
+  if (!opts.force) {
+    for (const [, group] of langGroups) {
+      for (const file of group) {
+        if (!parsedFiles.has(file.relativePath)) {
+          const existing = db.getSymbolsByFile(file.relativePath);
+          if (existing.length > 0) {
+            symbolsByFile.set(file.relativePath, existing);
+            allSymbols.push(...existing);
+          }
+        }
+      }
+    }
+  }
+
+  // Phase 5: Resolve cross-file links
   const links = resolveLinks({
     symbolsByFile,
     allSymbols,
@@ -103,10 +120,16 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   });
   if (opts.verbose) console.log(`[link] Resolved ${links.length} relationships`);
 
-  // Phase 5: Persist to database in single transaction
+  // Phase 6: Persist to database in single transaction
   db.transaction(() => {
-    db.clearSymbolsAndLinks();
-    for (const sym of allSymbols) db.insertSymbol(sym);
+    if (opts.force) {
+      db.clearSymbolsAndLinks();
+    } else {
+      for (const fp of parsedFiles) db.deleteFileData(fp);
+    }
+    for (const sym of allSymbols) {
+      if (opts.force || parsedFiles.has(sym.filePath)) db.insertSymbol(sym);
+    }
     for (const link of links) db.insertLink(link);
     db.rebuildSearch();
   });
@@ -123,6 +146,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     console.log(`[done] ${stats.symbolCount} symbols, ${stats.linkCount} links in ${stats.durationMs}ms`);
   }
 
+  clearQueryCache();
   db.close();
   return stats;
 }

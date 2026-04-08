@@ -1,0 +1,56 @@
+# Milens MCP — Cursor Rules
+
+This project uses **milens** MCP for code intelligence. The MCP server exposes 9 tools for navigating the codebase knowledge graph.
+
+## MCP Configuration
+
+Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
+
+```json
+{
+  "mcpServers": {
+    "milens": {
+      "command": "npx",
+      "args": ["tsx", "src/cli.ts", "serve"]
+    }
+  }
+}
+```
+
+Or if installed globally:
+
+```json
+{
+  "mcpServers": {
+    "milens": {
+      "command": "milens",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+## Available MCP Tools
+
+- `query({query, repo?, limit?})` — Find symbols by name or keyword
+- `context({name, repo?})` — 360° symbol view: incoming refs, outgoing deps
+- `impact({target, direction?, depth?, repo?})` — Blast radius analysis
+- `status({repo?})` — Index stats
+- `detect_changes({ref?, repo?})` — Git diff → affected symbols
+- `explain_relationship({from, to, repo?})` — Shortest path between two symbols
+- `find_dead_code({kind?, limit?, repo?})` — Unreferenced exported symbols
+- `get_file_symbols({file, repo?})` — All symbols in a file
+- `get_type_hierarchy({name, repo?})` — Inheritance/implementation tree
+
+## Workflow
+
+1. Before editing a symbol → `context` it first
+2. Before risky changes → `impact` with upstream direction
+3. After significant changes → re-index: `npx tsx src/cli.ts analyze -p . --force`
+
+## Project Info
+
+- TypeScript ESM, Node.js ≥20, MIT License
+- 8 languages: TS, JS, Python, Java, Go, Rust, PHP, Vue
+- SQLite + FTS5 + recursive CTEs for graph queries
+- Declarative LangSpec grammar configs + universal extractor

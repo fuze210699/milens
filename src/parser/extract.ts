@@ -62,6 +62,64 @@ function captureNode(match: Parser.QueryMatch, captureName: string): Parser.Synt
   }
 }
 
+// ── Import name extraction from AST ──
+
+function collectImportNames(defNode: Parser.SyntaxNode): Array<{ name: string; alias?: string }> {
+  const names: Array<{ name: string; alias?: string }> = [];
+  walkImportNames(defNode, names);
+  return names;
+}
+
+function walkImportNames(node: Parser.SyntaxNode, out: Array<{ name: string; alias?: string }>): void {
+  // TS/JS: import { Foo, Bar as B }
+  if (node.type === 'import_specifier') {
+    const n = node.childForFieldName('name');
+    const a = node.childForFieldName('alias');
+    if (n) out.push({ name: n.text, alias: a?.text });
+    return;
+  }
+  // TS/JS: default import (identifier directly under import_clause)
+  if (node.type === 'identifier' && node.parent?.type === 'import_clause') {
+    out.push({ name: node.text });
+    return;
+  }
+  // Python: from x import Foo, Bar as B
+  if (node.type === 'import_from_statement') {
+    for (let i = 0; i < node.namedChildCount; i++) {
+      const child = node.namedChild(i)!;
+      if (child === node.childForFieldName('module_name')) continue;
+      if (child.type === 'dotted_name') out.push({ name: child.text });
+      else if (child.type === 'aliased_import') {
+        const n = child.childForFieldName('name');
+        const a = child.childForFieldName('alias');
+        if (n) out.push({ name: n.text, alias: a?.text });
+      }
+    }
+    return;
+  }
+  // Recurse for other node types (import_clause, named_imports, etc.)
+  for (let i = 0; i < node.namedChildCount; i++) {
+    walkImportNames(node.namedChild(i)!, out);
+  }
+}
+
+// ── Heritage type detection from AST ancestry ──
+
+function detectHeritageType(node: Parser.SyntaxNode): 'extends' | 'implements' {
+  let cur: Parser.SyntaxNode | null = node.parent;
+  while (cur) {
+    const t = cur.type;
+    if (t === 'implements_clause' || t === 'super_interfaces' || t === 'class_interface_clause' || t === 'impl_item') {
+      return 'implements';
+    }
+    if (t === 'extends_clause' || t === 'superclass' || t === 'base_clause') {
+      return 'extends';
+    }
+    cur = cur.parent;
+  }
+  return 'extends';
+}
+
 // ── Enclosing symbol lookup via sorted spans + binary search ──
 
 interface Span { startLine: number; endLine: number; id: string }
@@ -183,11 +241,7 @@ export function extractFromTree(
       if (!source || !defNode) continue;
 
       const cleanSource = source.replace(/^['"]|['"]$/g, '');
-      const itemNode = captureNode(match, 'item');
-      const names: Array<{ name: string; alias?: string }> = [];
-      if (itemNode) {
-        names.push({ name: itemNode.text });
-      }
+      const names = collectImportNames(defNode);
 
       imports.push({
         filePath,
@@ -228,15 +282,15 @@ export function extractFromTree(
   if (spec.queries.heritage) {
     for (const match of runQuery(spec.queries.heritage)) {
       const child = captureText(match, 'child');
-      const parent = captureText(match, 'parent');
-      if (!child || !parent) continue;
+      const parentNode = captureNode(match, 'parent');
+      if (!child || !parentNode) continue;
 
       const defNode = captureNode(match, 'def');
       heritage.push({
         filePath,
         childName: child,
-        parentName: parent,
-        type: 'extends',
+        parentName: parentNode.text,
+        type: detectHeritageType(parentNode),
         line: defNode?.startPosition.row ? defNode.startPosition.row + 1 : 0,
       });
     }

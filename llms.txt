@@ -1,0 +1,58 @@
+# Milens — Code Intelligence Engine
+
+> Lightweight code intelligence platform — parses codebases into knowledge graphs, serves via MCP.
+
+## What is milens?
+
+milens indexes source code into a SQLite knowledge graph containing symbols (functions, classes, methods, interfaces, etc.) and their relationships (calls, imports, extends, implements, contains). It exposes this graph through 9 MCP tools for AI agent consumption.
+
+## MCP Tools
+
+- `query({query, limit?})` — BM25 full-text search across symbol names and file paths
+- `context({name})` — 360° view: incoming refs (who calls this?), outgoing deps (what does this call?), exported status
+- `impact({target, direction, depth?})` — Recursive graph traversal showing blast radius. Direction: `upstream` (what depends on this?) or `downstream` (what does this call?)
+- `status()` — Symbol count, link count, file count for the indexed repo
+- `detect_changes({ref?})` — Git diff → affected symbols and their direct dependents
+- `explain_relationship({from, to})` — Shortest path between two symbols in the dependency graph
+- `find_dead_code({kind?, limit?})` — Exported symbols with zero incoming references
+- `get_file_symbols({file})` — All symbols in a specific file with relationship counts
+- `get_type_hierarchy({name})` — Inheritance/implementation tree for a class, interface, or trait
+
+## Architecture
+
+- **Parser**: Declarative `LangSpec` configs with tree-sitter query strings. One universal `extractFromTree()` function handles all 8 languages.
+- **Analyzer**: Pipeline — scan files → group by language → parse/extract → resolve cross-file links → persist to SQLite.
+- **Storage**: SQLite with FTS5 search, recursive CTEs for transitive dependency traversal, WAL mode.
+- **Server**: MCP server with stdio and StreamableHTTP transports.
+
+## Supported Languages
+
+TypeScript, JavaScript, Python, Java, Go, Rust, PHP, Vue
+
+## CLI Commands
+
+```
+milens analyze -p <path>           # Index a repo
+milens analyze -p . --force        # Force full re-index
+milens analyze -p . --skills       # Index + generate skill files
+milens search <query>              # Search symbols
+milens inspect <symbol>            # 360° symbol view
+milens impact <symbol>             # Blast radius
+milens serve                       # Start MCP server (stdio)
+milens serve --http                # Start MCP server (HTTP on port 3100)
+milens status                      # Index stats
+milens list                        # List all indexed repos
+milens clean -p <path>             # Remove index
+```
+
+## Setup
+
+```bash
+npm install
+npm run build
+npx tsx src/cli.ts analyze -p <path>
+```
+
+## License
+
+MIT

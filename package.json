@@ -1,19 +1,42 @@
 {
   "name": "milens",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Lightweight Code Intelligence Platform — analyze codebases and build knowledge graphs",
   "type": "module",
   "bin": {
     "milens": "./dist/cli.js"
   },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').copyFileSync('src/store/schema.sql','dist/store/schema.sql')\"",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test",
     "self-analyze": "tsx src/cli.ts analyze -p . --force --verbose",
     "self-serve": "tsx src/cli.ts serve -p . --http --port 3100"
+  },
+  "keywords": [
+    "code-intelligence",
+    "knowledge-graph",
+    "mcp",
+    "tree-sitter",
+    "static-analysis",
+    "codebase-indexer",
+    "ai-agent"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fuze210699/milens.git"
+  },
+  "homepage": "https://github.com/fuze210699/milens#readme",
+  "bugs": {
+    "url": "https://github.com/fuze210699/milens/issues"
   },
   "engines": {
     "node": ">=20.0.0"

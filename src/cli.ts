@@ -9,7 +9,7 @@ const program = new Command();
 program
   .name('milens')
   .description('Code intelligence engine — analyze codebases, build knowledge graphs, serve via MCP')
-  .version('0.2.3');
+  .version('0.2.4');
 
 program
   .command('analyze')

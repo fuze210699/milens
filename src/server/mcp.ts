@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -242,6 +242,7 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - \`routes\` — detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Go, PHP, Rails)
 - \`smart_context\` — intent-aware context: understand/edit/debug/test (returns only what matters for intent)
 - \`domains\` — show domain clusters: groups of files forming logical modules based on dependency graph
+- \`repos\` — list all indexed repositories with summary stats (multi-repo support)
 - \`detect_changes\` — git diff → affected symbols
 - \`explain_relationship\` — shortest path between two symbols
 - \`find_dead_code\` — unused exports
@@ -258,6 +259,12 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - ⚠ markers indicate unresolved INTERNAL references — external package imports/calls are tracked separately
 - ✓ test coverage shown on edit_check — symbols with no test coverage get a warning
 - ⏳ staleness: files not re-analyzed in 24h are flagged — consider re-running \`milens analyze\`
+
+## Resources (MCP Resources protocol)
+- \`milens://overview\` — index overview (stats, domains, coverage, staleness)
+- \`milens://symbol/{name}\` — symbol context by name
+- \`milens://file/{path}\` — all symbols in a file
+- \`milens://domain/{name}\` — domain cluster details
 `;
 
 // ── Server setup ──
@@ -611,6 +618,45 @@ export function createMcpServer(rootPath?: string): McpServer {
       }
 
       return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
+    },
+  );
+
+  // ── Tool: repos ──
+  server.tool(
+    'repos',
+    'List all indexed repositories with summary stats. Useful for multi-repo workspaces.',
+    {},
+    async () => {
+      const entries = registry.listAll();
+      if (entries.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No indexed repositories. Run `milens analyze` first.' }] };
+      }
+      const lines: string[] = [`${entries.length} indexed repositories:\n`];
+      for (const entry of entries) {
+        lines.push(`${entry.rootPath}`);
+        lines.push(`  indexed: ${entry.analyzedAt}`);
+        try {
+          const dbPath = registry.findDbPath(entry.rootPath);
+          if (dbPath) {
+            const tempDb = pools.has(entry.rootPath)
+              ? pools.get(entry.rootPath)!.get()
+              : new Database(dbPath);
+            const summary = tempDb.getRepoSummary();
+            lines.push(`  ${summary.symbols} symbols, ${summary.links} links, ${summary.files} files`);
+            if (summary.domains.length > 0) {
+              lines.push(`  domains: ${summary.domains.join(', ')}`);
+            }
+            if (summary.staleCount > 0) {
+              lines.push(`  ⏳ ${summary.staleCount} stale files`);
+            }
+            if (!pools.has(entry.rootPath)) tempDb.close();
+          }
+        } catch {
+          lines.push(`  (unable to read index)`);
+        }
+        lines.push('');
+      }
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },
   );
 
@@ -1220,6 +1266,138 @@ export function createMcpServer(rootPath?: string): McpServer {
       }
 
       return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
+    },
+  );
+
+  // ══════════════════════════════════════════════
+  // ── MCP Resources ──
+  // ══════════════════════════════════════════════
+
+  // ── Resource: milens://symbol/{name} ──
+  server.resource(
+    'symbol',
+    new ResourceTemplate('milens://symbol/{name}', { list: undefined }),
+    { description: 'Symbol context: definition, incoming refs, outgoing deps, role/heat metadata' },
+    async (uri, { name }) => {
+      const { db } = getDb();
+      const symbols = db.findSymbolByName(name as string);
+      if (symbols.length === 0) {
+        return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: `"${name}" not found.` }] };
+      }
+      const lines: string[] = [];
+      for (const sym of symbols) {
+        lines.push(`${fmtSymbol(sym, 'L2')}${sym.exported ? ' (exported)' : ''}`);
+        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+        if (incoming.length > 0) {
+          lines.push(`incoming (${incoming.length}):`);
+          for (const l of incoming) {
+            const from = db.findSymbolById(l.fromId);
+            lines.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
+          }
+        }
+        const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+        if (outgoing.length > 0) {
+          lines.push(`outgoing (${outgoing.length}):`);
+          for (const l of outgoing) {
+            const to = db.findSymbolById(l.toId);
+            lines.push(`  ${l.type}: ${to ? fmtSymbol(to) : l.toId}`);
+          }
+        }
+        lines.push('');
+      }
+      return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: lines.join('\n') }] };
+    },
+  );
+
+  // ── Resource: milens://file/{path} ──
+  server.resource(
+    'file-symbols',
+    new ResourceTemplate('milens://file/{+path}', { list: undefined }),
+    { description: 'All symbols in a file with ref/dep counts' },
+    async (uri, { path }) => {
+      const { db } = getDb();
+      const filePath = decodeURIComponent(path as string);
+      const symbols = db.getSymbolsByFile(filePath);
+      if (symbols.length === 0) {
+        return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: `No symbols in "${filePath}".` }] };
+      }
+      const lines: string[] = [`${filePath}: ${symbols.length} symbols\n`];
+      for (const sym of symbols) {
+        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+        const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+        const exp = sym.exported ? ' (exported)' : '';
+        lines.push(`${fmtSymbol(sym, 'L2')}${exp} ← ${incoming.length} refs, → ${outgoing.length} deps`);
+      }
+      return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: lines.join('\n') }] };
+    },
+  );
+
+  // ── Resource: milens://domain/{name} ──
+  server.resource(
+    'domain',
+    new ResourceTemplate('milens://domain/{name}', { list: undefined }),
+    { description: 'Domain cluster details: files and top symbols in a domain' },
+    async (uri, { name }) => {
+      const { db } = getDb();
+      const domainName = name as string;
+      // Find files in this domain
+      const allFiles = db.db_getFilesByZone(domainName);
+      if (allFiles.length === 0) {
+        return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: `Domain "${domainName}" not found.` }] };
+      }
+      const lines: string[] = [`domain: ${domainName} (${allFiles.length} files)\n`];
+      let totalSymbols = 0;
+      for (const file of allFiles) {
+        const syms = db.getSymbolsByFile(file);
+        totalSymbols += syms.length;
+        const exported = syms.filter(s => s.exported);
+        lines.push(`${file}: ${syms.length} symbols (${exported.length} exported)`);
+      }
+      lines.push(`\ntotal: ${totalSymbols} symbols in ${allFiles.length} files`);
+      return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: lines.join('\n') }] };
+    },
+  );
+
+  // ── Resource: milens://overview ──
+  server.resource(
+    'overview',
+    'milens://overview',
+    { description: 'Index overview: stats, domains, unresolved, test coverage, staleness' },
+    async (uri) => {
+      const { db, root } = getDb();
+      const stats = db.getStats();
+      const unresolved = db.getUnresolvedStats();
+      const coverage = db.getTestCoverage();
+      const domains = db.getDomainStats();
+      const staleFiles = db.getStaleFiles(24);
+
+      const lines: string[] = [
+        `repo: ${root}`,
+        `symbols: ${stats.symbols}`,
+        `links: ${stats.links}`,
+        `files: ${stats.files}`,
+      ];
+      if (unresolved.imports > 0 || unresolved.calls > 0) {
+        lines.push(`⚠ unresolved (internal): ${unresolved.imports} imports, ${unresolved.calls} calls`);
+      }
+      if (unresolved.externalImports > 0 || unresolved.externalCalls > 0) {
+        lines.push(`external (expected): ${unresolved.externalImports} imports, ${unresolved.externalCalls} calls`);
+      }
+      if (coverage.testFiles > 0) {
+        const pct = coverage.exportedProductionSymbols > 0
+          ? Math.round(coverage.testedSymbols / coverage.exportedProductionSymbols * 100) : 0;
+        lines.push(`test coverage: ${coverage.testedSymbols}/${coverage.exportedProductionSymbols} (${pct}%) from ${coverage.testFiles} test files`);
+      }
+      if (domains.length > 0) {
+        lines.push(`\ndomains (${domains.length}):`);
+        for (const d of domains) {
+          lines.push(`  ${d.domain}: ${d.files} files, ${d.symbols} symbols`);
+        }
+      }
+      if (staleFiles.length > 0) {
+        lines.push(`\n⏳ ${staleFiles.length} stale files (>24h)`);
+      }
+      return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: lines.join('\n') }] };
     },
   );
 

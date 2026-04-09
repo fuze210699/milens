@@ -20,7 +20,7 @@ Contains 28 symbols (10 exported) across 3 files.
 - **`RepoEntry`** [interface] (src/types.ts:87) — 0 refs
 
 ## Entry Points
-- **`has`** [function] — 18 incoming references
+- **`has`** [function] — 19 incoming references
 - **`getAreaName`** [function] — 2 incoming references
 - **`capitalize`** [function] — 2 incoming references
 - **`deleteIndex`** [function] — 1 incoming references

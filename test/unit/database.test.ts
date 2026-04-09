@@ -171,4 +171,21 @@ describe('Database', () => {
       expect(stale).not.toContain(f);
     }
   });
+
+  it('returns files by zone', () => {
+    const authFiles = db.db_getFilesByZone('auth');
+    expect(authFiles).toContain('src/auth.ts');
+    expect(authFiles).toContain('src/models.ts');
+    expect(authFiles).not.toContain('src/app.ts');
+  });
+
+  it('returns repo summary with domains and stale count', () => {
+    const summary = db.getRepoSummary();
+    expect(summary.symbols).toBeGreaterThanOrEqual(2);
+    expect(summary.links).toBeGreaterThanOrEqual(1);
+    expect(summary.files).toBeGreaterThanOrEqual(3);
+    expect(summary.domains).toContain('auth');
+    expect(summary.domains).toContain('app');
+    expect(typeof summary.staleCount).toBe('number');
+  });
 });

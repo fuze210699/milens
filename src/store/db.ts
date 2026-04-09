@@ -427,6 +427,24 @@ export class Database {
     return rows.map((r: any) => r.path);
   }
 
+  // ── Zone/domain queries ──
+
+  db_getFilesByZone(zone: string): string[] {
+    const rows = this.db.prepare(
+      'SELECT path FROM file_hashes WHERE zone = ? ORDER BY path'
+    ).all(zone) as any[];
+    return rows.map((r: any) => r.path);
+  }
+
+  // ── Multi-repo summary ──
+
+  getRepoSummary(): { symbols: number; links: number; files: number; domains: string[]; staleCount: number } {
+    const stats = this.getStats();
+    const domains = this.getDomainStats().map(d => d.domain);
+    const staleCount = this.getStaleFiles(24).length;
+    return { ...stats, domains, staleCount };
+  }
+
   clear(): void {
     this.db.exec('DELETE FROM symbols');
     this.db.exec('DELETE FROM links');

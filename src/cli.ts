@@ -23,6 +23,7 @@ program
   .option('--skills-cursor', 'Generate skill files for Cursor only')
   .option('--skills-claude', 'Generate skill files for Claude Code only')
   .option('--skills-agents', 'Generate skill files for AGENTS.md only')
+  .option('--skills-windsurf', 'Generate config for Windsurf only')
   .action(async (opts) => {
     const rootPath = resolve(opts.path);
     const outDir = opts.output ?? join(rootPath, '.milens');
@@ -48,7 +49,7 @@ program
 
     console.log(`\n✓ Indexed ${stats.symbolCount} symbols, ${stats.linkCount} links across ${stats.filesParsed} files (${stats.durationMs}ms)`);
 
-    if (opts.skills || opts.skillsCopilot || opts.skillsCursor || opts.skillsClaude || opts.skillsAgents) {
+    if (opts.skills || opts.skillsCopilot || opts.skillsCursor || opts.skillsClaude || opts.skillsAgents || opts.skillsWindsurf) {
       const editors: string[] | undefined = opts.skills
         ? undefined  // all editors
         : [
@@ -56,6 +57,7 @@ program
             ...(opts.skillsCursor ? ['cursor'] : []),
             ...(opts.skillsClaude ? ['claude'] : []),
             ...(opts.skillsAgents ? ['agents'] : []),
+            ...(opts.skillsWindsurf ? ['windsurf'] : []),
           ];
       const { Database } = await import('./store/db.js');
       const { generateSkills } = await import('./skills.js');

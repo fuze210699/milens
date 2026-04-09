@@ -40,9 +40,9 @@ npx milens serve            # start MCP server for AI agents
 - **Incremental indexing** — file-hash based, only re-parses changed files
 - **Multi-repo registry** — manage multiple codebases from `~/.milens/`
 - **Dual transport** — MCP over stdio (VS Code / Cursor) or HTTP (localhost-bound, secure)
-- **Skills generation** — auto-generate context files for Copilot, Cursor, Claude, Codex, and 40+ agents. Injects into root configs (`.github/copilot-instructions.md`, `.cursorrules`, `CLAUDE.md`, `AGENTS.md`)
+- **Skills generation** — auto-generate context files for Copilot, Cursor, Claude, Windsurf, and 40+ agents. Injects into root configs (`.github/copilot-instructions.md`, `.cursor/index.mdc`, `CLAUDE.md`, `.windsurfrules`, `AGENTS.md`)
 - **MCP protocol instructions** — server-level instructions sent to every connected agent on `initialize`, guiding tool usage without static files
-- **Per-editor CLI** — `--skills-copilot`, `--skills-cursor`, `--skills-claude`, `--skills-agents` for targeted generation
+- **Per-editor CLI** — `--skills-copilot`, `--skills-cursor`, `--skills-claude`, `--skills-windsurf`, `--skills-agents` for targeted generation
 - **Security hardened** — ReDoS protection, path traversal prevention, FTS5 injection sanitization, command injection prevention
 
 ## Installation
@@ -110,6 +110,7 @@ Scans source files, parses symbols with tree-sitter, resolves imports/calls/inhe
 | `--skills-cursor` | Generate skill files for Cursor only |
 | `--skills-claude` | Generate skill files for Claude Code only |
 | `--skills-agents` | Generate skill files for AGENTS.md only |
+| `--skills-windsurf` | Generate config for Windsurf only |
 
 ### `search`
 
@@ -270,6 +271,21 @@ Add to `.cursor/mcp.json` (per-project):
 claude mcp add milens -- npx -y milens serve -p .
 ```
 
+### Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "milens": {
+      "command": "npx",
+      "args": ["-y", "milens", "serve", "-p", "."]
+    }
+  }
+}
+```
+
 ### Codex
 
 Add to `.codex/config.toml`:
@@ -299,6 +315,7 @@ npx milens analyze -p . --skills
 # Generate for a specific editor only
 npx milens analyze -p . --skills-cursor
 npx milens analyze -p . --skills-copilot --skills-agents  # combine multiple
+npx milens analyze -p . --skills-windsurf
 ```
 
 This creates:
@@ -307,13 +324,14 @@ This creates:
 |---|---|
 | `.github/instructions/*.instructions.md` | GitHub Copilot |
 | `.github/copilot-instructions.md` | GitHub Copilot (root config, always loaded) |
-| `.cursor/rules/*.mdc` | Cursor |
-| `.cursorrules` | Cursor (root config, always loaded) |
-| `.claude/skills/generated/*/SKILL.md` | Claude Code |
+| `.cursor/rules/*.mdc` | Cursor (per-area, `globs:` scoped) |
+| `.cursor/index.mdc` | Cursor (root config, `alwaysApply: true`) |
+| `.claude/skills/generated/*/SKILL.md` | Claude Code (skills) |
+| `.claude/rules/*.md` | Claude Code (path-scoped rules, `paths:` frontmatter) |
 | `CLAUDE.md` | Claude Code (root config, always loaded) |
+| `.windsurfrules` | Windsurf (root config, always loaded) |
 | `.agents/skills/*/SKILL.md` | 40+ agents ([Agent Skills](https://agentskills.io)) |
 | `AGENTS.md` | Universal agents (root config, always loaded) |
-| `.milens/skills/*.md` | milens internal |
 
 All root config files use `<!-- milens:start/end -->` markers for idempotent injection — re-running replaces the milens section without duplicating or overwriting other content.
 

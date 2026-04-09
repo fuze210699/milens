@@ -341,6 +341,66 @@ export class Database {
     };
   }
 
+  // ── Flow tracing — call chains from entrypoints to target ──
+
+  traceToEntrypoints(symbolId: string, maxDepth = 8): Array<{ path: Array<{ symbol: CodeSymbol; via: string }>}> {
+    // Walk upstream following only 'calls' links to find paths from entrypoints
+    const paths: Array<{ path: Array<{ symbol: CodeSymbol; via: string }> }> = [];
+    const visited = new Set<string>();
+
+    const dfs = (currentId: string, currentPath: Array<{ symbol: CodeSymbol; via: string }>, depth: number) => {
+      if (depth > maxDepth) return;
+      if (visited.has(currentId)) return;
+      visited.add(currentId);
+
+      const incoming = this.getIncomingLinks(currentId).filter(l => l.type === 'calls' || l.type === 'imports');
+      const sym = this.findSymbolById(currentId);
+
+      if (incoming.length === 0 && sym?.exported) {
+        // Reached an entrypoint — save this path
+        paths.push({ path: [...currentPath] });
+        visited.delete(currentId);
+        return;
+      }
+
+      for (const link of incoming) {
+        const fromSym = this.findSymbolById(link.fromId);
+        if (!fromSym) continue;
+        // Skip module-level _top imports — go to their real callers
+        if (fromSym.name === '_top' && fromSym.kind === 'module') {
+          // Recurse from the _top module's incoming callers
+          dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
+        } else {
+          dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
+        }
+      }
+
+      visited.delete(currentId);
+    };
+
+    const targetSym = this.findSymbolById(symbolId);
+    if (targetSym) {
+      dfs(symbolId, [{ symbol: targetSym, via: 'target' }], 0);
+    }
+
+    // Sort by path length (shortest first), limit to 5
+    return paths.sort((a, b) => a.path.length - b.path.length).slice(0, 5);
+  }
+
+  // ── Route/endpoint detection via link patterns ──
+
+  getEntrypoints(): CodeSymbol[] {
+    // Symbols with role='entrypoint' OR exported + 0 incoming non-contains links
+    const rows = this.db.prepare(`
+      SELECT s.* FROM symbols s
+      WHERE s.exported = 1
+        AND s.role = 'entrypoint'
+      ORDER BY s.heat DESC
+      LIMIT 50
+    `).all() as any[];
+    return rows.map(rowToSymbol);
+  }
+
   clear(): void {
     this.db.exec('DELETE FROM symbols');
     this.db.exec('DELETE FROM links');

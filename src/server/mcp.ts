@@ -238,6 +238,9 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - \`impact\` — blast radius: what breaks if symbol changes
 - \`overview\` — combined context + impact + grep in one call (preferred for editing workflows)
 - \`edit_check\` — pre-edit safety: callers + export status + re-export chains + test coverage + ⚠ warnings (fastest for edits)
+- \`trace\` — execution flow: call chains from entrypoints to a symbol (or downstream from it)
+- \`routes\` — detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Go, PHP, Rails)
+- \`smart_context\` — intent-aware context: understand/edit/debug/test (returns only what matters for intent)
 - \`detect_changes\` — git diff → affected symbols
 - \`explain_relationship\` — shortest path between two symbols
 - \`find_dead_code\` — unused exports
@@ -245,10 +248,11 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - \`get_type_hierarchy\` — inheritance tree
 
 ## Rules
-- Before editing a symbol: run \`edit_check\` or \`overview\`
+- Before editing a symbol: run \`edit_check\` or \`smart_context\` with intent=edit
+- For debugging: run \`smart_context\` with intent=debug or \`trace\` to=symbol
+- For writing tests: run \`smart_context\` with intent=test — shows deps to mock + callers to cover
 - \`impact\` only tracks code deps — always pair with \`grep\` for templates/configs
 - Use \`query\` for camelCase/PascalCase identifiers, \`grep\` for display text or multi-word strings
-- Use \`grep\` with scope=imports to find only import lines, scope=definitions for declarations
 - impact depth: 1=WILL BREAK, 2=LIKELY AFFECTED, 3=MAY NEED TESTING
 - ⚠ markers indicate unresolved INTERNAL references — external package imports/calls are tracked separately
 - ✓ test coverage shown on edit_check — symbols with no test coverage get a warning
@@ -833,6 +837,348 @@ export function createMcpServer(rootPath?: string): McpServer {
         } else if (sym.exported) {
           sections.push(`⚠ no test coverage for this exported symbol`);
         }
+      }
+
+      return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
+    },
+  );
+
+  // ── Tool: trace ──
+  server.tool(
+    'trace',
+    'Trace execution flow: find call chains from entrypoints to a target symbol, or from a symbol downstream. Shows HOW code gets executed.',
+    {
+      name: z.string().describe('Symbol name to trace'),
+      direction: z.enum(['to', 'from']).optional().default('to')
+        .describe('to=trace paths TO this symbol from entrypoints, from=trace paths FROM this symbol downstream'),
+      repo: z.string().optional(),
+      depth: z.number().optional().default(8).describe('Max chain depth'),
+    },
+    async ({ name, direction, repo, depth }) => {
+      const { db } = getDb(repo);
+      const symbols = db.findSymbolByName(name);
+      if (symbols.length === 0) {
+        return { content: [{ type: 'text' as const, text: `"${name}" not found. Try \`grep\`.` }] };
+      }
+
+      const sections: string[] = [];
+
+      for (const sym of symbols) {
+        if (direction === 'to') {
+          // Trace upstream to entrypoints
+          const traces = db.traceToEntrypoints(sym.id, depth);
+          sections.push(`## Execution paths TO ${fmtSymbol(sym)}\n`);
+          if (traces.length === 0) {
+            sections.push('No call chains found (symbol may be an entrypoint itself or unreachable).');
+          } else {
+            for (let i = 0; i < traces.length; i++) {
+              const chain = traces[i].path;
+              sections.push(`path ${i + 1} (${chain.length} steps):`);
+              sections.push(chain.map((step, idx) => {
+                const arrow = idx === chain.length - 1 ? '→ (target)' : `→ [${chain[idx + 1]?.via ?? ''}]`;
+                return `  ${' '.repeat(idx)}${fmtSymbol(step.symbol)} ${arrow}`;
+              }).join('\n'));
+              sections.push('');
+            }
+          }
+        } else {
+          // Trace downstream — show call/dependency tree from this symbol
+          const downstream = db.findDownstream(sym.id, depth);
+          sections.push(`## Execution paths FROM ${fmtSymbol(sym)}\n`);
+          if (downstream.length === 0) {
+            sections.push('No downstream dependencies (leaf symbol).');
+          } else {
+            // Group by depth and show as tree
+            const byDepth = new Map<number, string[]>();
+            for (const { symbol, depth: d, via } of downstream) {
+              const arr = byDepth.get(d) ?? [];
+              arr.push(`${'  '.repeat(d)}[${via}] ${fmtSymbol(symbol)}`);
+              byDepth.set(d, arr);
+            }
+            for (const [, items] of [...byDepth].sort((a, b) => a[0] - b[0])) {
+              sections.push(...items);
+            }
+          }
+        }
+        sections.push('');
+      }
+
+      return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
+    },
+  );
+
+  // ── Tool: routes ──
+  server.tool(
+    'routes',
+    'Detect framework routes/endpoints and map them to handler symbols. Scans for Express, FastAPI, NestJS, Flask, Go HTTP, PHP, Rails patterns.',
+    {
+      repo: z.string().optional(),
+      framework: z.string().optional().describe('Filter by framework (express, fastapi, nestjs, flask, go, php, rails). Default: auto-detect all.'),
+      limit: z.number().optional().default(50),
+    },
+    async ({ repo, framework, limit }) => {
+      const root = resolveRoot(repo);
+      const { db } = getDb(repo);
+
+      // Route patterns for different frameworks
+      const routePatterns: Array<{ name: string; pattern: RegExp; fileGlob: string }> = [
+        { name: 'express', pattern: /\b(?:app|router)\.(get|post|put|patch|delete|use|all)\s*\(\s*['"`]([^'"`]+)['"`]/, fileGlob: '**/*.{ts,js,mjs,cjs}' },
+        { name: 'fastapi', pattern: /@(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
+        { name: 'flask', pattern: /@(?:app|bp|blueprint)\.(route|get|post|put|delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
+        { name: 'nestjs', pattern: /@(Get|Post|Put|Patch|Delete)\s*\(\s*['"]?([^'")]*?)['"]?\s*\)/, fileGlob: '**/*.ts' },
+        { name: 'go', pattern: /\b(?:mux|router|http)\.(HandleFunc|Handle|Get|Post|Put|Delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.go' },
+        { name: 'php', pattern: /Route::(get|post|put|patch|delete|any)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.php' },
+        { name: 'rails', pattern: /\b(get|post|put|patch|delete|resources?|root)\s+['"]([^'"]+)['"]/, fileGlob: '**/*.rb' },
+      ];
+
+      const activePatterns = framework
+        ? routePatterns.filter(p => p.name === framework.toLowerCase())
+        : routePatterns;
+
+      if (activePatterns.length === 0) {
+        return { content: [{ type: 'text' as const, text: `Unknown framework "${framework}". Available: express, fastapi, nestjs, flask, go, php, rails` }] };
+      }
+
+      interface RouteMatch { framework: string; method: string; path: string; file: string; line: number; handler?: string }
+      const routes: RouteMatch[] = [];
+
+      for (const rp of activePatterns) {
+        const matches = grepFiles(root, rp.pattern.source, {
+          isRegex: true, maxResults: limit, includePattern: rp.fileGlob,
+        });
+
+        for (const m of matches) {
+          const match = rp.pattern.exec(m.text);
+          if (!match) continue;
+          const method = match[1].toUpperCase();
+          const path = match[2] || '/';
+
+          // Try to find the handler symbol on this line or nearby
+          const fileSymbols = db.getSymbolsByFile(m.file);
+          const handler = fileSymbols.find(s =>
+            s.startLine <= m.line && s.endLine >= m.line && s.kind === 'method'
+          ) ?? fileSymbols.find(s =>
+            s.startLine <= m.line && s.endLine >= m.line
+          ) ?? fileSymbols.find(s =>
+            Math.abs(s.startLine - m.line) <= 3 && (s.kind === 'function' || s.kind === 'method')
+          );
+
+          routes.push({
+            framework: rp.name,
+            method,
+            path,
+            file: m.file,
+            line: m.line,
+            handler: handler ? `${handler.name} [${handler.kind}]` : undefined,
+          });
+        }
+      }
+
+      if (routes.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No framework routes detected.' }] };
+      }
+
+      // Group by framework
+      const grouped = new Map<string, RouteMatch[]>();
+      for (const r of routes) {
+        const arr = grouped.get(r.framework) ?? [];
+        arr.push(r);
+        grouped.set(r.framework, arr);
+      }
+
+      const lines: string[] = [`${routes.length} routes detected:\n`];
+      for (const [fw, fwRoutes] of grouped) {
+        lines.push(`[${fw}]`);
+        for (const r of fwRoutes) {
+          const handlerInfo = r.handler ? ` → ${r.handler}` : '';
+          lines.push(`  ${r.method.padEnd(7)} ${r.path}  (${r.file}:${r.line})${handlerInfo}`);
+        }
+        lines.push('');
+      }
+
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ── Tool: smart_context ──
+  server.tool(
+    'smart_context',
+    'Intent-aware context: returns different information based on what you want to do. Saves tokens by showing only what matters for your intent.',
+    {
+      name: z.string().describe('Symbol name'),
+      intent: z.enum(['understand', 'edit', 'debug', 'test'])
+        .describe('understand=360° view, edit=callers+blast radius, debug=execution paths+data flow, test=coverage+dependencies'),
+      repo: z.string().optional(),
+    },
+    async ({ name, intent, repo }) => {
+      const { db, root } = getDb(repo);
+      const symbols = db.findSymbolByName(name);
+      if (symbols.length === 0) {
+        return { content: [{ type: 'text' as const, text: `"${name}" not found. Try \`grep\`.` }] };
+      }
+
+      const sections: string[] = [];
+
+      for (const sym of symbols) {
+        sections.push(`${fmtSymbol(sym, 'L2')}${sym.exported ? ' (exported)' : ''}\n`);
+
+        if (intent === 'understand') {
+          // Full 360° — context + downstream + file structure
+          const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+          const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+
+          if (incoming.length > 0) {
+            sections.push(`incoming (${incoming.length}):`);
+            for (const l of incoming) {
+              const from = db.findSymbolById(l.fromId);
+              sections.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
+            }
+          }
+          if (outgoing.length > 0) {
+            sections.push(`outgoing (${outgoing.length}):`);
+            for (const l of outgoing) {
+              const to = db.findSymbolById(l.toId);
+              sections.push(`  ${l.type}: ${to ? fmtSymbol(to) : l.toId}`);
+            }
+          }
+
+          // Heritage
+          const { ancestors, descendants } = db.getTypeHierarchy(sym.id);
+          if (ancestors.length > 0) {
+            sections.push(`extends: ${ancestors.map(a => fmtSymbol(a.symbol)).join(', ')}`);
+          }
+          if (descendants.length > 0) {
+            sections.push(`extended by: ${descendants.map(d => fmtSymbol(d.symbol)).join(', ')}`);
+          }
+
+          // Siblings — other symbols in same file
+          const siblings = db.getSymbolsByFile(sym.filePath)
+            .filter(s => s.id !== sym.id && !s.parentId)
+            .slice(0, 10);
+          if (siblings.length > 0) {
+            sections.push(`file peers: ${siblings.map(s => `${s.name} [${s.kind}]`).join(', ')}`);
+          }
+
+        } else if (intent === 'edit') {
+          // Focused: who calls this + blast radius + test coverage
+          const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+          const upstream = db.findUpstream(sym.id, 2);
+
+          if (incoming.length > 0) {
+            sections.push(`direct callers (${incoming.length}):`);
+            for (const l of incoming) {
+              const from = db.findSymbolById(l.fromId);
+              sections.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
+            }
+          } else {
+            sections.push(`direct callers: none`);
+          }
+
+          if (upstream.length > incoming.length) {
+            const depth2 = upstream.filter(u => u.depth === 2);
+            if (depth2.length > 0) {
+              sections.push(`indirect dependents (depth 2): ${depth2.length} symbols`);
+            }
+          }
+
+          // Re-export detection
+          const reExportMatches = grepFiles(root, name, { maxResults: 5, includePattern: '**/index.{ts,js,mjs}' })
+            .filter(m => /export\s*\{/.test(m.text) && m.text.includes('from'));
+          if (reExportMatches.length > 0) {
+            sections.push(`re-exported via: ${reExportMatches.map(m => `${m.file}:${m.line}`).join(', ')}`);
+          }
+
+          // Test coverage
+          const testRefs = incoming.filter(l => {
+            const from = db.findSymbolById(l.fromId);
+            return from && isTestFilePath(from.filePath);
+          });
+          if (testRefs.length > 0) {
+            sections.push(`✓ has test coverage`);
+          } else if (sym.exported) {
+            sections.push(`⚠ no test coverage`);
+          }
+
+        } else if (intent === 'debug') {
+          // Execution paths + data flow
+          const traces = db.traceToEntrypoints(sym.id, 6);
+          if (traces.length > 0) {
+            sections.push(`execution paths (${traces.length}):`);
+            for (let i = 0; i < Math.min(traces.length, 3); i++) {
+              const chain = traces[i].path;
+              sections.push(`  ${chain.map(s => s.symbol.name).join(' → ')}`);
+            }
+          } else {
+            sections.push(`no call chains found (may be entrypoint or unreachable)`);
+          }
+
+          // What does this call? (downstream immediate)
+          const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type === 'calls');
+          if (outgoing.length > 0) {
+            sections.push(`calls (${outgoing.length}):`);
+            for (const l of outgoing) {
+              const to = db.findSymbolById(l.toId);
+              sections.push(`  ${to ? fmtSymbol(to) : l.toId}`);
+            }
+          }
+
+          // Data types used
+          const dataTypes = db.getOutgoingLinks(sym.id)
+            .filter(l => l.type === 'imports')
+            .map(l => db.findSymbolById(l.toId))
+            .filter(s => s && (s.kind === 'interface' || s.kind === 'type' || s.kind === 'class'))
+            .slice(0, 10);
+          if (dataTypes.length > 0) {
+            sections.push(`data types: ${dataTypes.map(s => s!.name).join(', ')}`);
+          }
+
+        } else if (intent === 'test') {
+          // Test coverage + what to mock
+          const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+          const testRefs = incoming.filter(l => {
+            const from = db.findSymbolById(l.fromId);
+            return from && isTestFilePath(from.filePath);
+          });
+
+          if (testRefs.length > 0) {
+            const testFiles = [...new Set(testRefs.map(l => {
+              const from = db.findSymbolById(l.fromId);
+              return from?.filePath;
+            }).filter(Boolean))];
+            sections.push(`✓ tested from: ${testFiles.join(', ')}`);
+          } else {
+            sections.push(`⚠ no existing tests`);
+          }
+
+          // Dependencies to mock
+          const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+          const externalDeps = outgoing.filter(l => {
+            const to = db.findSymbolById(l.toId);
+            return to && to.filePath !== sym.filePath;
+          });
+          if (externalDeps.length > 0) {
+            sections.push(`dependencies to mock (${externalDeps.length}):`);
+            for (const l of externalDeps) {
+              const to = db.findSymbolById(l.toId);
+              if (to) sections.push(`  ${l.type}: ${fmtSymbol(to)}`);
+            }
+          }
+
+          // Inputs — what calls this? (test should cover these call patterns)
+          const nonTestCallers = incoming.filter(l => {
+            const from = db.findSymbolById(l.fromId);
+            return from && !isTestFilePath(from.filePath);
+          });
+          if (nonTestCallers.length > 0) {
+            sections.push(`callers to cover (${nonTestCallers.length}):`);
+            for (const l of nonTestCallers.slice(0, 5)) {
+              const from = db.findSymbolById(l.fromId);
+              if (from) sections.push(`  ${fmtSymbol(from)}`);
+            }
+          }
+        }
+
+        sections.push('');
       }
 
       return { content: [{ type: 'text' as const, text: sections.join('\n') }] };

@@ -86,4 +86,60 @@ describe('Database', () => {
     expect(stats.symbols).toBeGreaterThanOrEqual(2);
     expect(stats.links).toBeGreaterThanOrEqual(1);
   });
+
+  it('traces call chains to entrypoints', () => {
+    // Add an entrypoint that calls AuthService
+    const entrypoint: CodeSymbol = {
+      id: 'src/app.ts#function:main:1',
+      name: 'main',
+      kind: 'function',
+      filePath: 'src/app.ts',
+      startLine: 1,
+      endLine: 10,
+      exported: true,
+      role: 'entrypoint',
+    };
+    db.insertSymbol(entrypoint);
+
+    // main → AuthService (calls link)
+    const link: SymbolLink = {
+      id: 'src/app.ts#function:main:1->calls->src/auth.ts#class:AuthService:3',
+      fromId: 'src/app.ts#function:main:1',
+      toId: 'src/auth.ts#class:AuthService:3',
+      type: 'calls',
+      confidence: 0.9,
+    };
+    db.insertLink(link);
+
+    // Trace from createUser → should find chain: main → AuthService → createUser
+    const traces = db.traceToEntrypoints('src/models.ts#function:createUser:10');
+    expect(traces.length).toBeGreaterThan(0);
+    // First path should include 'main' somewhere in the chain
+    const names = traces[0].path.map(s => s.symbol.name);
+    expect(names).toContain('main');
+    expect(names).toContain('createUser');
+  });
+
+  it('finds entrypoints', () => {
+    const entrypoints = db.getEntrypoints();
+    expect(entrypoints.some(s => s.name === 'main')).toBe(true);
+  });
+
+  it('stores and retrieves external resolution stats', () => {
+    db.setMeta('external_imports', '42');
+    db.setMeta('external_calls', '100');
+    const stats = db.getUnresolvedStats();
+    expect(stats.externalImports).toBe(42);
+    expect(stats.externalCalls).toBe(100);
+  });
+
+  it('stores and retrieves test coverage metadata', () => {
+    db.setMeta('test_files', '3');
+    db.setMeta('tested_symbols', '12');
+    db.setMeta('exported_production_symbols', '20');
+    const coverage = db.getTestCoverage();
+    expect(coverage.testFiles).toBe(3);
+    expect(coverage.testedSymbols).toBe(12);
+    expect(coverage.exportedProductionSymbols).toBe(20);
+  });
 });

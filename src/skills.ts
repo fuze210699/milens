@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { Database } from './store/db.js';
 import type { CodeSymbol, SymbolLink } from './types.js';
 
@@ -42,17 +42,14 @@ export function generateSkills(db: Database, rootDir: string, editors?: string[]
   const copilotDir = join(rootDir, '.github', 'instructions');
   const cursorDir = join(rootDir, '.cursor', 'rules');
   const claudeDir = join(rootDir, '.claude', 'skills', 'generated');
+  const claudeRulesDir = join(rootDir, '.claude', 'rules');
   const agentsDir = join(rootDir, '.agents', 'skills');
-  const milensDir = join(rootDir, '.milens', 'skills');
 
   const activeDirs: string[] = [];
-  if (has('copilot')) { mkdirSync(copilotDir, { recursive: true }); activeDirs.push(copilotDir); }
-  if (has('cursor'))  { mkdirSync(cursorDir, { recursive: true });  activeDirs.push(cursorDir); }
-  if (has('claude'))  { mkdirSync(claudeDir, { recursive: true });  activeDirs.push(claudeDir); }
-  if (has('agents'))  { mkdirSync(agentsDir, { recursive: true });  activeDirs.push(agentsDir); }
-  // milens internal always generated
-  mkdirSync(milensDir, { recursive: true });
-  activeDirs.push(milensDir);
+  if (has('copilot'))  { mkdirSync(copilotDir, { recursive: true }); activeDirs.push(copilotDir); }
+  if (has('cursor'))   { mkdirSync(cursorDir, { recursive: true });  activeDirs.push(cursorDir); }
+  if (has('claude'))   { mkdirSync(claudeDir, { recursive: true }); mkdirSync(claudeRulesDir, { recursive: true }); activeDirs.push(claudeDir); }
+  if (has('agents'))   { mkdirSync(agentsDir, { recursive: true });  activeDirs.push(agentsDir); }
 
   let count = 0;
   for (const [areaName, area] of filtered) {
@@ -70,6 +67,14 @@ export function generateSkills(db: Database, rootDir: string, editors?: string[]
       const claudeAreaDir = join(claudeDir, areaName);
       mkdirSync(claudeAreaDir, { recursive: true });
       writeFileSync(join(claudeAreaDir, 'SKILL.md'), content);
+
+      // Also generate path-scoped rule (loaded when Claude reads matching files)
+      if (area.prefix) {
+        writeFileSync(
+          join(claudeRulesDir, `${areaName}.md`),
+          `---\npaths:\n  - "${area.prefix}/**"\n---\n\n${content}`,
+        );
+      }
     }
 
     if (has('agents')) {
@@ -77,9 +82,6 @@ export function generateSkills(db: Database, rootDir: string, editors?: string[]
       mkdirSync(agentsAreaDir, { recursive: true });
       writeFileSync(join(agentsAreaDir, 'SKILL.md'), renderAgentSkill(areaName, content));
     }
-
-    // milens reference always generated
-    writeFileSync(join(milensDir, `${areaName}.md`), content);
 
     count++;
   }
@@ -89,7 +91,7 @@ export function generateSkills(db: Database, rootDir: string, editors?: string[]
   for (const sym of symbols) allFiles.add(sym.filePath);
   const stats = { symbols: symbols.length, links: links.length, files: allFiles.size };
   const areaNames = [...filtered].map(([name]) => name);
-  generateToolInstructions(rootDir, copilotDir, cursorDir, claudeDir, agentsDir, stats, areaNames, has);
+  generateToolInstructions(rootDir, copilotDir, cursorDir, claudeDir, claudeRulesDir, agentsDir, stats, areaNames, has);
 
   return { count, dirs: activeDirs };
 }
@@ -252,12 +254,24 @@ function renderAgentSkill(areaName: string, content: string): string {
 
 // ── Milens MCP tool instructions (injected per-editor) ──
 
-function renderMilensInstructions(rootDir: string, stats: { symbols: number; links: number; files: number }, areaNames: string[]): string {
+type EditorName = 'copilot' | 'cursor' | 'claude' | 'agents' | 'windsurf';
+
+function editorSkillPath(editor: EditorName, name: string): string {
+  switch (editor) {
+    case 'copilot':  return `.github/instructions/${name}.instructions.md`;
+    case 'cursor':   return `.cursor/rules/${name}.mdc`;
+    case 'claude':   return `.claude/skills/generated/${name}/SKILL.md`;
+    case 'agents':   return `.agents/skills/${name}/SKILL.md`;
+    case 'windsurf': return `.windsurfrules`;
+  }
+}
+
+function renderMilensInstructions(rootDir: string, stats: { symbols: number; links: number; files: number }, areaNames: string[], editor: EditorName): string {
   const t = (name: string) => `mcp_milens_${name}`;
   const repo = `repo: "${rootDir}"`;
 
   const skillsRows = areaNames.map(a =>
-    `| Work in the ${capitalize(a)} area | \`.agents/skills/${a}/SKILL.md\` |`
+    `| Work in the ${capitalize(a)} area | \`${editorSkillPath(editor, a)}\` |`
   ).join('\n');
 
   return `<!-- milens:start -->
@@ -345,7 +359,7 @@ npx milens analyze -p . --force
 
 | Task | Read this skill file |
 |------|---------------------|
-| General milens tools reference | \`.agents/skills/milens/SKILL.md\` |
+| General milens tools reference | \`${editorSkillPath(editor, 'milens')}\` |
 ${skillsRows}
 
 <!-- milens:end -->`;
@@ -356,14 +370,15 @@ function generateToolInstructions(
   copilotDir: string,
   cursorDir: string,
   claudeDir: string,
+  _claudeRulesDir: string,
   agentsDir: string,
   stats: { symbols: number; links: number; files: number },
   areaNames: string[],
   has: (name: string) => boolean,
 ): void {
-  const content = renderMilensInstructions(rootDir, stats, areaNames);
-
   if (has('copilot')) {
+    const content = renderMilensInstructions(rootDir, stats, areaNames, 'copilot');
+
     // Copilot: .github/instructions/milens.instructions.md (applyTo: ** → always loaded)
     writeFileSync(
       join(copilotDir, 'milens.instructions.md'),
@@ -377,17 +392,23 @@ function generateToolInstructions(
   }
 
   if (has('cursor')) {
+    const content = renderMilensInstructions(rootDir, stats, areaNames, 'cursor');
+
     // Cursor: .cursor/rules/milens.mdc (alwaysApply: true → always loaded)
     writeFileSync(
       join(cursorDir, 'milens.mdc'),
       `---\ndescription: Milens code intelligence MCP tools\nglobs: "**"\nalwaysApply: true\n---\n\n${content}`,
     );
 
-    // Inject into root config that Cursor always reads
-    injectWithMarkers(join(rootDir, '.cursorrules'), content);
+    // Cursor project-wide rules: .cursor/index.mdc (alwaysApply: always loaded)
+    const cursorIndex = join(rootDir, '.cursor', 'index.mdc');
+    mkdirSync(dirname(cursorIndex), { recursive: true });
+    injectMdcWithMarkers(cursorIndex, content);
   }
 
   if (has('claude')) {
+    const content = renderMilensInstructions(rootDir, stats, areaNames, 'claude');
+
     // Claude: .claude/skills/generated/milens/SKILL.md
     const claudeMilensDir = join(claudeDir, 'milens');
     mkdirSync(claudeMilensDir, { recursive: true });
@@ -398,6 +419,8 @@ function generateToolInstructions(
   }
 
   if (has('agents')) {
+    const content = renderMilensInstructions(rootDir, stats, areaNames, 'agents');
+
     // Universal agents: .agents/skills/milens/SKILL.md
     const agentsMilensDir = join(agentsDir, 'milens');
     mkdirSync(agentsMilensDir, { recursive: true });
@@ -408,6 +431,13 @@ function generateToolInstructions(
 
     // Inject into root config for universal agents
     injectWithMarkers(join(rootDir, 'AGENTS.md'), content);
+  }
+
+  if (has('windsurf')) {
+    const content = renderMilensInstructions(rootDir, stats, areaNames, 'windsurf');
+
+    // Windsurf: .windsurfrules (plain markdown, always loaded — no per-area skill files)
+    injectWithMarkers(join(rootDir, '.windsurfrules'), content);
   }
 }
 
@@ -432,5 +462,29 @@ function injectWithMarkers(filePath: string, content: string): void {
   } else {
     // Create new file
     writeFileSync(filePath, `${content}\n`);
+  }
+}
+
+/** Inject milens content into a .mdc file (MDC = Cursor frontmatter format, alwaysApply). */
+function injectMdcWithMarkers(filePath: string, content: string): void {
+  const startMarker = '<!-- milens:start -->';
+  const endMarker = '<!-- milens:end -->';
+
+  let existing = '';
+  try {
+    existing = readFileSync(filePath, 'utf-8');
+  } catch { /* file doesn't exist */ }
+
+  const wrapped = `${startMarker}\n${content.replace(/<!-- milens:start -->/, '').replace(/<!-- milens:end -->/, '')}\n${endMarker}`;
+
+  if (existing.includes(startMarker) && existing.includes(endMarker)) {
+    const before = existing.slice(0, existing.indexOf(startMarker));
+    const after = existing.slice(existing.indexOf(endMarker) + endMarker.length);
+    writeFileSync(filePath, `${before}${wrapped}${after}`);
+  } else if (existing) {
+    writeFileSync(filePath, `${existing}\n\n${wrapped}\n`);
+  } else {
+    // New .mdc file: add alwaysApply frontmatter
+    writeFileSync(filePath, `---\nalwaysApply: true\n---\n\n${wrapped}\n`);
   }
 }

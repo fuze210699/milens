@@ -41,22 +41,9 @@ The root cause: text search can't distinguish a caller from a comment from a typ
 
 ### How milens Solves This
 
-```mermaid
-flowchart LR
-  subgraph WITHOUT["Without milens"]
-    direction TB
-    W1["Agent: rename resolveLinks"] --> W2["grep for text matches"]
-    W2 --> W3["Finds 8 results — code, tests, configs, docs"]
-    W3 --> W4["Misses: resolveLinksWithStats wraps it,\nanalyze() calls the wrapper"]
-  end
-
-  subgraph WITH["With milens"]
-    direction TB
-    M1["Agent: rename resolveLinks"] --> M2["edit_check resolveLinks"]
-    M2 --> M3["1 caller (resolveLinksWithStats),\nwhich has 1 upstream (analyze).\nTest file imports it directly."]
-    M3 --> M4["Complete chain — safe rename"]
-  end
-```
+<p align="center">
+  <img src="docs/diagram1.svg" alt="Without milens vs With milens comparison" width="700">
+</p>
 
 milens builds a **pre-indexed knowledge graph** at analysis time — resolving every import, call, and inheritance chain — so that any tool query returns the full dependency picture instantly, without multi-step exploration.
 
@@ -294,63 +281,17 @@ npx milens dashboard --port 8080            # custom port
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  subgraph Pipeline["Indexing Pipeline"]
-    Scan["📁 Scan\n.gitignore aware"]
-    Parse["🌳 Parse\ntree-sitter WASM"]
-    Resolve["🔗 Resolve\nimports · calls · heritage"]
-    Enrich["⚡ Enrich\nroles · heat · domains"]
-    Store["💾 Store\nSQLite + FTS5"]
-  end
-
-  subgraph Serve["MCP Server"]
-    Tools["19 Tools"]
-    Resources["4 Resources"]
-    Prompts["3 Prompts"]
-  end
-
-  Scan --> Parse --> Resolve --> Enrich --> Store
-  Store --> Tools
-  Store --> Resources
-  Store --> Prompts
-
-  Agent["🤖 AI Agent\nCopilot · Cursor\nClaude · Codex"]
-  Tools --> Agent
-  Resources --> Agent
-  Prompts --> Agent
-```
+<p align="center">
+  <img src="docs/diagram2.svg" alt="milens architecture: Indexing Pipeline → MCP Server → AI Agent" width="700">
+</p>
 
 ### Multi-Repo Architecture
 
 milens uses a **global registry** — one MCP server serves all indexed repos. No per-project server config needed.
 
-```mermaid
-flowchart TD
-  subgraph Commands["CLI"]
-    Idx["milens analyze -p /repo/A"]
-    Srv["milens serve"]
-  end
-
-  subgraph Global["~/.milens/"]
-    Reg["registry.json\n(repo paths + DB locations)"]
-  end
-
-  subgraph Projects["Per-Repo Indexes"]
-    DbA["repo-A/.milens/milens.db"]
-    DbB["repo-B/.milens/milens.db"]
-  end
-
-  subgraph Server["MCP Server"]
-    ConnPool["On-demand DB pool\nidle timeout: 5 min"]
-  end
-
-  Idx -- "adds entry" --> Reg
-  Idx -- "writes SQLite" --> DbA
-  Srv -- "loads list" --> Reg
-  ConnPool -- "opens on first query" --> DbA
-  ConnPool -- "opens on first query" --> DbB
-```
+<p align="center">
+  <img src="docs/diagram3.svg" alt="Multi-repo architecture: CLI → Registry → Per-Repo DBs → MCP Server" width="500">
+</p>
 
 > With a single indexed repo, all tools work without specifying `repo`. When multiple repos are registered, pass `repo` to target a specific one.
 

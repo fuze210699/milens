@@ -7,8 +7,8 @@ const spec: LangSpec = {
   extensions: ['.go'],
   wasmName: 'tree-sitter-go',
   queries: {
-    functions: `[
-      (function_declaration name: (identifier) @name) @def
+    functions: `(function_declaration name: (identifier) @name) @def`,
+    variables: `[
       (const_declaration (const_spec name: (identifier) @name)) @def
       (var_declaration (var_spec name: (identifier) @name)) @def
     ]`,
@@ -25,6 +25,21 @@ const spec: LangSpec = {
       (type_spec
         name: (type_identifier) @name
         type: (interface_type)
+      )
+    ) @def`,
+    types: `(type_declaration
+      (type_spec
+        name: (type_identifier) @name
+        type: [
+          (type_identifier)
+          (qualified_type)
+          (pointer_type)
+          (slice_type)
+          (map_type)
+          (channel_type)
+          (function_type)
+          (array_type)
+        ]
       )
     ) @def`,
     imports: `(import_spec

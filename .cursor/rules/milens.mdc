@@ -7,7 +7,7 @@ alwaysApply: true
 <!-- milens:start -->
 # Milens — Code Intelligence (MCP)
 
-This project is indexed by milens (203 symbols, 346 links, 30 files).
+This project is indexed by milens (210 symbols, 348 links, 30 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include `repo: "D:\project\milens"` — without it, the tools will fail with "No index" error.
 

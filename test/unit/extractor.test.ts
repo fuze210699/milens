@@ -51,6 +51,10 @@ describe('TypeScript extractor', () => {
     const names = result.symbols.map(s => s.name);
     expect(names).toContain('User');
     expect(names).toContain('createUser');
+
+    // Type alias should be indexed as 'type' kind
+    const types = result.symbols.filter(s => s.kind === 'type');
+    expect(types.some(t => t.name === 'UserRole')).toBe(true);
   });
 });
 

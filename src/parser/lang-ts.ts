@@ -20,6 +20,7 @@ const spec: LangSpec = {
     methods: `(method_definition name: (property_identifier) @name) @def`,
     interfaces: `(interface_declaration name: (type_identifier) @name) @def`,
     enums: `(enum_declaration name: (identifier) @name) @def`,
+    types: `(type_alias_declaration name: (type_identifier) @name) @def`,
     imports: `[
       (import_statement
         source: (string (string_fragment) @source)

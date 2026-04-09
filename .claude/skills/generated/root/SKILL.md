@@ -1,7 +1,7 @@
 # Root
 
 ## Overview
-Contains 30 symbols (10 exported) across 3 files.
+Contains 34 symbols (13 exported) across 3 files.
 
 ## Key Symbols
 - **`generateSkills`** [function] (src/skills.ts:19) — 1 refs
@@ -14,6 +14,9 @@ Contains 30 symbols (10 exported) across 3 files.
 - **`RawReExport`** [interface] (src/types.ts:68) — 0 refs
 - **`AnalysisStats`** [interface] (src/types.ts:75) — 0 refs
 - **`RepoEntry`** [interface] (src/types.ts:87) — 0 refs
+- **`SymbolKind`** [type] (src/types.ts:3) — 0 refs
+- **`SymbolRole`** [type] (src/types.ts:21) — 0 refs
+- **`LinkType`** [type] (src/types.ts:23) — 0 refs
 
 ## Entry Points
 - **`has`** [function] — 19 incoming references

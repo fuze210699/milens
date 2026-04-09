@@ -14,6 +14,7 @@ const spec: LangSpec = {
     classes: `(class_declaration name: (name) @name) @def`,
     interfaces: `(interface_declaration name: (name) @name) @def`,
     traits: `(trait_declaration name: (name) @name) @def`,
+    enums: `(enum_declaration name: (name) @name) @def`,
     methods: `(method_declaration name: (name) @name) @def`,
     imports: `[
       (namespace_use_declaration

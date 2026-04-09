@@ -6,7 +6,7 @@ description: Code intelligence for the server area — symbols, dependencies, an
 # Server
 
 ## Overview
-Contains 27 symbols (3 exported) across 1 files.
+Contains 28 symbols (3 exported) across 1 files.
 
 ## Key Symbols
 - **`createMcpServer`** [function] (src/server/mcp.ts:322) — 2 refs

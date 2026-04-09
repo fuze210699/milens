@@ -7,16 +7,16 @@ const spec: LangSpec = {
   extensions: ['.rs'],
   wasmName: 'tree-sitter-rust',
   queries: {
-    functions: `[
-      (function_item name: (identifier) @name) @def
-      (const_item name: (identifier) @name) @def
-      (static_item name: (identifier) @name) @def
-      (type_item name: (type_identifier) @name) @def
-      (mod_item name: (identifier) @name) @def
-    ]`,
+    functions: `(function_item name: (identifier) @name) @def`,
     structs: `(struct_item name: (type_identifier) @name) @def`,
     enums: `(enum_item name: (type_identifier) @name) @def`,
     traits: `(trait_item name: (type_identifier) @name) @def`,
+    modules: `(mod_item name: (identifier) @name) @def`,
+    types: `(type_item name: (type_identifier) @name) @def`,
+    variables: `[
+      (const_item name: (identifier) @name) @def
+      (static_item name: (identifier) @name) @def
+    ]`,
     methods: `(impl_item
       body: (declaration_list
         (function_item name: (identifier) @name) @def
@@ -39,6 +39,16 @@ const spec: LangSpec = {
       trait: (type_identifier) @parent
       type: (type_identifier) @child
     ) @def`,
+    exports: `[
+      (function_item (visibility_modifier) name: (identifier) @name) @_def
+      (struct_item (visibility_modifier) name: (type_identifier) @name) @_def
+      (enum_item (visibility_modifier) name: (type_identifier) @name) @_def
+      (trait_item (visibility_modifier) name: (type_identifier) @name) @_def
+      (const_item (visibility_modifier) name: (identifier) @name) @_def
+      (static_item (visibility_modifier) name: (identifier) @name) @_def
+      (type_item (visibility_modifier) name: (type_identifier) @name) @_def
+      (mod_item (visibility_modifier) name: (identifier) @name) @_def
+    ]`,
   },
   resolveImport(raw, _fromFile, root, _aliases) {
     // Rust use: crate::module::item → src/module.rs or src/module/mod.rs

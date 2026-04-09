@@ -252,6 +252,45 @@ function parseFile(
   if (spec.id === 'vue') {
     const templateCalls = extractVueTemplateRefs(source, filePath);
     result.calls.push(...templateCalls);
+
+    // Synthesize a component symbol from filename (e.g. CalendarView.vue → CalendarView)
+    const fileName = filePath.split('/').pop()?.replace(/\.vue$/, '');
+    if (fileName) {
+      const componentId = `${filePath}#class:${fileName}:1`;
+      const componentSym: CodeSymbol = {
+        id: componentId,
+        name: fileName,
+        kind: 'class',
+        filePath,
+        startLine: 1,
+        endLine: source.split('\n').length,
+        exported: true,
+      };
+      result.symbols.unshift(componentSym);
+
+      // Mark all top-level symbols as children of the component
+      for (const sym of result.symbols) {
+        if (sym.id !== componentId && !sym.parentId) {
+          sym.parentId = componentId;
+        }
+      }
+    }
+  }
+
+  // Go: exported = first letter uppercase
+  if (spec.id === 'go') {
+    for (const sym of result.symbols) {
+      if (/^[A-Z]/.test(sym.name)) sym.exported = true;
+    }
+  }
+
+  // Java: mark all public symbols as exported (simplified — all top-level classes are public by convention)
+  if (spec.id === 'java') {
+    for (const sym of result.symbols) {
+      if (sym.kind === 'class' || sym.kind === 'interface' || sym.kind === 'enum') {
+        sym.exported = true;
+      }
+    }
   }
 
   return result;

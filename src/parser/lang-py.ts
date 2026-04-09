@@ -15,6 +15,7 @@ const spec: LangSpec = {
       (class_definition name: (identifier) @name) @def
       (decorated_definition definition: (class_definition name: (identifier) @name) @def)
     ]`,
+    variables: `(module (expression_statement (assignment left: (identifier) @name))) @def`,
     methods: `[
       (class_definition body: (block (function_definition name: (identifier) @name) @def))
       (class_definition body: (block (decorated_definition definition: (function_definition name: (identifier) @name) @def)))

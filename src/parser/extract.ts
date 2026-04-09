@@ -16,6 +16,8 @@ export interface LangSpec {
     structs?: string;
     traits?: string;
     modules?: string;
+    types?: string;
+    variables?: string;
     imports?: string;
     calls?: string;
     exports?: string;
@@ -157,6 +159,8 @@ const SYMBOL_QUERY_TYPES: ReadonlyArray<{ key: keyof LangSpec['queries']; kind: 
   { key: 'structs', kind: 'struct' },
   { key: 'traits', kind: 'trait' },
   { key: 'modules', kind: 'module' },
+  { key: 'types', kind: 'type' },
+  { key: 'variables', kind: 'variable' },
 ];
 
 // Container kinds for method → parent resolution
@@ -297,12 +301,16 @@ export function extractFromTree(
       const parentNode = captureNode(match, 'parent');
       if (!child || !parentNode) continue;
 
+      // Filter: if query captures @_inc (Ruby include/extend/prepend), verify method name
+      const incCapture = captureText(match, '_inc');
+      if (incCapture && incCapture !== 'include' && incCapture !== 'extend' && incCapture !== 'prepend') continue;
+
       const defNode = captureNode(match, 'def');
       heritage.push({
         filePath,
         childName: child,
         parentName: parentNode.text,
-        type: detectHeritageType(parentNode),
+        type: incCapture ? 'implements' : detectHeritageType(parentNode),
         line: defNode?.startPosition.row ? defNode.startPosition.row + 1 : 0,
       });
     }

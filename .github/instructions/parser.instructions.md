@@ -9,11 +9,11 @@ Contains 30 symbols (10 exported) across 12 files.
 
 ## Key Symbols
 - **`loadLanguage`** [function] (src/parser/loader.ts:20) — 3 refs
-- **`extractFromTree`** [function] (src/parser/extract.ts:167) — 2 refs
+- **`extractFromTree`** [function] (src/parser/extract.ts:171) — 2 refs
 - **`extractVueScript`** [function] (src/parser/lang-vue.ts:18) — 2 refs
 - **`extractVueTemplateRefs`** [function] (src/parser/lang-vue.ts:37) — 2 refs
 - **`getParser`** [function] (src/parser/loader.ts:31) — 2 refs
-- **`clearQueryCache`** [function] (src/parser/extract.ts:47) — 1 refs
+- **`clearQueryCache`** [function] (src/parser/extract.ts:49) — 1 refs
 - **`langForFile`** [function] (src/parser/languages.ts:21) — 1 refs
 - **`supportedExtensions`** [function] (src/parser/languages.ts:26) — 1 refs
 - **`initTreeSitter`** [function] (src/parser/loader.ts:14) — 1 refs

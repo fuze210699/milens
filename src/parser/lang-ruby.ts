@@ -24,6 +24,8 @@ const spec: LangSpec = {
     heritage: `[
       (class name: (constant) @child superclass: (superclass (constant) @parent)) @def
       (class name: (constant) @child superclass: (superclass (scope_resolution name: (constant) @parent))) @def
+      (class name: (constant) @child body: (body_statement (call method: (identifier) @_inc arguments: (argument_list (constant) @parent)))) @def
+      (class name: (constant) @child body: (body_statement (call method: (identifier) @_inc arguments: (argument_list (scope_resolution name: (constant) @parent))))) @def
     ]`,
   },
   resolveImport(raw, fromFile, root, _aliases) {

@@ -208,7 +208,7 @@ export function createMcpServer(rootPath?: string): McpServer {
 
   const server = new McpServer({
     name: 'milens',
-    version: '0.2.0',
+    version: '0.3.0',
   });
 
   // ── Tool: query ──

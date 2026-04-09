@@ -9,7 +9,8 @@ This project is indexed by **milens** (code intelligence engine). Use milens MCP
 - **Run `context` before editing any symbol.** Before modifying a function, class, or method, run `context({name: "symbolName"})` to see all incoming/outgoing relationships.
 - **Run `impact` before risky changes.** Use `impact({target: "symbolName", direction: "upstream"})` to find what depends on the symbol.
 - **Warn the user** if impact analysis shows many upstream dependents (depth 1 = will break).
-- When exploring unfamiliar code, use `query({query: "concept"})` to find symbols instead of grepping.
+- When exploring unfamiliar code, use `query` for symbol definitions plus `grep` for ALL text references.
+- **Run `grep` before deleting features or renaming.** `grep({pattern: "featureName"})` finds references in templates, SCSS, configs, routes, and docs that `impact` cannot see.
 - Use `detect_changes` after git operations to see which symbols are affected.
 
 ## When Debugging
@@ -23,7 +24,8 @@ This project is indexed by **milens** (code intelligence engine). Use milens MCP
 
 ## When Refactoring
 
-- **Before renaming**: run `context` to see all references, then `impact` to find blast radius
+- **Before renaming**: run `grep` to find ALL text references, then `impact` for symbol graph blast radius
+- **Before deleting a feature**: run `grep` first (templates, configs, routes, docs), then `impact` for code deps. Combine both — `grep` catches what `impact` misses.
 - **Before extracting/splitting**: run `context` on the target to see all incoming refs, then check upstream impact
 - **Check hierarchy**: run `get_type_hierarchy` on classes before modifying inheritance
 - **After any refactor**: re-index with `npx tsx src/cli.ts analyze -p . --force`
@@ -38,9 +40,10 @@ This project is indexed by **milens** (code intelligence engine). Use milens MCP
 
 | Tool | When to use | Example |
 |------|-------------|---------|
-| `query` | Find code by name/concept | `query({query: "auth validation"})` |
+| `query` | Find symbol definitions by name/concept | `query({query: "auth validation"})` |
+| `grep` | Find ALL text references (templates, SCSS, configs, docs) | `grep({pattern: "pencil"})` |
 | `context` | Full context of one symbol | `context({name: "AuthService"})` |
-| `impact` | Blast radius before editing | `impact({target: "createUser", direction: "upstream"})` |
+| `impact` | Blast radius in symbol graph before editing | `impact({target: "createUser", direction: "upstream"})` |
 | `status` | Check index stats | `status()` |
 | `detect_changes` | See affected symbols after git changes | `detect_changes({ref: "HEAD"})` |
 | `explain_relationship` | Trace connection between symbols | `explain_relationship({from: "A", to: "B"})` |

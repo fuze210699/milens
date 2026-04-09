@@ -39,9 +39,10 @@ export function generateSkills(db: Database, rootDir: string): SkillsResult {
   const copilotDir = join(rootDir, '.github', 'instructions');
   const cursorDir = join(rootDir, '.cursor', 'rules');
   const claudeDir = join(rootDir, '.claude', 'skills', 'generated');
+  const agentsDir = join(rootDir, '.agents', 'skills');  // Universal: Antigravity, Copilot, Cursor, Codex, Gemini CLI, Cline, etc.
   const milensDir = join(rootDir, '.milens', 'skills');
 
-  for (const dir of [copilotDir, cursorDir, claudeDir, milensDir]) {
+  for (const dir of [copilotDir, cursorDir, claudeDir, agentsDir, milensDir]) {
     mkdirSync(dir, { recursive: true });
   }
 
@@ -60,13 +61,21 @@ export function generateSkills(db: Database, rootDir: string): SkillsResult {
     mkdirSync(claudeAreaDir, { recursive: true });
     writeFileSync(join(claudeAreaDir, 'SKILL.md'), content);
 
+    // Universal agents: .agents/skills/{area}/SKILL.md
+    const agentsAreaDir = join(agentsDir, areaName);
+    mkdirSync(agentsAreaDir, { recursive: true });
+    writeFileSync(join(agentsAreaDir, 'SKILL.md'), renderAgentSkill(areaName, content));
+
     // milens reference: .milens/skills/{area}.md
     writeFileSync(join(milensDir, `${areaName}.md`), content);
 
     count++;
   }
 
-  return { count, dirs: [copilotDir, cursorDir, claudeDir, milensDir] };
+  // Generate milens MCP tool instructions for each editor
+  generateToolInstructions(rootDir, copilotDir, cursorDir, claudeDir, agentsDir);
+
+  return { count, dirs: [copilotDir, cursorDir, claudeDir, agentsDir, milensDir] };
 }
 
 function getAreaName(filePath: string): string {
@@ -219,4 +228,82 @@ function renderCopilot(area: AreaInfo, content: string): string {
 function renderCursor(area: AreaInfo, content: string): string {
   const glob = area.prefix ? `${area.prefix}/**` : '**';
   return `---\ndescription: Code intelligence for ${area.name} area\nglobs: ${glob}\nalwaysApply: false\n---\n\n${content}`;
+}
+
+function renderAgentSkill(areaName: string, content: string): string {
+  return `---\nname: milens-${areaName}\ndescription: Code intelligence for the ${areaName} area — symbols, dependencies, and entry points\n---\n\n${content}`;
+}
+
+// ── Milens MCP tool instructions (injected per-editor) ──
+
+const MILENS_TOOLS_MD = `# Milens — Code Intelligence
+
+This project is indexed by **milens**, a code intelligence engine that provides MCP tools for navigating and understanding the codebase.
+
+## MCP Tools
+
+| Tool | Purpose | Use when |
+|------|---------|----------|
+| \`query\` | Search indexed symbol definitions (functions, classes, exports) | Finding code by name/concept |
+| \`grep\` | Text search across ALL project files (templates, styles, configs, docs) | Deleting features, renaming, finding every reference |
+| \`context\` | 360° view of a symbol: incoming refs, outgoing deps, hierarchy | Before editing a symbol |
+| \`impact\` | Blast radius — what code breaks if a symbol changes | Before risky changes |
+| \`detect_changes\` | Git diff → affected symbols + dependents | After git operations |
+| \`explain_relationship\` | Shortest path between two symbols | Tracing how symbols connect |
+| \`find_dead_code\` | Exported symbols with zero references | Cleaning up unused code |
+| \`get_file_symbols\` | All symbols in a file | Understanding file contents |
+| \`get_type_hierarchy\` | Inheritance/implementation tree | Before modifying class hierarchy |
+
+## Workflow
+
+### Before Editing Code
+1. Run \`context\` on the symbol to understand its relationships
+2. Run \`impact\` with \`direction: "upstream"\` to see what depends on it
+3. If many upstream dependents exist, warn the user before proceeding
+
+### When Deleting a Feature or Renaming
+1. Run \`grep\` first to find ALL text references (templates, configs, routes, docs)
+2. Run \`impact\` to understand the symbol dependency graph
+3. Combine both — \`grep\` catches what \`impact\` misses
+
+### When Exploring Unfamiliar Code
+- Use \`query\` for symbol definitions + \`grep\` for all text references
+- Use \`context\` on key symbols to understand call chains
+- Use \`get_file_symbols\` to see everything in a file
+
+### After Modifying Code
+- Re-index if needed: \`npx milens analyze -p . --force\`
+`;
+
+function generateToolInstructions(
+  rootDir: string,
+  copilotDir: string,
+  cursorDir: string,
+  claudeDir: string,
+  agentsDir: string,
+): void {
+  // Copilot: .github/instructions/milens.instructions.md (applyTo: ** → always loaded)
+  writeFileSync(
+    join(copilotDir, 'milens.instructions.md'),
+    `---\napplyTo: "**"\n---\n\n${MILENS_TOOLS_MD}`,
+  );
+
+  // Cursor: .cursor/rules/milens.mdc (alwaysApply: true → always loaded)
+  writeFileSync(
+    join(cursorDir, 'milens.mdc'),
+    `---\ndescription: Milens code intelligence MCP tools\nglobs: "**"\nalwaysApply: true\n---\n\n${MILENS_TOOLS_MD}`,
+  );
+
+  // Claude: .claude/skills/generated/milens/SKILL.md
+  const claudeMilensDir = join(claudeDir, 'milens');
+  mkdirSync(claudeMilensDir, { recursive: true });
+  writeFileSync(join(claudeMilensDir, 'SKILL.md'), MILENS_TOOLS_MD);
+
+  // Universal agents: .agents/skills/milens/SKILL.md (Antigravity, Copilot, Cursor, Codex, Gemini CLI, etc.)
+  const agentsMilensDir = join(agentsDir, 'milens');
+  mkdirSync(agentsMilensDir, { recursive: true });
+  writeFileSync(
+    join(agentsMilensDir, 'SKILL.md'),
+    `---\nname: milens\ndescription: Code intelligence MCP tools — symbol search, text grep, impact analysis, dependency graph\n---\n\n${MILENS_TOOLS_MD}`,
+  );
 }

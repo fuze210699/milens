@@ -7,7 +7,13 @@ const spec: LangSpec = {
   extensions: ['.rs'],
   wasmName: 'tree-sitter-rust',
   queries: {
-    functions: `(function_item name: (identifier) @name) @def`,
+    functions: `[
+      (function_item name: (identifier) @name) @def
+      (const_item name: (identifier) @name) @def
+      (static_item name: (identifier) @name) @def
+      (type_item name: (type_identifier) @name) @def
+      (mod_item name: (identifier) @name) @def
+    ]`,
     structs: `(struct_item name: (type_identifier) @name) @def`,
     enums: `(enum_item name: (type_identifier) @name) @def`,
     traits: `(trait_item name: (type_identifier) @name) @def`,
@@ -23,11 +29,12 @@ const spec: LangSpec = {
         (scoped_use_list path: (scoped_identifier) @source)
       ]
     ) @def`,
-    calls: `
+    calls: `[
       (call_expression function: (identifier) @callee) @def
       (call_expression function: (scoped_identifier name: (identifier) @callee)) @def
       (call_expression function: (field_expression field: (field_identifier) @callee)) @def
-    `,
+      (macro_invocation macro: (identifier) @callee) @def
+    ]`,
     heritage: `(impl_item
       trait: (type_identifier) @parent
       type: (type_identifier) @child

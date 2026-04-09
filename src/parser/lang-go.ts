@@ -7,7 +7,11 @@ const spec: LangSpec = {
   extensions: ['.go'],
   wasmName: 'tree-sitter-go',
   queries: {
-    functions: `(function_declaration name: (identifier) @name) @def`,
+    functions: `[
+      (function_declaration name: (identifier) @name) @def
+      (const_declaration (const_spec name: (identifier) @name)) @def
+      (var_declaration (var_spec name: (identifier) @name)) @def
+    ]`,
     methods: `(method_declaration
       name: (field_identifier) @name
     ) @def`,

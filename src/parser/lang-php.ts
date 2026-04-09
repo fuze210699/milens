@@ -7,13 +7,22 @@ const spec: LangSpec = {
   extensions: ['.php'],
   wasmName: 'tree-sitter-php',
   queries: {
-    functions: `(function_definition name: (name) @name) @def`,
+    functions: `[
+      (function_definition name: (name) @name) @def
+      (const_declaration (const_element (name) @name)) @def
+    ]`,
     classes: `(class_declaration name: (name) @name) @def`,
     interfaces: `(interface_declaration name: (name) @name) @def`,
+    traits: `(trait_declaration name: (name) @name) @def`,
     methods: `(method_declaration name: (name) @name) @def`,
-    imports: `(namespace_use_declaration
-      (namespace_use_clause (qualified_name) @source)
-    ) @def`,
+    imports: `[
+      (namespace_use_declaration
+        (namespace_use_clause (qualified_name) @source)
+      ) @def
+      (expression_statement
+        (include_expression (string (string_content) @source))
+      ) @def
+    ]`,
     calls: `
       (function_call_expression
         function: (name) @callee
@@ -30,6 +39,12 @@ const spec: LangSpec = {
       (class_declaration
         name: (name) @child
         (class_interface_clause (name) @parent)
+      ) @def
+      (class_declaration
+        body: (declaration_list
+          (use_declaration (name) @parent)
+        )
+        name: (name) @child
       ) @def
     ]`,
   },

@@ -20,9 +20,19 @@ const spec: LangSpec = {
     methods: `(method_definition name: (property_identifier) @name) @def`,
     interfaces: `(interface_declaration name: (type_identifier) @name) @def`,
     enums: `(enum_declaration name: (identifier) @name) @def`,
-    imports: `(import_statement
-      source: (string (string_fragment) @source)
-    ) @def`,
+    imports: `[
+      (import_statement
+        source: (string (string_fragment) @source)
+      ) @def
+      (lexical_declaration
+        (variable_declarator
+          value: (call_expression
+            function: (identifier) @_req
+            arguments: (arguments (string (string_fragment) @source))
+          )
+        )
+      ) @def
+    ]`,
     exports: `[
       (export_statement
         declaration: (function_declaration name: (identifier) @name)
@@ -43,6 +53,9 @@ const spec: LangSpec = {
       )
       (export_statement
         (export_clause (export_specifier name: (identifier) @name))
+      )
+      (export_statement
+        declaration: (type_alias_declaration name: (type_identifier) @name)
       )
     ]`,
     calls: `

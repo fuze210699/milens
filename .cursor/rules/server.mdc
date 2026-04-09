@@ -7,22 +7,23 @@ alwaysApply: false
 # Server
 
 ## Overview
-Contains 13 symbols (3 exported) across 1 files.
+Contains 21 symbols (3 exported) across 1 files.
 
 ## Key Symbols
-- **`createMcpServer`** [function] (src/server/mcp.ts:68) — 2 refs
-- **`startStdio`** [function] (src/server/mcp.ts:368) — 1 refs
-- **`startHttp`** [function] (src/server/mcp.ts:376) — 1 refs
+- **`createMcpServer`** [function] (src/server/mcp.ts:227) — 2 refs
+- **`startStdio`** [function] (src/server/mcp.ts:656) — 1 refs
+- **`startHttp`** [function] (src/server/mcp.ts:664) — 1 refs
 
 ## Entry Points
-- **`get`** [method] — 17 incoming references
+- **`get`** [method] — 18 incoming references
 - **`fmtSymbol`** [function] — 2 incoming references
+- **`walk`** [function] — 2 incoming references
 - **`createMcpServer`** [function] — 2 incoming references
-- **`fmtImpact`** [function] — 1 incoming references
-- **`getDb`** [function] — 1 incoming references
+- **`resolveRoot`** [function] — 2 incoming references
 
 ## Dependencies
-- **store**: `close`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks`, `findSymbolById`, `getOutgoingLinks`, `findUpstream` (+6 more)
+- **store**: `close`, `findByRoot`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks`, `findSymbolById`, `getOutgoingLinks` (+7 more)
+- **root**: `has`
 
 ## Used By
 - **analyzer**: `get`

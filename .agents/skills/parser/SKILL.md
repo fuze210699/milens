@@ -1,3 +1,8 @@
+---
+name: milens-parser
+description: Code intelligence for the parser area — symbols, dependencies, and entry points
+---
+
 # Parser
 
 ## Overview

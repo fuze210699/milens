@@ -1,7 +1,6 @@
 ---
-description: Milens code intelligence MCP tools
-globs: "**"
-alwaysApply: true
+name: milens
+description: Code intelligence MCP tools — symbol search, text grep, impact analysis, dependency graph
 ---
 
 <!-- milens:start -->

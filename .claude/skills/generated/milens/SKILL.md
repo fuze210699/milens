@@ -1,9 +1,3 @@
----
-description: Milens code intelligence MCP tools
-globs: "**"
-alwaysApply: true
----
-
 <!-- milens:start -->
 # Milens — Code Intelligence (MCP)
 

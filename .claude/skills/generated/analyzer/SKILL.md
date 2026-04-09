@@ -18,8 +18,9 @@ Contains 12 symbols (4 exported) across 3 files.
 
 ## Dependencies
 - **store**: `clear`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction`, `clearSymbolsAndLinks`, `deleteFileData`, `insertSymbol` (+3 more)
-- **parser**: `langForFile`, `getParser`, `loadLanguage`, `resolveImport`, `clearQueryCache`, `extractVueScript`, `extractFromTree`, `supportedExtensions`
+- **parser**: `langForFile`, `getParser`, `loadLanguage`, `resolveImport`, `clearQueryCache`, `extractVueScript`, `extractFromTree`, `extractVueTemplateRefs` (+1 more)
 - **server**: `get`
+- **root**: `has`
 
 ## Files
 - src/analyzer/engine.ts

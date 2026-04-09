@@ -1,3 +1,8 @@
+---
+name: milens-test
+description: Code intelligence for the test area — symbols, dependencies, and entry points
+---
+
 # Test
 
 ## Overview

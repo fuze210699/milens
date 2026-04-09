@@ -1,3 +1,8 @@
+---
+name: milens-server
+description: Code intelligence for the server area — symbols, dependencies, and entry points
+---
+
 # Server
 
 ## Overview

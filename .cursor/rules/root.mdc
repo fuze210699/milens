@@ -7,7 +7,7 @@ alwaysApply: false
 # Root
 
 ## Overview
-Contains 21 symbols (9 exported) across 3 files.
+Contains 27 symbols (9 exported) across 3 files.
 
 ## Key Symbols
 - **`generateSkills`** [function] (src/skills.ts:19) — 1 refs
@@ -21,15 +21,21 @@ Contains 21 symbols (9 exported) across 3 files.
 - **`RepoEntry`** [interface] (src/types.ts:71) — 0 refs
 
 ## Entry Points
+- **`has`** [function] — 13 incoming references
 - **`getAreaName`** [function] — 2 incoming references
+- **`capitalize`** [function] — 2 incoming references
 - **`loadAliases`** [function] — 1 incoming references
 - **`deleteIndex`** [function] — 1 incoming references
-- **`generateSkills`** [function] — 1 incoming references
-- **`getAreaPrefix`** [function] — 1 incoming references
 
 ## Dependencies
 - **store**: `getAllSymbols`, `getAllLinks`
 - **server**: `get`
+
+## Used By
+- **analyzer**: `has`
+- **parser**: `has`
+- **server**: `has`
+- **store**: `has`
 
 ## Files
 - src/cli.ts

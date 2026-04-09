@@ -183,6 +183,45 @@ function loadGrepIgnoreRules(rootPath: string): ReturnType<typeof ignore> {
   return ig;
 }
 
+// ── Server instructions (sent to client via MCP protocol on initialize) ──
+
+const MILENS_INSTRUCTIONS = `milens is a code intelligence engine. It indexes codebases into knowledge graphs and provides tools for navigating and understanding code.
+
+## Critical Workflow Rules
+
+### Always combine \`impact\` with \`grep\`
+\`impact\` only tracks code-level symbol dependencies (calls, imports, extends).
+\`grep\` finds ALL text references including templates, styles, configs, routes, and docs.
+**After running \`impact\`, always run \`grep\` for the same symbol to catch non-code references.**
+
+### Before editing a symbol
+1. Run \`context\` to see all incoming/outgoing relationships
+2. Run \`impact\` with direction "upstream" to find what depends on it
+3. Run \`grep\` to find ALL text references (templates, SCSS, configs, routes, docs)
+
+### When deleting a feature or renaming
+1. Run \`grep\` first — finds every text occurrence across all file types
+2. Run \`impact\` — finds code-level dependency graph
+3. Combine both results — grep catches what impact misses and vice versa
+
+### Tool selection guide
+- **Find symbol definitions** → \`query\`
+- **Find ALL text references** (templates, styles, configs, docs) → \`grep\`
+- **Understand a symbol's relationships** → \`context\`
+- **What breaks if I change this?** → \`impact\` (upstream) + \`grep\`
+- **What does this call/depend on?** → \`impact\` (downstream)
+- **How are two symbols connected?** → \`explain_relationship\`
+- **What changed recently?** → \`detect_changes\`
+- **Find unused exports** → \`find_dead_code\`
+- **See all symbols in a file** → \`get_file_symbols\`
+- **Class inheritance tree** → \`get_type_hierarchy\`
+
+### Impact depth guide
+- depth 1: WILL BREAK — direct callers/importers → must update
+- depth 2: LIKELY AFFECTED — indirect dependents → should test
+- depth 3: MAY NEED TESTING — transitive → test if critical path
+`;
+
 // ── Server setup ──
 
 export function createMcpServer(rootPath?: string): McpServer {
@@ -206,10 +245,10 @@ export function createMcpServer(rootPath?: string): McpServer {
     return { db: pools.get(root)!.get(), root };
   }
 
-  const server = new McpServer({
-    name: 'milens',
-    version: '0.3.0',
-  });
+  const server = new McpServer(
+    { name: 'milens', version: '0.3.1' },
+    { instructions: MILENS_INSTRUCTIONS },
+  );
 
   // ── Tool: query ──
   server.tool(
@@ -225,7 +264,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const { db } = getDb(repo);
       const results = db.searchSymbols(query, limit);
       if (results.length === 0) {
-        return { content: [{ type: 'text' as const, text: `No symbols matching "${query}"` }] };
+        return { content: [{ type: 'text' as const, text: `No symbols matching "${query}". NOTE: query only searches indexed symbol definitions. Use \`grep\` to search ALL project files (templates, styles, configs, docs).` }] };
       }
       const text = results.map(s => fmtSymbol(s)).join('\n');
       return { content: [{ type: 'text' as const, text }] };
@@ -292,7 +331,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const { db } = getDb(repo);
       const symbols = db.findSymbolByName(name);
       if (symbols.length === 0) {
-        return { content: [{ type: 'text' as const, text: `Symbol "${name}" not found` }] };
+        return { content: [{ type: 'text' as const, text: `Symbol "${name}" not found in index. Use \`grep\` to search ALL project files for text references.` }] };
       }
 
       const lines: string[] = [];
@@ -338,7 +377,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const { db } = getDb(repo);
       const symbols = db.findSymbolByName(target);
       if (symbols.length === 0) {
-        return { content: [{ type: 'text' as const, text: `Symbol "${target}" not found` }] };
+        return { content: [{ type: 'text' as const, text: `Symbol "${target}" not found in index. Use \`grep\` to search ALL project files for text references.` }] };
       }
 
       const lines: string[] = [];
@@ -349,10 +388,11 @@ export function createMcpServer(rootPath?: string): McpServer {
           : db.findDownstream(sym.id, depth);
 
         if (refs.length === 0) {
-          lines.push(`No ${direction} dependencies found.`);
+          lines.push(`No ${direction} dependencies found in symbol graph. IMPORTANT: Also run \`grep\` for "${target}" to find references in templates, styles, configs, routes, and docs that are not tracked by impact analysis.`);
         } else {
           lines.push(`${direction} (${refs.length} symbols):`);
           lines.push(fmtImpact(refs));
+          lines.push(`\nNOTE: impact only tracks code-level dependencies. Also run \`grep\` for "${target}" to find template/style/config/doc references.`);
         }
         lines.push('');
       }
@@ -438,7 +478,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const { db } = getDb(repo);
       const path = db.findPath(from, to);
       if (!path) {
-        return { content: [{ type: 'text' as const, text: `No relationship found between "${from}" and "${to}"` }] };
+        return { content: [{ type: 'text' as const, text: `No relationship found between "${from}" and "${to}" in the symbol graph. Use \`grep\` to search for text references that may connect them.` }] };
       }
 
       const fromSym = db.findSymbolByName(from)[0];
@@ -510,7 +550,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const { db } = getDb(repo);
       const symbols = db.findSymbolByName(name);
       if (symbols.length === 0) {
-        return { content: [{ type: 'text' as const, text: `Symbol "${name}" not found` }] };
+        return { content: [{ type: 'text' as const, text: `Symbol "${name}" not found in index. Use \`grep\` to search ALL project files for text references.` }] };
       }
 
       const lines: string[] = [];
@@ -540,6 +580,72 @@ export function createMcpServer(rootPath?: string): McpServer {
 
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },
+  );
+
+  // ── Prompt: delete-feature ──
+  server.prompt(
+    'delete-feature',
+    'Step-by-step workflow for safely deleting a feature from the codebase',
+    { name: z.string().describe('Feature or symbol name to delete') },
+    ({ name }) => ({
+      messages: [{
+        role: 'user',
+        content: {
+          type: 'text',
+          text: `I want to safely delete the feature "${name}" from this codebase. Follow these steps:\n\n` +
+            `1. Run \`grep\` with pattern "${name}" to find ALL text references (templates, styles, configs, routes, docs)\n` +
+            `2. Run \`impact\` with target "${name}" and direction "upstream" to find code-level dependents\n` +
+            `3. Run \`context\` on "${name}" to see full relationships\n` +
+            `4. Combine grep + impact results to build a complete deletion plan\n` +
+            `5. List ALL files that need changes, ordered by dependency (leaf nodes first)\n\n` +
+            `Important: grep catches template/config/route references that impact cannot see. Always use both.`,
+        },
+      }],
+    }),
+  );
+
+  // ── Prompt: refactor-symbol ──
+  server.prompt(
+    'refactor-symbol',
+    'Step-by-step workflow for safely renaming or refactoring a symbol',
+    { name: z.string().describe('Symbol name to refactor') },
+    ({ name }) => ({
+      messages: [{
+        role: 'user',
+        content: {
+          type: 'text',
+          text: `I want to safely refactor/rename "${name}". Follow these steps:\n\n` +
+            `1. Run \`context\` on "${name}" to understand all relationships\n` +
+            `2. Run \`impact\` with target "${name}" and direction "upstream" to find all dependents\n` +
+            `3. Run \`grep\` with pattern "${name}" to find ALL text references (templates, SCSS, configs, routes, docs)\n` +
+            `4. Run \`get_type_hierarchy\` if it's a class/interface to check inheritance\n` +
+            `5. List every file and location that needs updating\n\n` +
+            `Important: grep catches template/config references that impact cannot see. Always use both.`,
+        },
+      }],
+    }),
+  );
+
+  // ── Prompt: explore-symbol ──
+  server.prompt(
+    'explore-symbol',
+    'Deep exploration of an unfamiliar symbol — what it is, who uses it, what it depends on',
+    { name: z.string().describe('Symbol name to explore') },
+    ({ name }) => ({
+      messages: [{
+        role: 'user',
+        content: {
+          type: 'text',
+          text: `I want to understand "${name}" in this codebase. Run these tools:\n\n` +
+            `1. \`query\` for "${name}" to find its definition\n` +
+            `2. \`context\` on "${name}" for full 360° view (incoming refs, outgoing deps)\n` +
+            `3. \`impact\` upstream to see what depends on it\n` +
+            `4. \`impact\` downstream to see what it depends on\n` +
+            `5. \`grep\` for "${name}" to find all text references including templates and configs\n` +
+            `6. Summarize: what it does, who uses it, what it depends on, and how important it is`,
+        },
+      }],
+    }),
   );
 
   return server;

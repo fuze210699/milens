@@ -23,6 +23,10 @@ const spec: LangSpec = {
     ]`,
     calls: `[
       (method_invocation
+        object: (_) @receiver
+        name: (identifier) @callee
+      ) @def
+      (method_invocation
         name: (identifier) @callee
       ) @def
       (object_creation_expression type: (type_identifier) @callee) @def

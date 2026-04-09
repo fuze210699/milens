@@ -86,4 +86,106 @@ describe('Database', () => {
     expect(stats.symbols).toBeGreaterThanOrEqual(2);
     expect(stats.links).toBeGreaterThanOrEqual(1);
   });
+
+  it('traces call chains to entrypoints', () => {
+    // Add an entrypoint that calls AuthService
+    const entrypoint: CodeSymbol = {
+      id: 'src/app.ts#function:main:1',
+      name: 'main',
+      kind: 'function',
+      filePath: 'src/app.ts',
+      startLine: 1,
+      endLine: 10,
+      exported: true,
+      role: 'entrypoint',
+    };
+    db.insertSymbol(entrypoint);
+
+    // main → AuthService (calls link)
+    const link: SymbolLink = {
+      id: 'src/app.ts#function:main:1->calls->src/auth.ts#class:AuthService:3',
+      fromId: 'src/app.ts#function:main:1',
+      toId: 'src/auth.ts#class:AuthService:3',
+      type: 'calls',
+      confidence: 0.9,
+    };
+    db.insertLink(link);
+
+    // Trace from createUser → should find chain: main → AuthService → createUser
+    const traces = db.traceToEntrypoints('src/models.ts#function:createUser:10');
+    expect(traces.length).toBeGreaterThan(0);
+    // First path should include 'main' somewhere in the chain
+    const names = traces[0].path.map(s => s.symbol.name);
+    expect(names).toContain('main');
+    expect(names).toContain('createUser');
+  });
+
+  it('finds entrypoints', () => {
+    const entrypoints = db.getEntrypoints();
+    expect(entrypoints.some(s => s.name === 'main')).toBe(true);
+  });
+
+  it('stores and retrieves external resolution stats', () => {
+    db.setMeta('external_imports', '42');
+    db.setMeta('external_calls', '100');
+    const stats = db.getUnresolvedStats();
+    expect(stats.externalImports).toBe(42);
+    expect(stats.externalCalls).toBe(100);
+  });
+
+  it('stores and retrieves test coverage metadata', () => {
+    db.setMeta('test_files', '3');
+    db.setMeta('tested_symbols', '12');
+    db.setMeta('exported_production_symbols', '20');
+    const coverage = db.getTestCoverage();
+    expect(coverage.testFiles).toBe(3);
+    expect(coverage.testedSymbols).toBe(12);
+    expect(coverage.exportedProductionSymbols).toBe(20);
+  });
+
+  it('returns domain stats grouped by zone', () => {
+    // Zones are set via setFileZone — simulate domain clustering output
+    db.upsertFileHash('src/auth.ts', 'hash-auth');
+    db.setFileZone('src/auth.ts', 'auth');
+    db.upsertFileHash('src/models.ts', 'hash-models');
+    db.setFileZone('src/models.ts', 'auth');
+    db.upsertFileHash('src/app.ts', 'hash-app');
+    db.setFileZone('src/app.ts', 'app');
+
+    const domains = db.getDomainStats();
+    expect(domains.length).toBeGreaterThanOrEqual(2);
+    const authDomain = domains.find(d => d.domain === 'auth');
+    expect(authDomain).toBeDefined();
+    expect(authDomain!.files).toBe(2);
+    const appDomain = domains.find(d => d.domain === 'app');
+    expect(appDomain).toBeDefined();
+    expect(appDomain!.files).toBe(1);
+  });
+
+  it('detects stale files by analyzed_at timestamp', () => {
+    // Recently analyzed files should NOT appear as stale
+    const stale = db.getStaleFiles(24);
+    // All files were just upserted, so none should be stale at 24h
+    const recentFiles = ['src/auth.ts', 'src/models.ts', 'src/app.ts'];
+    for (const f of recentFiles) {
+      expect(stale).not.toContain(f);
+    }
+  });
+
+  it('returns files by zone', () => {
+    const authFiles = db.db_getFilesByZone('auth');
+    expect(authFiles).toContain('src/auth.ts');
+    expect(authFiles).toContain('src/models.ts');
+    expect(authFiles).not.toContain('src/app.ts');
+  });
+
+  it('returns repo summary with domains and stale count', () => {
+    const summary = db.getRepoSummary();
+    expect(summary.symbols).toBeGreaterThanOrEqual(2);
+    expect(summary.links).toBeGreaterThanOrEqual(1);
+    expect(summary.files).toBeGreaterThanOrEqual(3);
+    expect(summary.domains).toContain('auth');
+    expect(summary.domains).toContain('app');
+    expect(typeof summary.staleCount).toBe('number');
+  });
 });

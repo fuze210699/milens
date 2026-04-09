@@ -1,5 +1,5 @@
 import type Parser from 'web-tree-sitter';
-import type { CodeSymbol, RawImport, RawCall, RawHeritage, ExtractionResult, SymbolKind } from '../types.js';
+import type { CodeSymbol, RawImport, RawCall, RawHeritage, RawReExport, ExtractionResult, SymbolKind } from '../types.js';
 
 // ── Declarative language specification ──
 
@@ -15,9 +15,11 @@ export interface LangSpec {
     enums?: string;
     structs?: string;
     traits?: string;
+    modules?: string;
     imports?: string;
     calls?: string;
     exports?: string;
+    reExports?: string;
     heritage?: string;
   };
   resolveImport(raw: string, fromFile: string, root: string, aliases: Record<string, string>): string | null;
@@ -154,10 +156,11 @@ const SYMBOL_QUERY_TYPES: ReadonlyArray<{ key: keyof LangSpec['queries']; kind: 
   { key: 'enums', kind: 'enum' },
   { key: 'structs', kind: 'struct' },
   { key: 'traits', kind: 'trait' },
+  { key: 'modules', kind: 'module' },
 ];
 
 // Container kinds for method → parent resolution
-const CONTAINER_KINDS = new Set<SymbolKind>(['class', 'struct', 'trait']);
+const CONTAINER_KINDS = new Set<SymbolKind>(['class', 'struct', 'trait', 'module']);
 
 // ── Universal symbol extractor ──
 
@@ -171,6 +174,7 @@ export function extractFromTree(
   const imports: RawImport[] = [];
   const calls: RawCall[] = [];
   const heritage: RawHeritage[] = [];
+  const reExports: RawReExport[] = [];
   const exportedNames = new Set<string>();
 
   const root = tree.rootNode;
@@ -246,7 +250,7 @@ export function extractFromTree(
 
       // Filter: if query captures @_req (require() pattern), verify identifier text
       const reqCapture = captureText(match, '_req');
-      if (reqCapture && reqCapture !== 'require') continue;
+      if (reqCapture && reqCapture !== 'require' && reqCapture !== 'require_relative') continue;
 
       const cleanSource = source.replace(/^['"]|['"]$/g, '');
       const names = collectImportNames(defNode);
@@ -304,5 +308,30 @@ export function extractFromTree(
     }
   }
 
-  return { symbols, imports, calls, heritage, exportedNames };
+  // ── Extract re-exports (export { X } from './y', export * from './y') ──
+
+  if (spec.queries.reExports) {
+    for (const match of runQuery(spec.queries.reExports)) {
+      const source = captureText(match, 'source');
+      const defNode = captureNode(match, 'def');
+      if (!source || !defNode) continue;
+
+      const cleanSource = source.replace(/^['"]|['"]$/g, '');
+      const names: string[] = [];
+
+      // Collect re-exported names from export_clause
+      for (const capture of match.captures) {
+        if (capture.name === 'name') names.push(capture.node.text);
+      }
+
+      reExports.push({
+        filePath,
+        modulePath: cleanSource,
+        names,
+        line: defNode.startPosition.row + 1,
+      });
+    }
+  }
+
+  return { symbols, imports, calls, heritage, exportedNames, reExports };
 }

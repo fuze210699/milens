@@ -29,8 +29,14 @@ export class Database {
          ON CONFLICT(path) DO UPDATE SET hash = excluded.hash, analyzed_at = datetime('now')`
       ),
       insertSym: this.db.prepare(
-        `INSERT OR REPLACE INTO symbols (id, name, kind, file_path, start_line, end_line, exported, parent_id, signature)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT OR REPLACE INTO symbols (id, name, kind, file_path, start_line, end_line, exported, parent_id, signature, role, heat)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ),
+      updateMeta: this.db.prepare(
+        `UPDATE symbols SET role = ?, heat = ? WHERE id = ?`
+      ),
+      upsertZone: this.db.prepare(
+        `UPDATE file_hashes SET zone = ? WHERE path = ?`
       ),
       insertLink: this.db.prepare(
         `INSERT OR REPLACE INTO links (id, from_id, to_id, type, confidence, line_number)
@@ -85,6 +91,19 @@ export class Database {
       sql = readFileSync(join(__dirname, '..', '..', 'src', 'store', 'schema.sql'), 'utf-8');
     }
     this.db.exec(sql);
+    this.migrateSchema();
+  }
+
+  private migrateSchema(): void {
+    // Add columns introduced after initial schema (safe to re-run)
+    const cols = this.db.prepare(`PRAGMA table_info(symbols)`).all() as any[];
+    const colNames = new Set(cols.map((c: any) => c.name));
+    if (!colNames.has('role')) this.db.exec(`ALTER TABLE symbols ADD COLUMN role TEXT`);
+    if (!colNames.has('heat')) this.db.exec(`ALTER TABLE symbols ADD COLUMN heat INTEGER DEFAULT 0`);
+
+    const fhCols = this.db.prepare(`PRAGMA table_info(file_hashes)`).all() as any[];
+    const fhNames = new Set(fhCols.map((c: any) => c.name));
+    if (!fhNames.has('zone')) this.db.exec(`ALTER TABLE file_hashes ADD COLUMN zone TEXT`);
   }
 
   // ── File hash tracking ──
@@ -107,6 +126,7 @@ export class Database {
       sym.id, sym.name, sym.kind, sym.filePath,
       sym.startLine, sym.endLine, sym.exported ? 1 : 0,
       sym.parentId ?? null, sym.signature ?? null,
+      sym.role ?? null, sym.heat ?? 0,
     );
   }
 
@@ -115,6 +135,14 @@ export class Database {
       link.id, link.fromId, link.toId, link.type,
       link.confidence, link.line ?? null,
     );
+  }
+
+  updateSymbolMetadata(id: string, role: string, heat: number): void {
+    this.stmts.updateMeta.run(role, heat, id);
+  }
+
+  setFileZone(filePath: string, zone: string): void {
+    this.stmts.upsertZone.run(zone, filePath);
   }
 
   // ── Queries ──
@@ -285,10 +313,210 @@ export class Database {
     this.db.exec('DELETE FROM links');
   }
 
+  // ── Repo metadata (unresolved counts, etc.) ──
+
+  setMeta(key: string, value: string): void {
+    this.db.prepare('INSERT OR REPLACE INTO repo_meta (key, value) VALUES (?, ?)').run(key, value);
+  }
+
+  getMeta(key: string): string | undefined {
+    const row = this.db.prepare('SELECT value FROM repo_meta WHERE key = ?').get(key) as any;
+    return row?.value;
+  }
+
+  getUnresolvedStats(): { imports: number; calls: number; externalImports: number; externalCalls: number } {
+    return {
+      imports: parseInt(this.getMeta('unresolved_imports') ?? '0', 10),
+      calls: parseInt(this.getMeta('unresolved_calls') ?? '0', 10),
+      externalImports: parseInt(this.getMeta('external_imports') ?? '0', 10),
+      externalCalls: parseInt(this.getMeta('external_calls') ?? '0', 10),
+    };
+  }
+
+  getTestCoverage(): { testFiles: number; testedSymbols: number; exportedProductionSymbols: number } {
+    return {
+      testFiles: parseInt(this.getMeta('test_files') ?? '0', 10),
+      testedSymbols: parseInt(this.getMeta('tested_symbols') ?? '0', 10),
+      exportedProductionSymbols: parseInt(this.getMeta('exported_production_symbols') ?? '0', 10),
+    };
+  }
+
+  // ── Flow tracing — call chains from entrypoints to target ──
+
+  traceToEntrypoints(symbolId: string, maxDepth = 8): Array<{ path: Array<{ symbol: CodeSymbol; via: string }>}> {
+    // Walk upstream following only 'calls' links to find paths from entrypoints
+    const paths: Array<{ path: Array<{ symbol: CodeSymbol; via: string }> }> = [];
+    const visited = new Set<string>();
+
+    const dfs = (currentId: string, currentPath: Array<{ symbol: CodeSymbol; via: string }>, depth: number) => {
+      if (depth > maxDepth) return;
+      if (visited.has(currentId)) return;
+      visited.add(currentId);
+
+      const incoming = this.getIncomingLinks(currentId).filter(l => l.type === 'calls' || l.type === 'imports');
+      const sym = this.findSymbolById(currentId);
+
+      if (incoming.length === 0 && sym?.exported) {
+        // Reached an entrypoint — save this path
+        paths.push({ path: [...currentPath] });
+        visited.delete(currentId);
+        return;
+      }
+
+      for (const link of incoming) {
+        const fromSym = this.findSymbolById(link.fromId);
+        if (!fromSym) continue;
+        // Skip module-level _top imports — go to their real callers
+        if (fromSym.name === '_top' && fromSym.kind === 'module') {
+          // Recurse from the _top module's incoming callers
+          dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
+        } else {
+          dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
+        }
+      }
+
+      visited.delete(currentId);
+    };
+
+    const targetSym = this.findSymbolById(symbolId);
+    if (targetSym) {
+      dfs(symbolId, [{ symbol: targetSym, via: 'target' }], 0);
+    }
+
+    // Sort by path length (shortest first), limit to 5
+    return paths.sort((a, b) => a.path.length - b.path.length).slice(0, 5);
+  }
+
+  // ── Route/endpoint detection via link patterns ──
+
+  getEntrypoints(): CodeSymbol[] {
+    // Symbols with role='entrypoint' OR exported + 0 incoming non-contains links
+    const rows = this.db.prepare(`
+      SELECT s.* FROM symbols s
+      WHERE s.exported = 1
+        AND s.role = 'entrypoint'
+      ORDER BY s.heat DESC
+      LIMIT 50
+    `).all() as any[];
+    return rows.map(rowToSymbol);
+  }
+
+  // ── Domain clustering stats ──
+
+  getDomainStats(): Array<{ domain: string; files: number; symbols: number }> {
+    const rows = this.db.prepare(`
+      SELECT fh.zone AS domain, COUNT(DISTINCT fh.path) AS file_count,
+             COUNT(s.id) AS symbol_count
+      FROM file_hashes fh
+      LEFT JOIN symbols s ON s.file_path = fh.path
+      WHERE fh.zone IS NOT NULL
+      GROUP BY fh.zone
+      ORDER BY symbol_count DESC
+    `).all() as any[];
+    return rows.map((r: any) => ({ domain: r.domain, files: r.file_count, symbols: r.symbol_count }));
+  }
+
+  // ── Staleness detection ──
+
+  getStaleFiles(hoursOld = 24): string[] {
+    const rows = this.db.prepare(`
+      SELECT path FROM file_hashes
+      WHERE analyzed_at < datetime('now', '-' || ? || ' hours')
+      ORDER BY analyzed_at ASC
+    `).all(hoursOld) as any[];
+    return rows.map((r: any) => r.path);
+  }
+
+  // ── Zone/domain queries ──
+
+  db_getFilesByZone(zone: string): string[] {
+    const rows = this.db.prepare(
+      'SELECT path FROM file_hashes WHERE zone = ? ORDER BY path'
+    ).all(zone) as any[];
+    return rows.map((r: any) => r.path);
+  }
+
+  // ── Multi-repo summary ──
+
+  getRepoSummary(): { symbols: number; links: number; files: number; domains: string[]; staleCount: number } {
+    const stats = this.getStats();
+    const domains = this.getDomainStats().map(d => d.domain);
+    const staleCount = this.getStaleFiles(24).length;
+    return { ...stats, domains, staleCount };
+  }
+
   clear(): void {
     this.db.exec('DELETE FROM symbols');
     this.db.exec('DELETE FROM links');
     this.db.exec('DELETE FROM file_hashes');
+  }
+
+  // ── Tool usage tracking ──
+
+  logToolUsage(tool: string, durationMs: number, tokensOut: number, tokensSaved: number, repo?: string): void {
+    this.db.prepare(
+      `INSERT INTO tool_usage (tool, duration_ms, tokens_out, tokens_saved, repo)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(tool, durationMs, tokensOut, tokensSaved, repo ?? null);
+  }
+
+  getToolUsageStats(): {
+    totalCalls: number;
+    totalTokensSaved: number;
+    totalTokensOut: number;
+    totalDurationMs: number;
+    byTool: Array<{ tool: string; calls: number; tokensSaved: number; tokensOut: number; avgDurationMs: number }>;
+    byDay: Array<{ date: string; calls: number; tokensSaved: number }>;
+    recentCalls: Array<{ tool: string; calledAt: string; durationMs: number; tokensSaved: number }>;
+  } {
+    const totals = this.db.prepare(`
+      SELECT COUNT(*) as total_calls,
+             COALESCE(SUM(tokens_saved), 0) as total_saved,
+             COALESCE(SUM(tokens_out), 0) as total_out,
+             COALESCE(SUM(duration_ms), 0) as total_ms
+      FROM tool_usage
+    `).get() as any;
+
+    const byTool = this.db.prepare(`
+      SELECT tool, COUNT(*) as calls,
+             COALESCE(SUM(tokens_saved), 0) as tokens_saved,
+             COALESCE(SUM(tokens_out), 0) as tokens_out,
+             CAST(COALESCE(AVG(duration_ms), 0) AS INTEGER) as avg_ms
+      FROM tool_usage
+      GROUP BY tool
+      ORDER BY calls DESC
+    `).all() as any[];
+
+    const byDay = this.db.prepare(`
+      SELECT date(called_at) as date, COUNT(*) as calls,
+             COALESCE(SUM(tokens_saved), 0) as tokens_saved
+      FROM tool_usage
+      GROUP BY date(called_at)
+      ORDER BY date DESC
+      LIMIT 30
+    `).all() as any[];
+
+    const recentCalls = this.db.prepare(`
+      SELECT tool, called_at, duration_ms, tokens_saved
+      FROM tool_usage
+      ORDER BY id DESC
+      LIMIT 50
+    `).all() as any[];
+
+    return {
+      totalCalls: totals.total_calls,
+      totalTokensSaved: totals.total_saved,
+      totalTokensOut: totals.total_out,
+      totalDurationMs: totals.total_ms,
+      byTool: byTool.map((r: any) => ({
+        tool: r.tool, calls: r.calls, tokensSaved: r.tokens_saved,
+        tokensOut: r.tokens_out, avgDurationMs: r.avg_ms,
+      })),
+      byDay: byDay.map((r: any) => ({ date: r.date, calls: r.calls, tokensSaved: r.tokens_saved })).reverse(),
+      recentCalls: recentCalls.map((r: any) => ({
+        tool: r.tool, calledAt: r.called_at, durationMs: r.duration_ms, tokensSaved: r.tokens_saved,
+      })),
+    };
   }
 
   transaction<T>(fn: () => T): T {
@@ -313,6 +541,8 @@ function rowToSymbol(row: any): CodeSymbol {
     exported: row.exported === 1,
     parentId: row.parent_id ?? undefined,
     signature: row.signature ?? undefined,
+    role: row.role ?? undefined,
+    heat: row.heat ?? undefined,
   };
 }
 

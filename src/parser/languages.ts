@@ -6,9 +6,10 @@ import javaSpec from './lang-java.js';
 import goSpec from './lang-go.js';
 import rustSpec from './lang-rust.js';
 import phpSpec from './lang-php.js';
+import rubySpec from './lang-ruby.js';
 import vueSpec from './lang-vue.js';
 
-const ALL_LANGS: LangSpec[] = [tsSpec, jsSpec, pySpec, javaSpec, goSpec, rustSpec, phpSpec, vueSpec];
+const ALL_LANGS: LangSpec[] = [tsSpec, jsSpec, pySpec, javaSpec, goSpec, rustSpec, phpSpec, rubySpec, vueSpec];
 
 const byExtension = new Map<string, LangSpec>();
 for (const lang of ALL_LANGS) {

@@ -1,240 +1,146 @@
 <p align="center">
   <strong>milens</strong><br>
-  <em>Lightweight Code Intelligence Engine</em>
+  <em>Code Intelligence Engine for AI Agents</em>
 </p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/milens"><img src="https://img.shields.io/npm/v/milens" alt="npm version"></a>
   <a href="https://github.com/fuze210699/milens/blob/develop/LICENSE"><img src="https://img.shields.io/badge/license-PolyForm--Noncommercial-blue" alt="License: PolyForm Noncommercial"></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node.js >= 20"></a>
+  <img src="https://img.shields.io/badge/languages-9-orange" alt="9 Languages">
+  <img src="https://img.shields.io/badge/MCP_tools-19-purple" alt="19 MCP Tools">
 </p>
 
 <p align="center">
-  <a href="#features">Features</a> •
-  <a href="#installation">Install</a> •
+  <strong>Index any codebase → Knowledge graph → AI agents that never miss code</strong>
+</p>
+
+<p align="center">
+  <a href="#the-problem">Why?</a> •
   <a href="#quick-start">Quick Start</a> •
-  <a href="#cli-commands">CLI</a> •
-  <a href="#mcp-server">MCP Server</a> •
-  <a href="#editor-integration">Editors</a> •
-  <a href="#architecture">Architecture</a> •
-  <a href="#adding-a-language">Extend</a>
+  <a href="#what-your-ai-agent-gets">Agent Tools</a> •
+  <a href="#editor-setup">Editors</a> •
+  <a href="#supported-languages">Languages</a> •
+  <a href="#architecture">Architecture</a>
 </p>
 
 ---
 
-Parse codebases into **knowledge graphs** — symbols, imports, calls, inheritance — and serve them to **AI agents** via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
+## The Problem
 
-```bash
-npx milens analyze          # index any codebase
-npx milens serve            # start MCP server for AI agents
+AI agents are blind to structure. They see files as text, not as a connected graph of dependencies.
+
+**A real scenario:**
+
+1. You ask your agent to refactor `resolveLinks()` in your codebase
+2. The agent searches for `"resolveLinks"` — finds matches in code, tests, comments, and docs
+3. It renames the function, but misses that `resolveLinksWithStats` wraps it and `analyze()` calls the wrapper — a chain invisible to text search
+4. **Your pipeline breaks. The agent didn't know the call graph.**
+
+The root cause: text search can't distinguish a caller from a comment from a type annotation. It has no concept of "what actually depends on this at the code level."
+
+### How milens Solves This
+
+```mermaid
+flowchart LR
+  subgraph WITHOUT["Without milens"]
+    direction TB
+    W1["Agent: rename resolveLinks"] --> W2["grep for text matches"]
+    W2 --> W3["Finds 8 results — code, tests, configs, docs"]
+    W3 --> W4["Misses: resolveLinksWithStats wraps it,\nanalyze() calls the wrapper"]
+  end
+
+  subgraph WITH["With milens"]
+    direction TB
+    M1["Agent: rename resolveLinks"] --> M2["edit_check resolveLinks"]
+    M2 --> M3["1 caller (resolveLinksWithStats),\nwhich has 1 upstream (analyze).\nTest file imports it directly."]
+    M3 --> M4["Complete chain — safe rename"]
+  end
 ```
 
-## Features
+milens builds a **pre-indexed knowledge graph** at analysis time — resolving every import, call, and inheritance chain — so that any tool query returns the full dependency picture instantly, without multi-step exploration.
 
-- **8 languages** — TypeScript, JavaScript, Python, Java, Go, Rust, PHP, Vue
-- **Declarative grammars** — add a new language by writing a config object, not code
-- **11 MCP tools + 3 prompts** — query, grep, context, impact, status, detect_changes, explain_relationship, find_dead_code, get_file_symbols, get_type_hierarchy
-- **Full-text grep** — search ALL project files (templates, SCSS, configs, docs) — not just indexed symbols
-- **SQLite + FTS5** — full-text symbol search + recursive CTE graph traversal
-- **Token-compact output** — minimal structured text, saving 40-60% tokens for AI agents
-- **Incremental indexing** — file-hash based, only re-parses changed files
-- **Multi-repo registry** — manage multiple codebases from `~/.milens/`
-- **Dual transport** — MCP over stdio (VS Code / Cursor) or HTTP (localhost-bound, secure)
-- **Skills generation** — auto-generate context files for Copilot, Cursor, Claude, Windsurf, and 40+ agents. Injects into root configs (`.github/copilot-instructions.md`, `.cursor/index.mdc`, `CLAUDE.md`, `.windsurfrules`, `AGENTS.md`)
-- **MCP protocol instructions** — server-level instructions sent to every connected agent on `initialize`, guiding tool usage without static files
-- **Per-editor CLI** — `--skills-copilot`, `--skills-cursor`, `--skills-claude`, `--skills-windsurf`, `--skills-agents` for targeted generation
-- **Security hardened** — ReDoS protection, path traversal prevention, FTS5 injection sanitization, command injection prevention
-
-## Installation
-
-```bash
-# Use directly (no install needed)
-npx milens analyze -p .
-
-# Or install globally
-npm install -g milens
-milens analyze -p .   # after global install, npx prefix is optional
-```
+---
 
 ## Quick Start
 
+**2 commands. That's it.**
+
 ```bash
-# Index a codebase
-npx milens analyze -p /path/to/repo --verbose
-
-# Search for symbols
-npx milens search "UserService"
-
-# 360° symbol context
-npx milens inspect "AuthService"
-
-# Blast radius — what breaks if this changes?
-npx milens impact "createUser" --depth 3
-
-# Start MCP server (stdio for editors)
-npx milens serve -p /path/to/repo
-
-# Start MCP server (HTTP for remote agents)
-npx milens serve --http --port 3100
+npx milens analyze                          # index your codebase
+npx milens analyze --skills                 # + generate AI skill files
 ```
 
-## CLI Commands
+Then add the MCP server to your editor ([setup below](#editor-setup)) and your agent immediately gets 19 tools + 4 resources + 3 prompts — with built-in instructions that teach it how to use them.
 
-| Command | Description |
+> **No config files needed.** milens sends tool usage guidance via the MCP protocol `initialize` response — every connected agent automatically learns the workflows.
+
+---
+
+## What Your AI Agent Gets
+
+### 19 MCP Tools
+
+| Tool | What It Does |
 |---|---|
-| `analyze` | Index a codebase into a knowledge graph |
-| `search` | Full-text symbol search (FTS5) |
-| `inspect` | 360° symbol context — incoming refs + outgoing deps |
-| `impact` | Blast radius analysis via recursive CTE |
-| `serve` | Start MCP server (stdio or HTTP) |
-| `status` | Show index stats |
-| `list` | List all indexed repositories |
-| `clean` | Remove index for a repository |
+| **Search & Navigate** | |
+| `query` | Symbol search (FTS5 full-text) |
+| `grep` | Text search ALL files — templates, SCSS, configs, docs. Scoped: `all`, `code`, `imports`, `definitions` |
+| `context` | 360° symbol view — incoming refs + outgoing deps |
+| `get_file_symbols` | All symbols in a file with ref/dep counts |
+| `get_type_hierarchy` | Inheritance/implementation tree |
+| **Impact & Safety** | |
+| `impact` | Blast radius: what breaks if this changes? Depth-grouped |
+| `edit_check` | Pre-edit safety: callers + exports + re-export chains + test coverage + ⚠ warnings |
+| `detect_changes` | `git diff` → affected symbols + direct dependents |
+| `find_dead_code` | Exported symbols with zero references |
+| **Understanding** | |
+| `smart_context` | Intent-aware context: `understand` / `edit` / `debug` / `test` — returns only what matters |
+| `trace` | Execution flow: call chains from entrypoints to a target (or downstream) |
+| `routes` | Detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Go, PHP, Rails) |
+| `explain_relationship` | Shortest dependency path between two symbols |
+| **Codebase Overview** | |
+| `overview` | Combined context + impact + grep in ONE call (saves 2-3 round trips) |
+| `domains` | Domain clusters — groups of files forming logical modules |
+| `repos` | List all indexed repositories with summary stats |
+| `status` | Index stats, domains, test coverage, staleness |
 
-### `analyze`
+### 4 MCP Resources
 
-```bash
-npx milens analyze -p /path/to/repo --verbose --force --skills
-```
-
-Scans source files, parses symbols with tree-sitter, resolves imports/calls/inheritance, and stores everything in `.milens/milens.db`.
-
-| Flag | Description |
+| Resource | What It Returns |
 |---|---|
-| `-p, --path` | Repository root (default: `.`) |
-| `-o, --output` | Custom output directory for the database |
-| `-v, --verbose` | Show detailed progress |
-| `-f, --force` | Force full re-index (skip hash check) |
-| `-s, --skills` | Generate skill files for all supported editors |
-| `--skills-copilot` | Generate skill files for GitHub Copilot only |
-| `--skills-cursor` | Generate skill files for Cursor only |
-| `--skills-claude` | Generate skill files for Claude Code only |
-| `--skills-agents` | Generate skill files for AGENTS.md only |
-| `--skills-windsurf` | Generate config for Windsurf only |
+| `milens://overview` | Index overview: stats, domains, coverage, staleness |
+| `milens://symbol/{name}` | Symbol definition + relationships |
+| `milens://file/{path}` | All symbols in a file |
+| `milens://domain/{name}` | Domain cluster details |
 
-### `search`
+### 3 Guided Prompts
 
-```bash
-npx milens search "createUser" --limit 10
-```
-
-### `inspect`
-
-```bash
-npx milens inspect "AuthService"
-```
-
-Shows incoming references (who calls/uses it) and outgoing dependencies (what it calls/imports/extends).
-
-### `impact`
-
-```bash
-npx milens impact "UserModel" --direction upstream --depth 3
-```
-
-*"What breaks if this symbol changes?"* — traverses the dependency graph via recursive CTEs.
-
-| Flag | Description |
+| Prompt | Workflow |
 |---|---|
-| `-d, --direction` | `upstream` (default) or `downstream` |
-| `--depth` | Max traversal depth (default: `3`) |
+| `delete-feature` | grep → impact → context → full deletion plan |
+| `refactor-symbol` | context → impact → grep → hierarchy → every file to update |
+| `explore-symbol` | query → context → impact (both directions) → grep → summary |
 
-### `serve`
+### Built-in Agent Instructions
+
+The MCP server sends **tool usage guidance** on every `initialize` — agents automatically learn:
+
+- When to combine `impact` + `grep` (code deps + text references)
+- Pre-edit workflow (`edit_check` or `smart_context intent=edit`)
+- `query` for code identifiers vs `grep` for display text
+- Impact depth meaning: 1 = WILL BREAK, 2 = LIKELY AFFECTED, 3 = MAY NEED TESTING
+- ⚠ unresolved markers vs ✓ external (expected) classification
+
+---
+
+## Editor Setup
+
+### VS Code / GitHub Copilot (recommended)
 
 ```bash
-npx milens serve -p /path/to/repo              # stdio (for editors)
-npx milens serve -p /path/to/repo --http --port 3100  # HTTP
+npx milens analyze -p .                     # index your repo (run once)
 ```
-
-### `list`
-
-```bash
-npx milens list    # show all indexed repositories
-```
-
-### `clean`
-
-```bash
-npx milens clean -p /path/to/repo    # remove index for one repo
-npx milens clean --all               # remove all indexes
-```
-
-## MCP Server
-
-milens exposes **11 tools** and **3 prompt templates** via the Model Context Protocol.
-
-The server includes **built-in instructions** sent via the MCP `initialize` response — every connected agent automatically receives tool usage guidance (when to combine `impact` + `grep`, workflow for deletions/refactors, etc.) without needing static files.
-
-### Tools
-
-| Tool | Description | Key params |
-|---|---|---|
-| `query` | Search indexed symbol definitions (FTS5) | `query`, `limit` |
-| `grep` | Text search across ALL project files (templates, SCSS, configs, docs) | `pattern`, `isRegex`, `include` |
-| `context` | 360° symbol view — incoming refs, outgoing deps | `name` |
-| `impact` | Blast radius with depth grouping (code deps only) | `target`, `direction`, `depth` |
-| `status` | Index stats for a repository | `repo` |
-| `detect_changes` | Git diff → affected symbols + dependents | `ref` |
-| `explain_relationship` | Shortest path between two symbols | `from`, `to` |
-| `find_dead_code` | Exported symbols with zero references | `kind`, `limit` |
-| `get_file_symbols` | All symbols in a specific file | `file` |
-| `get_type_hierarchy` | Inheritance/implementation tree | `name` |
-
-> **`query` vs `grep`**: `query` searches indexed symbol definitions only. `grep` searches raw text across every file — essential for finding references in templates, SCSS, configs, routes, and docs that `query`/`impact` cannot see.
-
-> When only one repo is indexed, the `repo` parameter is optional on all tools.
-
-### Prompts
-
-| Prompt | Description | Params |
-|---|---|---|
-| `delete-feature` | Guided workflow for safe feature deletion (grep + impact + context) | `name` |
-| `refactor-symbol` | Guided workflow for renaming/refactoring with full coverage | `name` |
-| `explore-symbol` | Deep exploration of unfamiliar code | `name` |
-
-### Tool Examples
-
-```
-# Search indexed symbols
-query({query: "auth"})
-→ AuthService [class] src/auth/service.ts:10
-  validateUser [function] src/auth/validate.ts:15
-
-# Grep ALL files (templates, SCSS, configs, docs)
-grep({pattern: "AuthService"})
-→ src/auth/service.ts L10: export class AuthService {
-  src/components/Login.vue L5: <AuthForm @submit="handleAuth" />
-  src/routes/index.ts L12: import { AuthService } from '../auth'
-  docs/api.md L42: The `AuthService` handles JWT...
-
-# Context
-context({name: "validateUser"})
-→ incoming:
-    calls: handleLogin (src/api/auth.ts)
-  outgoing:
-    calls: checkPassword (src/auth/hash.ts)
-
-# Impact
-impact({target: "UserService", direction: "upstream"})
-→ depth 1:
-    handleLogin [function] src/api/auth.ts:45 (calls)
-    UserController [class] src/controllers/user.ts:12 (calls)
-  depth 2:
-    authRouter [module] src/routes/auth.ts (imports)
-
-# Detect changes
-detect_changes({ref: "HEAD"})
-→ changed: src/auth/service.ts
-  affected: handleLogin, UserController
-
-# Dead code
-find_dead_code({kind: "function"})
-→ legacyHash [function] src/utils/hash.ts:42 (0 refs)
-```
-
-## Editor Integration
-
-### VS Code / GitHub Copilot
 
 Add to `.vscode/mcp.json`:
 
@@ -250,9 +156,14 @@ Add to `.vscode/mcp.json`:
 }
 ```
 
-### Cursor
+**Done.** Copilot now has access to 19 code intelligence tools.
 
-Add to `.cursor/mcp.json` (per-project):
+<details>
+<summary><strong>Other Editors</strong></summary>
+
+#### Cursor
+
+Add to `.cursor/mcp.json`:
 
 ```json
 {
@@ -265,13 +176,13 @@ Add to `.cursor/mcp.json` (per-project):
 }
 ```
 
-### Claude Code
+#### Claude Code
 
 ```bash
 claude mcp add milens -- npx -y milens serve -p .
 ```
 
-### Windsurf
+#### Windsurf
 
 Add to `~/.codeium/windsurf/mcp_config.json`:
 
@@ -286,7 +197,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
-### Codex
+#### Codex
 
 Add to `.codex/config.toml`:
 
@@ -296,114 +207,229 @@ command = "npx"
 args = ["-y", "milens", "serve", "-p", "."]
 ```
 
-### HTTP Mode (remote agents)
+#### HTTP Mode (remote agents)
 
 ```bash
-npx milens serve --http --port 3100
+npx milens serve --http --port 3100         # localhost only, no auth needed
 ```
 
 Endpoint: `POST http://localhost:3100/mcp`
 
+</details>
+
+---
+
 ## Skills Generation
 
-Generate editor-specific context files from your codebase's knowledge graph:
+Generate editor-specific context files from your knowledge graph:
 
 ```bash
-# Generate for all editors
-npx milens analyze -p . --skills
-
-# Generate for a specific editor only
-npx milens analyze -p . --skills-cursor
-npx milens analyze -p . --skills-copilot --skills-agents  # combine multiple
-npx milens analyze -p . --skills-windsurf
+npx milens analyze -p . --skills            # all editors at once
+npx milens analyze -p . --skills-copilot    # GitHub Copilot only
+npx milens analyze -p . --skills-cursor     # Cursor only
+npx milens analyze -p . --skills-claude     # Claude Code only
+npx milens analyze -p . --skills-agents     # AGENTS.md only
+npx milens analyze -p . --skills-windsurf   # Windsurf only
 ```
 
-This creates:
+This generates per-area skill files with: key symbols, entry points, cross-area dependencies, and **MCP tool usage instructions** — so agents know both the codebase structure and how to use milens tools.
 
-| Path | For |
+| Output Path | Editor |
 |---|---|
-| `.github/instructions/*.instructions.md` | GitHub Copilot |
-| `.github/copilot-instructions.md` | GitHub Copilot (root config, always loaded) |
-| `.cursor/rules/*.mdc` | Cursor (per-area, `globs:` scoped) |
-| `.cursor/index.mdc` | Cursor (root config, `alwaysApply: true`) |
-| `.claude/skills/generated/*/SKILL.md` | Claude Code (skills) |
-| `.claude/rules/*.md` | Claude Code (path-scoped rules, `paths:` frontmatter) |
-| `CLAUDE.md` | Claude Code (root config, always loaded) |
-| `.windsurfrules` | Windsurf (root config, always loaded) |
-| `.agents/skills/*/SKILL.md` | 40+ agents ([Agent Skills](https://agentskills.io)) |
-| `AGENTS.md` | Universal agents (root config, always loaded) |
+| `.github/instructions/*.instructions.md` + `.github/copilot-instructions.md` | GitHub Copilot |
+| `.cursor/rules/*.mdc` + `.cursor/index.mdc` | Cursor |
+| `.claude/skills/generated/*/SKILL.md` + `.claude/rules/*.md` + `CLAUDE.md` | Claude Code |
+| `.agents/skills/*/SKILL.md` + `AGENTS.md` | 40+ agents |
+| `.windsurfrules` | Windsurf |
 
-All root config files use `<!-- milens:start/end -->` markers for idempotent injection — re-running replaces the milens section without duplicating or overwriting other content.
+> Root config files use `<!-- milens:start/end -->` markers for **idempotent injection** — re-running replaces the milens section without overwriting your custom content.
 
-Each generated file contains: key symbols, entry points, cross-area dependencies, file listings, and **full MCP tool usage instructions** with `mcp_milens_*` tool names, repo path, workflows, and "Never Do" rules — so AI agents know both the codebase structure and exactly how to use milens tools.
+---
 
-## Architecture
+## CLI Commands
 
-```
-src/
-  cli.ts              — CLI entry point (commander, 8 commands)
-  types.ts            — Shared types (CodeSymbol, SymbolLink, etc.)
-  skills.ts           — Skills/context file generator
-  parser/
-    loader.ts         — Tree-sitter WASM loading + caching
-    extract.ts        — Universal extractor + LangSpec interface
-    lang-ts.ts        — TypeScript (+ .tsx)
-    lang-js.ts        — JavaScript (+ .jsx, .mjs, .cjs)
-    lang-py.ts        — Python
-    lang-java.ts      — Java
-    lang-go.ts        — Go
-    lang-rust.ts      — Rust
-    lang-php.ts       — PHP
-    lang-vue.ts       — Vue (extracts <script> + <template> refs)
-    languages.ts      — Language registry
-  analyzer/
-    scanner.ts        — File discovery (.gitignore aware)
-    resolver.ts       — Import + call + heritage resolution
-    engine.ts         — Pipeline orchestrator (6 phases)
-  store/
-    schema.sql        — SQLite schema (FTS5, triggers, indexes)
-    db.ts             — Database adapter (30+ methods, recursive CTEs)
-    registry.ts       — Multi-repo registry (~/.milens/)
-  server/
-    mcp.ts            — MCP server (11 tools, stdio + HTTP)
+```bash
+# ── Index & Explore ──
+npx milens analyze -p .                     # index current directory
+npx milens analyze -p . --force --verbose   # full re-index with progress
+npx milens search "UserService"             # search symbols (FTS5)
+npx milens inspect "AuthService"            # 360° view: refs + deps
+
+# ── Impact Analysis ──
+npx milens impact "createUser"              # what breaks if this changes?
+npx milens impact "UserModel" -d downstream # what does this depend on?
+
+# ── MCP Server ──
+npx milens serve -p .                       # stdio (for editors)
+npx milens serve --http --port 3100         # HTTP (for remote agents)
+
+# ── Management ──
+npx milens status -p .                      # index stats
+npx milens list                             # all indexed repos
+npx milens clean -p .                       # remove index
+npx milens clean --all                      # remove all indexes
+
+# ── Dashboard ──
+npx milens dashboard                        # usage analytics on port 3200
+npx milens dashboard --port 8080            # custom port
 ```
 
-### How It Works
-
-```
-Source Files → [Scan] → [Parse] → [Resolve] → [Store] → [Serve]
-                 │         │          │           │          │
-            .gitignore  tree-sitter  imports   SQLite     MCP
-             filter      WASM AST    calls     FTS5      stdio/HTTP
-                                    heritage   CTE
-```
-
-1. **Scan** — Walk file tree respecting `.gitignore`, skip `node_modules`/`dist`/`build`/etc.
-2. **Parse** — Extract symbols (functions, classes, methods, interfaces, enums, structs, traits) via tree-sitter WASM grammars
-3. **Resolve** — Link imports → symbols, calls → definitions, inheritance chains. Confidence-scored.
-4. **Store** — Write symbols + links to SQLite with FTS5 search index in a single transaction
-5. **Serve** — Expose the knowledge graph via 11 MCP tools + 3 prompts, with built-in agent instructions
-
-### Design Decisions
-
-- **Declarative `LangSpec`**: Each language is a config object with tree-sitter queries. One universal extractor processes all — no per-language extraction code.
-- **SQLite recursive CTE**: Impact analysis (upstream/downstream) runs entirely in the database. No need to load the full graph into memory.
-- **Token-compact output**: MCP responses use `name [kind] file:line` format. Saves 40-60% tokens for AI agents.
-- **Incremental by default**: File content is SHA-256 hashed; only changed files get re-parsed.
-- **Lazy DB pools**: MCP server opens database connections on demand and evicts them after 5 minutes of inactivity.
+---
 
 ## Supported Languages
 
-| Language | Extensions | Symbols | Imports | Calls | Heritage |
+| Language | Extensions | Imports | Calls | Heritage | Frameworks |
 |---|---|---|---|---|---|
-| TypeScript | `.ts`, `.tsx` | functions, classes, methods, interfaces, enums | ✓ (ESM + require) | ✓ | ✓ |
-| JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` | functions, classes, methods | ✓ (ESM + require) | ✓ | ✓ |
-| Python | `.py` | functions, classes, methods (+ decorated) | ✓ | ✓ (+ decorators) | ✓ |
-| Java | `.java` | classes, records, interfaces, methods, enums | ✓ (+ static) | ✓ (+ annotations, new) | ✓ |
-| Go | `.go` | functions, methods, structs, interfaces, consts, vars | ✓ | ✓ | — |
-| Rust | `.rs` | functions, structs, enums, traits, methods, consts, mods | ✓ | ✓ (+ macros) | ✓ |
-| PHP | `.php` | functions, classes, interfaces, traits, methods, consts | ✓ (+ include) | ✓ | ✓ (+ traits) |
-| Vue | `.vue` | `<script>` symbols + `<template>` refs (components, events, directives, interpolations) | ✓ | ✓ | ✓ |
+| TypeScript | `.ts` `.tsx` | ✓ ESM + require | ✓ + decorators | ✓ extends/implements | NestJS, React JSX |
+| JavaScript | `.js` `.jsx` `.mjs` `.cjs` | ✓ ESM + require | ✓ | ✓ | React JSX, Express |
+| Python | `.py` | ✓ | ✓ + decorators | ✓ | FastAPI, Flask |
+| Java | `.java` | ✓ + static | ✓ + annotations, new | ✓ | Spring |
+| Go | `.go` | ✓ | ✓ | — | net/http |
+| Rust | `.rs` | ✓ | ✓ + macros | ✓ | — |
+| PHP | `.php` | ✓ + include | ✓ + static, new | ✓ + traits | Laravel |
+| Ruby | `.rb` | ✓ | ✓ | ✓ | Rails |
+| Vue | `.vue` | ✓ | ✓ template refs | ✓ | Vue 3 SFC |
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Pipeline["Indexing Pipeline"]
+    Scan["📁 Scan\n.gitignore aware"]
+    Parse["🌳 Parse\ntree-sitter WASM"]
+    Resolve["🔗 Resolve\nimports · calls · heritage"]
+    Enrich["⚡ Enrich\nroles · heat · domains"]
+    Store["💾 Store\nSQLite + FTS5"]
+  end
+
+  subgraph Serve["MCP Server"]
+    Tools["19 Tools"]
+    Resources["4 Resources"]
+    Prompts["3 Prompts"]
+  end
+
+  Scan --> Parse --> Resolve --> Enrich --> Store
+  Store --> Tools
+  Store --> Resources
+  Store --> Prompts
+
+  Agent["🤖 AI Agent\nCopilot · Cursor\nClaude · Codex"]
+  Tools --> Agent
+  Resources --> Agent
+  Prompts --> Agent
+```
+
+### Multi-Repo Architecture
+
+milens uses a **global registry** — one MCP server serves all indexed repos. No per-project server config needed.
+
+```mermaid
+flowchart TD
+  subgraph Commands["CLI"]
+    Idx["milens analyze -p /repo/A"]
+    Srv["milens serve"]
+  end
+
+  subgraph Global["~/.milens/"]
+    Reg["registry.json\n(repo paths + DB locations)"]
+  end
+
+  subgraph Projects["Per-Repo Indexes"]
+    DbA["repo-A/.milens/milens.db"]
+    DbB["repo-B/.milens/milens.db"]
+  end
+
+  subgraph Server["MCP Server"]
+    ConnPool["On-demand DB pool\nidle timeout: 5 min"]
+  end
+
+  Idx -- "adds entry" --> Reg
+  Idx -- "writes SQLite" --> DbA
+  Srv -- "loads list" --> Reg
+  ConnPool -- "opens on first query" --> DbA
+  ConnPool -- "opens on first query" --> DbB
+```
+
+> With a single indexed repo, all tools work without specifying `repo`. When multiple repos are registered, pass `repo` to target a specific one.
+
+### Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| **Declarative LangSpec** | Each language = 1 config object with tree-sitter queries. One universal extractor for all 9 languages |
+| **SQLite + recursive CTE** | Impact analysis runs entirely in the database — no full graph in memory |
+| **Token-compact output** | `name [kind] file:line` format — saves 40-60% tokens for AI |
+| **Incremental by hash** | SHA-256 file hashing — only changed files get re-parsed |
+| **Union-Find domains** | Graph-based clustering (files with ≥2 mutual links = same domain) — smarter than directory-based |
+| **External-aware resolution** | Separates internal unresolved (⚠ data quality) from external packages (✓ expected) |
+| **Lazy DB pools** | Connections opened on demand, evicted after 5min idle |
+| **Localhost-only HTTP** | Binds `127.0.0.1` — no network exposure without explicit intent |
+
+---
+
+## Security & Privacy
+
+milens is **offline by design** — zero network calls, zero telemetry. Everything executes on your machine.
+
+| Layer | Protection |
+|---|---|
+| **Data locality** | Index lives in `.milens/` per repo (gitignored). Global registry (`~/.milens/`) stores only file paths — no source code |
+| **HTTP transport** | Binds to `127.0.0.1` only — requires explicit `--http` flag, never auto-exposed |
+| **User-supplied regex** | Validated against ReDoS patterns before execution |
+| **FTS5 queries** | Each search token quoted as a literal — no query injection |
+| **File access** | All reads bounded to the repo root — no path traversal |
+| **Git integration** | Uses `execFileSync` with argument arrays — no shell interpolation |
+
+---
+
+## Tool Examples
+
+These examples are from **milens indexing itself** (`npx milens analyze -p .`):
+
+```
+# Pre-edit safety check — real output from milens self-index
+edit_check({name: "createMcpServer"})
+→ createMcpServer [function] src/server/mcp.ts:272 {utility,heat:70} (exported)
+  callers (2):
+    calls: startStdio [function] src/server/mcp.ts:1475
+    calls: startHttp [function] src/server/mcp.ts:1483
+  deps (32): searchSymbols, findSymbolByName, getIncomingLinks, findUpstream,
+             grepFiles, traceToEntrypoints, getDomainStats, getStaleFiles, ...
+
+# Context — 360° view with callers and callees
+context({name: "analyze"})
+→ analyze [function] src/analyzer/engine.ts:23 {utility,heat:55} (exported)
+  incoming:
+    calls: src/cli.ts (CLI entry point)
+  outgoing (26 deps):
+    calls: scanFiles [function] src/analyzer/scanner.ts:11
+    calls: resolveLinksWithStats [function] src/analyzer/resolver.ts:27
+    calls: enrichMetadata [function] src/analyzer/enrich.ts:21
+    calls: loadLanguage [function] src/parser/loader.ts:20
+    calls: transaction, insertSymbol, insertLink, rebuildSearch ... (db ops)
+
+# Impact analysis — what breaks if searchSymbols changes?
+impact({target: "searchSymbols", direction: "upstream"})
+→ depth 1:
+    createMcpServer [function] src/server/mcp.ts:272 (calls)
+  depth 2:
+    startStdio [function] src/server/mcp.ts:1475 (calls)
+    startHttp [function] src/server/mcp.ts:1483 (calls)
+
+# File symbols — what's inside a file?
+get_file_symbols({file: "src/store/db.ts"})
+→ src/store/db.ts: 45 symbols
+    Database [class] L10-461 (exported) ← 0 refs, → 0 deps
+    searchSymbols [method] L150-165 ← 3 refs, → 0 deps
+    findUpstream [method] L192-195 ← 3 refs, → 1 deps
+    traceToEntrypoints [method] L346-388 ← 2 refs, → 2 deps
+    getDomainStats [method] L406-417 ← 3 refs, → 0 deps
+    ... (40 more)
+```
+
+---
 
 ## Adding a Language
 
@@ -419,7 +445,6 @@ const spec: LangSpec = {
   queries: {
     functions: `(function_definition name: (identifier) @name) @def`,
     classes: `(class_definition name: (identifier) @name) @def`,
-    // add queries using tree-sitter playground
   },
   resolveImport(raw, fromFile, root, aliases) {
     // return resolved file path or null
@@ -431,20 +456,21 @@ export default spec;
 
 Then register it in `src/parser/languages.ts`.
 
+---
+
 ## Development
 
 ```bash
-npm install            # install dependencies
-npm run build          # tsc → dist/
-npm test               # vitest
-npm run lint           # tsc --noEmit
-npm run self-analyze   # index this repo
-npm run self-serve     # start MCP server on port 3100
+npm install              # install dependencies
+npm run build            # tsc → dist/
+npm test                 # vitest (32 tests)
+npm run lint             # tsc --noEmit
+npm run self-analyze     # index this repo
+npm run self-serve       # start MCP server on port 3100
+npx milens dashboard     # open usage analytics dashboard
 ```
 
-## Requirements
-
-- Node.js >= 20.0.0
+---
 
 ## License
 

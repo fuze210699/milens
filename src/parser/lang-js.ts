@@ -47,16 +47,34 @@ const spec: LangSpec = {
         (export_clause (export_specifier name: (identifier) @name))
       )
     ]`,
-    calls: `
+    calls: `[
       (call_expression function: (identifier) @callee) @def
-      (call_expression function: (member_expression property: (property_identifier) @callee)) @def
-    `,
+      (call_expression function: (member_expression object: (_) @receiver property: (property_identifier) @callee)) @def
+    ]`,
     heritage: `(class_declaration
       name: (identifier) @child
       (class_heritage (identifier) @parent)
     ) @def`,
+    reExports: `[
+      (export_statement
+        source: (string (string_fragment) @source)
+        (export_clause (export_specifier name: (identifier) @name))
+      ) @def
+      (export_statement
+        source: (string (string_fragment) @source)
+        "*"
+      ) @def
+    ]`,
   },
-  resolveImport(raw, fromFile, root, _aliases) {
+  resolveImport(raw, fromFile, root, aliases) {
+    // Check aliases first (e.g. @ → src)
+    for (const [alias, target] of Object.entries(aliases)) {
+      if (raw.startsWith(alias + '/') || raw === alias) {
+        raw = raw.replace(alias, target);
+        break;
+      }
+    }
+
     if (!raw.startsWith('.') && !raw.startsWith('/')) return null;
     const dir = dirname(join(root, fromFile));
     const base = join(dir, raw);

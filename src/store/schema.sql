@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS symbols (
   end_line    INTEGER,
   exported    INTEGER DEFAULT 0,
   parent_id   TEXT,
-  signature   TEXT
+  signature   TEXT,
+  role        TEXT,
+  heat        INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS links (
@@ -24,7 +26,13 @@ CREATE TABLE IF NOT EXISTS links (
 CREATE TABLE IF NOT EXISTS file_hashes (
   path        TEXT PRIMARY KEY,
   hash        TEXT NOT NULL,
-  analyzed_at TEXT NOT NULL DEFAULT (datetime('now'))
+  analyzed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  zone        TEXT
+);
+
+CREATE TABLE IF NOT EXISTS repo_meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS meta (
@@ -58,3 +66,18 @@ CREATE TRIGGER IF NOT EXISTS symbols_ad AFTER DELETE ON symbols BEGIN
   INSERT INTO symbol_fts(symbol_fts, rowid, name, file_path, kind)
   VALUES ('delete', old.rowid, old.name, old.file_path, old.kind);
 END;
+
+-- Tool usage tracking for dashboard analytics
+CREATE TABLE IF NOT EXISTS tool_usage (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tool        TEXT NOT NULL,
+  called_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  duration_ms INTEGER DEFAULT 0,
+  tokens_in   INTEGER DEFAULT 0,
+  tokens_out  INTEGER DEFAULT 0,
+  tokens_saved INTEGER DEFAULT 0,
+  repo        TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_usage_tool ON tool_usage(tool);
+CREATE INDEX IF NOT EXISTS idx_tool_usage_at   ON tool_usage(called_at);

@@ -23,14 +23,20 @@ const spec: LangSpec = {
         (include_expression (string (string_content) @source))
       ) @def
     ]`,
-    calls: `
+    calls: `[
       (function_call_expression
         function: (name) @callee
       ) @def
       (member_call_expression
+        object: (_) @receiver
         name: (name) @callee
       ) @def
-    `,
+      (scoped_call_expression
+        scope: (name) @receiver
+        name: (name) @callee
+      ) @def
+      (object_creation_expression (name) @callee) @def
+    ]`,
     heritage: `[
       (class_declaration
         name: (name) @child
@@ -41,10 +47,10 @@ const spec: LangSpec = {
         (class_interface_clause (name) @parent)
       ) @def
       (class_declaration
+        name: (name) @child
         body: (declaration_list
           (use_declaration (name) @parent)
         )
-        name: (name) @child
       ) @def
     ]`,
   },

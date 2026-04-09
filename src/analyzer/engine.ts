@@ -5,9 +5,10 @@ import { langForFile } from '../parser/languages.js';
 import { getParser, loadLanguage } from '../parser/loader.js';
 import { extractFromTree, clearQueryCache } from '../parser/extract.js';
 import { extractVueScript, extractVueTemplateRefs } from '../parser/lang-vue.js';
-import { resolveLinks } from './resolver.js';
+import { resolveLinks, resolveLinksWithStats } from './resolver.js';
+import { enrichMetadata } from './enrich.js';
 import { Database } from '../store/db.js';
-import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, AnalysisStats } from '../types.js';
+import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, AnalysisStats } from '../types.js';
 import type Parser from 'web-tree-sitter';
 import type { LangSpec } from '../parser/extract.js';
 
@@ -48,6 +49,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const allImports: RawImport[] = [];
   const allCalls: RawCall[] = [];
   const allHeritage: RawHeritage[] = [];
+  const allReExports: RawReExport[] = [];
   const resolvedImportPaths = new Map<string, string>();
   const parsedFiles = new Set<string>();
   let filesParsed = 0;
@@ -75,12 +77,21 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
         allImports.push(...result.imports);
         allCalls.push(...result.calls);
         allHeritage.push(...result.heritage);
+        allReExports.push(...result.reExports);
 
         // Resolve import paths eagerly
         for (const imp of result.imports) {
           const resolved = file.spec.resolveImport(imp.modulePath, imp.filePath, rootPath, aliases);
           if (resolved) {
             resolvedImportPaths.set(`${imp.filePath}::${imp.modulePath}`, resolved);
+          }
+        }
+
+        // Resolve re-export paths
+        for (const re of result.reExports) {
+          const resolved = file.spec.resolveImport(re.modulePath, re.filePath, rootPath, aliases);
+          if (resolved) {
+            resolvedImportPaths.set(`${re.filePath}::${re.modulePath}`, resolved);
           }
         }
 
@@ -110,17 +121,52 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   }
 
   // Phase 5: Resolve cross-file links
-  const links = resolveLinks({
+  const resolution = resolveLinksWithStats({
     symbolsByFile,
     allSymbols,
     imports: allImports,
     calls: allCalls,
     heritage: allHeritage,
+    reExports: allReExports,
     resolvedImportPaths,
   });
-  if (opts.verbose) console.log(`[link] Resolved ${links.length} relationships`);
+  const links = resolution.links;
+  if (opts.verbose) {
+    console.log(`[link] Resolved ${links.length} relationships`);
+    if (resolution.unresolvedImports > 0 || resolution.unresolvedCalls > 0) {
+      console.log(`[link] ⚠ ${resolution.unresolvedImports} unresolved imports, ${resolution.unresolvedCalls} unresolved calls (internal)`);
+    }
+    if (resolution.externalImports > 0 || resolution.externalCalls > 0) {
+      console.log(`[link] ✓ ${resolution.externalImports} external imports, ${resolution.externalCalls} external calls (expected)`);
+    }
+  }
 
-  // Phase 6: Persist to database in single transaction
+  // Phase 6: Enrich — compute roles, heat, zones from resolved graph
+  const enriched = enrichMetadata({ symbols: allSymbols, links });
+  if (opts.verbose) console.log(`[enrich] Computed metadata for ${allSymbols.length} symbols, ${enriched.zones.size} zones`);
+
+  // Phase 6.5: Test coverage — count symbols referenced from test files
+  const testFileSymbolIds = new Set<string>();
+  const testFiles = new Set<string>();
+  for (const sym of allSymbols) {
+    if (isTestFile(sym.filePath)) {
+      testFileSymbolIds.add(sym.id);
+      testFiles.add(sym.filePath);
+    }
+  }
+  const testedSymbolIds = new Set<string>();
+  for (const link of links) {
+    if (link.type === 'contains') continue;
+    // Link from test file symbol → production symbol
+    const fromIsTest = testFileSymbolIds.has(link.fromId) ||
+      [...testFiles].some(f => link.fromId.startsWith(f + '#'));
+    if (fromIsTest && !testFileSymbolIds.has(link.toId)) {
+      testedSymbolIds.add(link.toId);
+    }
+  }
+  const exportedProduction = allSymbols.filter(s => s.exported && !isTestFile(s.filePath));
+
+  // Phase 7: Persist to database in single transaction
   db.transaction(() => {
     if (opts.force) {
       db.clearSymbolsAndLinks();
@@ -130,7 +176,23 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     for (const sym of allSymbols) {
       if (opts.force || parsedFiles.has(sym.filePath)) db.insertSymbol(sym);
     }
+    // Incremental: update role/heat for unchanged files (enrichment recomputes all)
+    if (!opts.force) {
+      for (const sym of allSymbols) {
+        if (!parsedFiles.has(sym.filePath)) {
+          db.updateSymbolMetadata(sym.id, sym.role ?? 'leaf', sym.heat ?? 0);
+        }
+      }
+    }
     for (const link of links) db.insertLink(link);
+    for (const [filePath, zone] of enriched.zones) db.setFileZone(filePath, zone);
+    db.setMeta('unresolved_imports', String(resolution.unresolvedImports));
+    db.setMeta('unresolved_calls', String(resolution.unresolvedCalls));
+    db.setMeta('external_imports', String(resolution.externalImports));
+    db.setMeta('external_calls', String(resolution.externalCalls));
+    db.setMeta('test_files', String(testFiles.size));
+    db.setMeta('tested_symbols', String(testedSymbolIds.size));
+    db.setMeta('exported_production_symbols', String(exportedProduction.length));
     db.rebuildSearch();
   });
 
@@ -140,6 +202,10 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     symbolCount: allSymbols.length,
     linkCount: links.length,
     durationMs: Date.now() - t0,
+    unresolvedImports: resolution.unresolvedImports,
+    unresolvedCalls: resolution.unresolvedCalls,
+    externalImports: resolution.externalImports,
+    externalCalls: resolution.externalCalls,
   };
 
   if (opts.verbose) {
@@ -189,4 +255,13 @@ function parseFile(
   }
 
   return result;
+}
+
+/** Check if a file path looks like a test/spec file */
+function isTestFile(filePath: string): boolean {
+  return /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
+    /^tests?[/\\]/.test(filePath) ||
+    /__tests__[/\\]/.test(filePath) ||
+    /_test\.(go|py|rb|rs|java|php)$/.test(filePath) ||
+    /^test_.*\.py$/.test(filePath.split('/').pop() ?? '');
 }

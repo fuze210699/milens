@@ -58,10 +58,15 @@ const spec: LangSpec = {
         declaration: (type_alias_declaration name: (type_identifier) @name)
       )
     ]`,
-    calls: `
+    calls: `[
       (call_expression function: (identifier) @callee) @def
-      (call_expression function: (member_expression property: (property_identifier) @callee)) @def
-    `,
+      (call_expression function: (member_expression object: (_) @receiver property: (property_identifier) @callee)) @def
+      (decorator (identifier) @callee) @def
+      (jsx_self_closing_element name: (identifier) @callee) @def
+      (jsx_opening_element name: (identifier) @callee) @def
+      (jsx_self_closing_element name: (member_expression object: (identifier) @receiver property: (property_identifier) @callee)) @def
+      (jsx_opening_element name: (member_expression object: (identifier) @receiver property: (property_identifier) @callee)) @def
+    ]`,
     heritage: `[
       (class_declaration
         name: (type_identifier) @child
@@ -70,6 +75,16 @@ const spec: LangSpec = {
       (class_declaration
         name: (type_identifier) @child
         (class_heritage (implements_clause (type_identifier) @parent))
+      ) @def
+    ]`,
+    reExports: `[
+      (export_statement
+        source: (string (string_fragment) @source)
+        (export_clause (export_specifier name: (identifier) @name))
+      ) @def
+      (export_statement
+        source: (string (string_fragment) @source)
+        "*"
       ) @def
     ]`,
   },
@@ -90,6 +105,7 @@ const spec: LangSpec = {
     const candidates = [
       base + '.ts', base + '.tsx',
       base + '.js', base + '.jsx',
+      base + '.vue',
       join(base, 'index.ts'), join(base, 'index.tsx'),
       join(base, 'index.js'),
     ];

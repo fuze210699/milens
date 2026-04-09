@@ -1,9 +1,0 @@
-{
-  "mcpServers": [
-    {
-      "name": "milens",
-      "command": "npx",
-      "args": ["tsx", "src/cli.ts", "serve"]
-    }
-  ]
-}

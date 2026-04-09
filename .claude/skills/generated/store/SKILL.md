@@ -16,11 +16,12 @@ Contains 40 symbols (2 exported) across 2 files.
 
 ## Dependencies
 - **server**: `get`
+- **root**: `has`
 
 ## Used By
 - **analyzer**: `clear`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction`, `clearSymbolsAndLinks`, `deleteFileData`, `insertSymbol` (+3 more)
 - **parser**: `clear`, `load`
-- **server**: `close`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks`, `findSymbolById`, `getOutgoingLinks`, `findUpstream` (+6 more)
+- **server**: `close`, `findByRoot`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks`, `findSymbolById`, `getOutgoingLinks` (+7 more)
 - **root**: `getAllSymbols`, `getAllLinks`
 
 ## Files

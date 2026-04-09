@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Database } from './store/db.js';
 import type { CodeSymbol, SymbolLink } from './types.js';
@@ -16,7 +16,10 @@ interface SkillsResult {
   dirs: string[];
 }
 
-export function generateSkills(db: Database, rootDir: string): SkillsResult {
+export function generateSkills(db: Database, rootDir: string, editors?: string[]): SkillsResult {
+  const all = !editors; // undefined = all editors
+  const has = (name: string) => all || editors!.includes(name);
+
   const symbols = db.getAllSymbols();
   const links = db.getAllLinks();
 
@@ -39,43 +42,56 @@ export function generateSkills(db: Database, rootDir: string): SkillsResult {
   const copilotDir = join(rootDir, '.github', 'instructions');
   const cursorDir = join(rootDir, '.cursor', 'rules');
   const claudeDir = join(rootDir, '.claude', 'skills', 'generated');
-  const agentsDir = join(rootDir, '.agents', 'skills');  // Universal: Antigravity, Copilot, Cursor, Codex, Gemini CLI, Cline, etc.
+  const agentsDir = join(rootDir, '.agents', 'skills');
   const milensDir = join(rootDir, '.milens', 'skills');
 
-  for (const dir of [copilotDir, cursorDir, claudeDir, agentsDir, milensDir]) {
-    mkdirSync(dir, { recursive: true });
-  }
+  const activeDirs: string[] = [];
+  if (has('copilot')) { mkdirSync(copilotDir, { recursive: true }); activeDirs.push(copilotDir); }
+  if (has('cursor'))  { mkdirSync(cursorDir, { recursive: true });  activeDirs.push(cursorDir); }
+  if (has('claude'))  { mkdirSync(claudeDir, { recursive: true });  activeDirs.push(claudeDir); }
+  if (has('agents'))  { mkdirSync(agentsDir, { recursive: true });  activeDirs.push(agentsDir); }
+  // milens internal always generated
+  mkdirSync(milensDir, { recursive: true });
+  activeDirs.push(milensDir);
 
   let count = 0;
   for (const [areaName, area] of filtered) {
     const content = renderSkillContent(areaName, area, incomingCount, crossArea);
 
-    // Copilot: .github/instructions/{area}.instructions.md
-    writeFileSync(join(copilotDir, `${areaName}.instructions.md`), renderCopilot(area, content));
+    if (has('copilot')) {
+      writeFileSync(join(copilotDir, `${areaName}.instructions.md`), renderCopilot(area, content));
+    }
 
-    // Cursor: .cursor/rules/{area}.mdc
-    writeFileSync(join(cursorDir, `${areaName}.mdc`), renderCursor(area, content));
+    if (has('cursor')) {
+      writeFileSync(join(cursorDir, `${areaName}.mdc`), renderCursor(area, content));
+    }
 
-    // Claude: .claude/skills/generated/{area}/SKILL.md
-    const claudeAreaDir = join(claudeDir, areaName);
-    mkdirSync(claudeAreaDir, { recursive: true });
-    writeFileSync(join(claudeAreaDir, 'SKILL.md'), content);
+    if (has('claude')) {
+      const claudeAreaDir = join(claudeDir, areaName);
+      mkdirSync(claudeAreaDir, { recursive: true });
+      writeFileSync(join(claudeAreaDir, 'SKILL.md'), content);
+    }
 
-    // Universal agents: .agents/skills/{area}/SKILL.md
-    const agentsAreaDir = join(agentsDir, areaName);
-    mkdirSync(agentsAreaDir, { recursive: true });
-    writeFileSync(join(agentsAreaDir, 'SKILL.md'), renderAgentSkill(areaName, content));
+    if (has('agents')) {
+      const agentsAreaDir = join(agentsDir, areaName);
+      mkdirSync(agentsAreaDir, { recursive: true });
+      writeFileSync(join(agentsAreaDir, 'SKILL.md'), renderAgentSkill(areaName, content));
+    }
 
-    // milens reference: .milens/skills/{area}.md
+    // milens reference always generated
     writeFileSync(join(milensDir, `${areaName}.md`), content);
 
     count++;
   }
 
-  // Generate milens MCP tool instructions for each editor
-  generateToolInstructions(rootDir, copilotDir, cursorDir, claudeDir, agentsDir);
+  // Generate milens MCP tool instructions
+  const allFiles = new Set<string>();
+  for (const sym of symbols) allFiles.add(sym.filePath);
+  const stats = { symbols: symbols.length, links: links.length, files: allFiles.size };
+  const areaNames = [...filtered].map(([name]) => name);
+  generateToolInstructions(rootDir, copilotDir, cursorDir, claudeDir, agentsDir, stats, areaNames, has);
 
-  return { count, dirs: [copilotDir, cursorDir, claudeDir, agentsDir, milensDir] };
+  return { count, dirs: activeDirs };
 }
 
 function getAreaName(filePath: string): string {
@@ -236,44 +252,104 @@ function renderAgentSkill(areaName: string, content: string): string {
 
 // ── Milens MCP tool instructions (injected per-editor) ──
 
-const MILENS_TOOLS_MD = `# Milens — Code Intelligence
+function renderMilensInstructions(rootDir: string, stats: { symbols: number; links: number; files: number }, areaNames: string[]): string {
+  const t = (name: string) => `mcp_milens_${name}`;
+  const repo = `repo: "${rootDir}"`;
 
-This project is indexed by **milens**, a code intelligence engine that provides MCP tools for navigating and understanding the codebase.
+  const skillsRows = areaNames.map(a =>
+    `| Work in the ${capitalize(a)} area | \`.agents/skills/${a}/SKILL.md\` |`
+  ).join('\n');
 
-## MCP Tools
+  return `<!-- milens:start -->
+# Milens — Code Intelligence (MCP)
 
-| Tool | Purpose | Use when |
-|------|---------|----------|
-| \`query\` | Search indexed symbol definitions (functions, classes, exports) | Finding code by name/concept |
-| \`grep\` | Text search across ALL project files (templates, styles, configs, docs) | Deleting features, renaming, finding every reference |
-| \`context\` | 360° view of a symbol: incoming refs, outgoing deps, hierarchy | Before editing a symbol |
-| \`impact\` | Blast radius — what code breaks if a symbol changes | Before risky changes |
-| \`detect_changes\` | Git diff → affected symbols + dependents | After git operations |
-| \`explain_relationship\` | Shortest path between two symbols | Tracing how symbols connect |
-| \`find_dead_code\` | Exported symbols with zero references | Cleaning up unused code |
-| \`get_file_symbols\` | All symbols in a file | Understanding file contents |
-| \`get_type_hierarchy\` | Inheritance/implementation tree | Before modifying class hierarchy |
+This project is indexed by milens (${stats.symbols} symbols, ${stats.links} links, ${stats.files} files). Use the milens MCP tools (\`mcp_milens_*\`) to understand code, assess impact, and navigate safely.
 
-## Workflow
+> **CRITICAL:** All milens MCP tool calls MUST include \`${repo}\` — without it, the tools will fail with "No index" error.
 
-### Before Editing Code
-1. Run \`context\` on the symbol to understand its relationships
-2. Run \`impact\` with \`direction: "upstream"\` to see what depends on it
-3. If many upstream dependents exist, warn the user before proceeding
+> If any milens tool warns the index is stale, run \`npx milens analyze -p . --force\` in the project root.
 
-### When Deleting a Feature or Renaming
-1. Run \`grep\` first to find ALL text references (templates, configs, routes, docs)
-2. Run \`impact\` to understand the symbol dependency graph
-3. Combine both — \`grep\` catches what \`impact\` misses
+## Always Do
 
-### When Exploring Unfamiliar Code
-- Use \`query\` for symbol definitions + \`grep\` for all text references
-- Use \`context\` on key symbols to understand call chains
-- Use \`get_file_symbols\` to see everything in a file
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run \`${t('impact')}({target: "symbolName", ${repo}})\` and report the blast radius to the user.
+- **MUST run \`${t('detect_changes')}({${repo}})\` before committing** to verify changes only affect expected symbols.
+- **MUST warn the user** if impact analysis shows many upstream dependents before proceeding with edits.
+- When exploring unfamiliar code, use \`${t('query')}\` to find symbol definitions and \`${t('grep')}\` for all text references.
+- When you need full context on a specific symbol — callers, callees, parent, children — use \`${t('context')}({name: "symbolName", ${repo}})\`.
 
-### After Modifying Code
-- Re-index if needed: \`npx milens analyze -p . --force\`
-`;
+## When Debugging
+
+1. \`${t('query')}({query: "<error or symptom>", ${repo}})\` — find symbols related to the issue
+2. \`${t('context')}({name: "<suspect function>", ${repo}})\` — see all callers, callees, and hierarchy
+3. \`${t('grep')}({pattern: "<error message>", ${repo}})\` — find every text occurrence across all files
+4. \`${t('explain_relationship')}({from: "A", to: "B", ${repo}})\` — trace how two symbols connect
+
+## When Refactoring
+
+- **Before editing**: MUST run \`${t('context')}\` to see all incoming/outgoing refs, then \`${t('impact')}\` to find all upstream dependents.
+- **When deleting features**: MUST use \`${t('grep')}\` first to find ALL text references (templates, configs, routes, docs), then \`${t('impact')}\` for the dependency graph. Combine both — \`grep\` catches what \`impact\` misses.
+- **After any refactor**: run \`${t('detect_changes')}({${repo}})\` to verify only expected files changed.
+
+## Never Do
+
+- NEVER edit a function, class, or method without first running \`${t('impact')}\` on it.
+- NEVER ignore warnings when impact analysis shows many upstream dependents.
+- NEVER delete or rename symbols without running both \`${t('grep')}\` and \`${t('impact')}\`.
+- NEVER commit changes without running \`${t('detect_changes')}()\` to check affected scope.
+- NEVER call milens MCP tools without the \`repo\` parameter.
+
+## Tools Quick Reference
+
+| Tool | When to use | Example |
+|------|-------------|---------|
+| \`${t('query')}\` | Find symbols by name/concept | \`${t('query')}({query: "auth validation", ${repo}})\` |
+| \`${t('context')}\` | 360° view of one symbol | \`${t('context')}({name: "UserService", ${repo}})\` |
+| \`${t('impact')}\` | Blast radius before editing | \`${t('impact')}({target: "X", direction: "upstream", ${repo}})\` |
+| \`${t('grep')}\` | Text search ALL files (templates, SCSS, configs) | \`${t('grep')}({pattern: "route name", ${repo}})\` |
+| \`${t('detect_changes')}\` | Pre-commit scope check | \`${t('detect_changes')}({${repo}})\` |
+| \`${t('explain_relationship')}\` | How two symbols connect | \`${t('explain_relationship')}({from: "A", to: "B", ${repo}})\` |
+| \`${t('get_file_symbols')}\` | All symbols in a file | \`${t('get_file_symbols')}({file: "path/to/file", ${repo}})\` |
+| \`${t('get_type_hierarchy')}\` | Class inheritance tree | \`${t('get_type_hierarchy')}({name: "ClassName", ${repo}})\` |
+| \`${t('find_dead_code')}\` | Unused exported symbols | \`${t('find_dead_code')}({${repo}})\` |
+| \`${t('status')}\` | Check index health | \`${t('status')}({${repo}})\` |
+
+## \`query\` vs \`grep\` — When to Use Which
+
+| Scenario | Use \`query\` | Use \`grep\` |
+|----------|-------------|------------|
+| Find function/class definitions | ✅ | |
+| Find references in templates/views | | ✅ |
+| Find route definitions in configs | | ✅ |
+| Find text in comments/docs | | ✅ |
+| Find symbol by concept/name | ✅ | |
+| Find every text occurrence | | ✅ |
+| Deleting a feature | ✅ + ✅ | ✅ + ✅ |
+
+## Self-Check Before Finishing
+
+Before completing any code modification task, verify:
+1. \`${t('impact')}\` was run for all modified symbols
+2. No warnings about many upstream dependents were ignored
+3. \`${t('detect_changes')}()\` confirms changes match expected scope
+4. All direct dependents (d=1) were updated
+
+## Keeping the Index Fresh
+
+After significant code changes, re-index:
+
+\`\`\`bash
+npx milens analyze -p . --force
+\`\`\`
+
+## Skills
+
+| Task | Read this skill file |
+|------|---------------------|
+| General milens tools reference | \`.agents/skills/milens/SKILL.md\` |
+${skillsRows}
+
+<!-- milens:end -->`;
+}
 
 function generateToolInstructions(
   rootDir: string,
@@ -281,29 +357,80 @@ function generateToolInstructions(
   cursorDir: string,
   claudeDir: string,
   agentsDir: string,
+  stats: { symbols: number; links: number; files: number },
+  areaNames: string[],
+  has: (name: string) => boolean,
 ): void {
-  // Copilot: .github/instructions/milens.instructions.md (applyTo: ** → always loaded)
-  writeFileSync(
-    join(copilotDir, 'milens.instructions.md'),
-    `---\napplyTo: "**"\n---\n\n${MILENS_TOOLS_MD}`,
-  );
+  const content = renderMilensInstructions(rootDir, stats, areaNames);
 
-  // Cursor: .cursor/rules/milens.mdc (alwaysApply: true → always loaded)
-  writeFileSync(
-    join(cursorDir, 'milens.mdc'),
-    `---\ndescription: Milens code intelligence MCP tools\nglobs: "**"\nalwaysApply: true\n---\n\n${MILENS_TOOLS_MD}`,
-  );
+  if (has('copilot')) {
+    // Copilot: .github/instructions/milens.instructions.md (applyTo: ** → always loaded)
+    writeFileSync(
+      join(copilotDir, 'milens.instructions.md'),
+      `---\napplyTo: "**"\n---\n\n${content}`,
+    );
 
-  // Claude: .claude/skills/generated/milens/SKILL.md
-  const claudeMilensDir = join(claudeDir, 'milens');
-  mkdirSync(claudeMilensDir, { recursive: true });
-  writeFileSync(join(claudeMilensDir, 'SKILL.md'), MILENS_TOOLS_MD);
+    // Inject into root config that Copilot always reads
+    const githubDir = join(rootDir, '.github');
+    mkdirSync(githubDir, { recursive: true });
+    injectWithMarkers(join(githubDir, 'copilot-instructions.md'), content);
+  }
 
-  // Universal agents: .agents/skills/milens/SKILL.md (Antigravity, Copilot, Cursor, Codex, Gemini CLI, etc.)
-  const agentsMilensDir = join(agentsDir, 'milens');
-  mkdirSync(agentsMilensDir, { recursive: true });
-  writeFileSync(
-    join(agentsMilensDir, 'SKILL.md'),
-    `---\nname: milens\ndescription: Code intelligence MCP tools — symbol search, text grep, impact analysis, dependency graph\n---\n\n${MILENS_TOOLS_MD}`,
-  );
+  if (has('cursor')) {
+    // Cursor: .cursor/rules/milens.mdc (alwaysApply: true → always loaded)
+    writeFileSync(
+      join(cursorDir, 'milens.mdc'),
+      `---\ndescription: Milens code intelligence MCP tools\nglobs: "**"\nalwaysApply: true\n---\n\n${content}`,
+    );
+
+    // Inject into root config that Cursor always reads
+    injectWithMarkers(join(rootDir, '.cursorrules'), content);
+  }
+
+  if (has('claude')) {
+    // Claude: .claude/skills/generated/milens/SKILL.md
+    const claudeMilensDir = join(claudeDir, 'milens');
+    mkdirSync(claudeMilensDir, { recursive: true });
+    writeFileSync(join(claudeMilensDir, 'SKILL.md'), content);
+
+    // Inject into root config that Claude Code always reads
+    injectWithMarkers(join(rootDir, 'CLAUDE.md'), content);
+  }
+
+  if (has('agents')) {
+    // Universal agents: .agents/skills/milens/SKILL.md
+    const agentsMilensDir = join(agentsDir, 'milens');
+    mkdirSync(agentsMilensDir, { recursive: true });
+    writeFileSync(
+      join(agentsMilensDir, 'SKILL.md'),
+      `---\nname: milens\ndescription: Code intelligence MCP tools — symbol search, text grep, impact analysis, dependency graph\n---\n\n${content}`,
+    );
+
+    // Inject into root config for universal agents
+    injectWithMarkers(join(rootDir, 'AGENTS.md'), content);
+  }
+}
+
+/** Inject milens instructions into a file using markers. Creates the file if it doesn't exist. Replaces on re-run. */
+function injectWithMarkers(filePath: string, content: string): void {
+  const startMarker = '<!-- milens:start -->';
+  const endMarker = '<!-- milens:end -->';
+
+  let existing = '';
+  try {
+    existing = readFileSync(filePath, 'utf-8');
+  } catch { /* file doesn't exist */ }
+
+  if (existing.includes(startMarker) && existing.includes(endMarker)) {
+    // Replace existing milens section
+    const before = existing.slice(0, existing.indexOf(startMarker));
+    const after = existing.slice(existing.indexOf(endMarker) + endMarker.length);
+    writeFileSync(filePath, `${before}${content}${after}`);
+  } else if (existing) {
+    // Append to existing file
+    writeFileSync(filePath, `${existing}\n\n${content}\n`);
+  } else {
+    // Create new file
+    writeFileSync(filePath, `${content}\n`);
+  }
 }

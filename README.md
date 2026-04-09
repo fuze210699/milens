@@ -33,14 +33,16 @@ npx milens serve            # start MCP server for AI agents
 
 - **8 languages** — TypeScript, JavaScript, Python, Java, Go, Rust, PHP, Vue
 - **Declarative grammars** — add a new language by writing a config object, not code
-- **11 MCP tools** — query, grep, context, impact, status, detect_changes, explain_relationship, find_dead_code, get_file_symbols, get_type_hierarchy
+- **11 MCP tools + 3 prompts** — query, grep, context, impact, status, detect_changes, explain_relationship, find_dead_code, get_file_symbols, get_type_hierarchy
 - **Full-text grep** — search ALL project files (templates, SCSS, configs, docs) — not just indexed symbols
 - **SQLite + FTS5** — full-text symbol search + recursive CTE graph traversal
 - **Token-compact output** — minimal structured text, saving 40-60% tokens for AI agents
 - **Incremental indexing** — file-hash based, only re-parses changed files
 - **Multi-repo registry** — manage multiple codebases from `~/.milens/`
 - **Dual transport** — MCP over stdio (VS Code / Cursor) or HTTP (localhost-bound, secure)
-- **Skills generation** — auto-generate context files for Copilot, Cursor, Claude, Codex, and 40+ agents via `.agents/skills/`
+- **Skills generation** — auto-generate context files for Copilot, Cursor, Claude, Codex, and 40+ agents. Injects into root configs (`.github/copilot-instructions.md`, `.cursorrules`, `CLAUDE.md`, `AGENTS.md`)
+- **MCP protocol instructions** — server-level instructions sent to every connected agent on `initialize`, guiding tool usage without static files
+- **Per-editor CLI** — `--skills-copilot`, `--skills-cursor`, `--skills-claude`, `--skills-agents` for targeted generation
 - **Security hardened** — ReDoS protection, path traversal prevention, FTS5 injection sanitization, command injection prevention
 
 ## Installation
@@ -103,7 +105,11 @@ Scans source files, parses symbols with tree-sitter, resolves imports/calls/inhe
 | `-o, --output` | Custom output directory for the database |
 | `-v, --verbose` | Show detailed progress |
 | `-f, --force` | Force full re-index (skip hash check) |
-| `-s, --skills` | Generate SKILL.md files for Copilot, Cursor, Claude |
+| `-s, --skills` | Generate skill files for all supported editors |
+| `--skills-copilot` | Generate skill files for GitHub Copilot only |
+| `--skills-cursor` | Generate skill files for Cursor only |
+| `--skills-claude` | Generate skill files for Claude Code only |
+| `--skills-agents` | Generate skill files for AGENTS.md only |
 
 ### `search`
 
@@ -154,7 +160,11 @@ npx milens clean --all               # remove all indexes
 
 ## MCP Server
 
-milens exposes **11 tools** via the Model Context Protocol:
+milens exposes **11 tools** and **3 prompt templates** via the Model Context Protocol.
+
+The server includes **built-in instructions** sent via the MCP `initialize` response — every connected agent automatically receives tool usage guidance (when to combine `impact` + `grep`, workflow for deletions/refactors, etc.) without needing static files.
+
+### Tools
 
 | Tool | Description | Key params |
 |---|---|---|
@@ -172,6 +182,14 @@ milens exposes **11 tools** via the Model Context Protocol:
 > **`query` vs `grep`**: `query` searches indexed symbol definitions only. `grep` searches raw text across every file — essential for finding references in templates, SCSS, configs, routes, and docs that `query`/`impact` cannot see.
 
 > When only one repo is indexed, the `repo` parameter is optional on all tools.
+
+### Prompts
+
+| Prompt | Description | Params |
+|---|---|---|
+| `delete-feature` | Guided workflow for safe feature deletion (grep + impact + context) | `name` |
+| `refactor-symbol` | Guided workflow for renaming/refactoring with full coverage | `name` |
+| `explore-symbol` | Deep exploration of unfamiliar code | `name` |
 
 ### Tool Examples
 
@@ -275,7 +293,12 @@ Endpoint: `POST http://localhost:3100/mcp`
 Generate editor-specific context files from your codebase's knowledge graph:
 
 ```bash
+# Generate for all editors
 npx milens analyze -p . --skills
+
+# Generate for a specific editor only
+npx milens analyze -p . --skills-cursor
+npx milens analyze -p . --skills-copilot --skills-agents  # combine multiple
 ```
 
 This creates:
@@ -283,12 +306,18 @@ This creates:
 | Path | For |
 |---|---|
 | `.github/instructions/*.instructions.md` | GitHub Copilot |
+| `.github/copilot-instructions.md` | GitHub Copilot (root config, always loaded) |
 | `.cursor/rules/*.mdc` | Cursor |
+| `.cursorrules` | Cursor (root config, always loaded) |
 | `.claude/skills/generated/*/SKILL.md` | Claude Code |
+| `CLAUDE.md` | Claude Code (root config, always loaded) |
 | `.agents/skills/*/SKILL.md` | 40+ agents ([Agent Skills](https://agentskills.io)) |
+| `AGENTS.md` | Universal agents (root config, always loaded) |
 | `.milens/skills/*.md` | milens internal |
 
-Each skill file contains: key symbols, entry points, cross-area dependencies, file listings, and **MCP tool usage instructions** — so AI agents know both the codebase structure and how to use milens tools effectively.
+All root config files use `<!-- milens:start/end -->` markers for idempotent injection — re-running replaces the milens section without duplicating or overwriting other content.
+
+Each generated file contains: key symbols, entry points, cross-area dependencies, file listings, and **full MCP tool usage instructions** with `mcp_milens_*` tool names, repo path, workflows, and "Never Do" rules — so AI agents know both the codebase structure and exactly how to use milens tools.
 
 ## Architecture
 
@@ -335,7 +364,7 @@ Source Files → [Scan] → [Parse] → [Resolve] → [Store] → [Serve]
 2. **Parse** — Extract symbols (functions, classes, methods, interfaces, enums, structs, traits) via tree-sitter WASM grammars
 3. **Resolve** — Link imports → symbols, calls → definitions, inheritance chains. Confidence-scored.
 4. **Store** — Write symbols + links to SQLite with FTS5 search index in a single transaction
-5. **Serve** — Expose the knowledge graph via 10 MCP tools or CLI commands
+5. **Serve** — Expose the knowledge graph via 11 MCP tools + 3 prompts, with built-in agent instructions
 
 ### Design Decisions
 

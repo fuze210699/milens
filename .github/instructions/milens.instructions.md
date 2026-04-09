@@ -1,7 +1,5 @@
 ---
-description: Milens code intelligence MCP tools
-globs: "**"
-alwaysApply: true
+applyTo: "**"
 ---
 
 <!-- milens:start -->

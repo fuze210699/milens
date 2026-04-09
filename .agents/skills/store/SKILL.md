@@ -1,5 +1,6 @@
 ---
-applyTo: "src/store/**"
+name: milens-store
+description: Code intelligence for the store area — symbols, dependencies, and entry points
 ---
 
 # Store

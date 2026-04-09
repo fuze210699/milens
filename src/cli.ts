@@ -9,7 +9,7 @@ const program = new Command();
 program
   .name('milens')
   .description('Code intelligence engine — analyze codebases, build knowledge graphs, serve via MCP')
-  .version('0.3.0');
+  .version('0.3.1');
 
 program
   .command('analyze')
@@ -18,7 +18,11 @@ program
   .option('-o, --output <dir>', 'Output directory for database')
   .option('-v, --verbose', 'Show detailed progress')
   .option('-f, --force', 'Force full re-index')
-  .option('-s, --skills', 'Generate SKILL.md files for each code area')
+  .option('-s, --skills', 'Generate skill files for all supported editors')
+  .option('--skills-copilot', 'Generate skill files for GitHub Copilot only')
+  .option('--skills-cursor', 'Generate skill files for Cursor only')
+  .option('--skills-claude', 'Generate skill files for Claude Code only')
+  .option('--skills-agents', 'Generate skill files for AGENTS.md only')
   .action(async (opts) => {
     const rootPath = resolve(opts.path);
     const outDir = opts.output ?? join(rootPath, '.milens');
@@ -44,13 +48,21 @@ program
 
     console.log(`\n✓ Indexed ${stats.symbolCount} symbols, ${stats.linkCount} links across ${stats.filesParsed} files (${stats.durationMs}ms)`);
 
-    if (opts.skills) {
+    if (opts.skills || opts.skillsCopilot || opts.skillsCursor || opts.skillsClaude || opts.skillsAgents) {
+      const editors: string[] | undefined = opts.skills
+        ? undefined  // all editors
+        : [
+            ...(opts.skillsCopilot ? ['copilot'] : []),
+            ...(opts.skillsCursor ? ['cursor'] : []),
+            ...(opts.skillsClaude ? ['claude'] : []),
+            ...(opts.skillsAgents ? ['agents'] : []),
+          ];
       const { Database } = await import('./store/db.js');
       const { generateSkills } = await import('./skills.js');
       const db = new Database(dbPath);
-      const result = generateSkills(db, rootPath);
+      const result = generateSkills(db, rootPath, editors);
       db.close();
-      console.log(`✓ Generated ${result.count} skill files for each editor:`);
+      console.log(`✓ Generated ${result.count} skill files for ${editors ? editors.join(', ') : 'all editors'}:`);
       for (const d of result.dirs) console.log(`  ${d}`);
     }
   });

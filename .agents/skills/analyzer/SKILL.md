@@ -1,7 +1,6 @@
 ---
-description: Code intelligence for analyzer area
-globs: src/analyzer/**
-alwaysApply: false
+name: milens-analyzer
+description: Code intelligence for the analyzer area — symbols, dependencies, and entry points
 ---
 
 # Analyzer

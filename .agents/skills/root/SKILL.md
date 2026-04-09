@@ -1,5 +1,6 @@
 ---
-applyTo: "src/**"
+name: milens-root
+description: Code intelligence for the root area — symbols, dependencies, and entry points
 ---
 
 # Root

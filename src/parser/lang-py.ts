@@ -7,9 +7,18 @@ const spec: LangSpec = {
   extensions: ['.py'],
   wasmName: 'tree-sitter-python',
   queries: {
-    functions: `(module (function_definition name: (identifier) @name) @def)`,
-    classes: `(class_definition name: (identifier) @name) @def`,
-    methods: `(class_definition body: (block (function_definition name: (identifier) @name) @def))`,
+    functions: `[
+      (module (function_definition name: (identifier) @name) @def)
+      (module (decorated_definition definition: (function_definition name: (identifier) @name) @def))
+    ]`,
+    classes: `[
+      (class_definition name: (identifier) @name) @def
+      (decorated_definition definition: (class_definition name: (identifier) @name) @def)
+    ]`,
+    methods: `[
+      (class_definition body: (block (function_definition name: (identifier) @name) @def))
+      (class_definition body: (block (decorated_definition definition: (function_definition name: (identifier) @name) @def)))
+    ]`,
     imports: `[
       (import_from_statement
         module_name: (dotted_name) @source
@@ -18,10 +27,20 @@ const spec: LangSpec = {
         name: (dotted_name) @source
       ) @def
     ]`,
-    calls: `
+    exports: `(module
+      (expression_statement
+        (assignment
+          left: (identifier) @_all
+          right: (list (string (string_content) @name))
+        )
+      )
+    )`,
+    calls: `[
       (call function: (identifier) @callee) @def
       (call function: (attribute attribute: (identifier) @callee)) @def
-    `,
+      (decorator (identifier) @callee) @def
+      (decorator (call function: (identifier) @callee)) @def
+    ]`,
     heritage: `(class_definition
       name: (identifier) @child
       superclasses: (argument_list (identifier) @parent)

@@ -7,17 +7,28 @@ const spec: LangSpec = {
   extensions: ['.java'],
   wasmName: 'tree-sitter-java',
   queries: {
-    classes: `(class_declaration name: (identifier) @name) @def`,
+    classes: `[
+      (class_declaration name: (identifier) @name) @def
+      (record_declaration name: (identifier) @name) @def
+    ]`,
     interfaces: `(interface_declaration name: (identifier) @name) @def`,
     methods: `[
       (method_declaration name: (identifier) @name) @def
       (constructor_declaration name: (identifier) @name) @def
     ]`,
     enums: `(enum_declaration name: (identifier) @name) @def`,
-    imports: `(import_declaration (scoped_identifier) @source) @def`,
-    calls: `(method_invocation
-      name: (identifier) @callee
-    ) @def`,
+    imports: `[
+      (import_declaration (scoped_identifier) @source) @def
+      (import_declaration "static" (scoped_identifier) @source) @def
+    ]`,
+    calls: `[
+      (method_invocation
+        name: (identifier) @callee
+      ) @def
+      (object_creation_expression type: (type_identifier) @callee) @def
+      (marker_annotation name: (identifier) @callee) @def
+      (annotation name: (identifier) @callee) @def
+    ]`,
     heritage: `[
       (class_declaration
         name: (identifier) @child

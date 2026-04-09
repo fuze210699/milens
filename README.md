@@ -33,13 +33,15 @@ npx milens serve            # start MCP server for AI agents
 
 - **8 languages** — TypeScript, JavaScript, Python, Java, Go, Rust, PHP, Vue
 - **Declarative grammars** — add a new language by writing a config object, not code
-- **10 MCP tools** — query, context, impact, status, detect_changes, explain_relationship, find_dead_code, get_file_symbols, get_type_hierarchy
+- **11 MCP tools** — query, grep, context, impact, status, detect_changes, explain_relationship, find_dead_code, get_file_symbols, get_type_hierarchy
+- **Full-text grep** — search ALL project files (templates, SCSS, configs, docs) — not just indexed symbols
 - **SQLite + FTS5** — full-text symbol search + recursive CTE graph traversal
 - **Token-compact output** — minimal structured text, saving 40-60% tokens for AI agents
 - **Incremental indexing** — file-hash based, only re-parses changed files
 - **Multi-repo registry** — manage multiple codebases from `~/.milens/`
-- **Dual transport** — MCP over stdio (VS Code / Cursor) or HTTP (remote agents)
-- **Skills generation** — auto-generate context files for Copilot, Cursor, Claude, and Codex
+- **Dual transport** — MCP over stdio (VS Code / Cursor) or HTTP (localhost-bound, secure)
+- **Skills generation** — auto-generate context files for Copilot, Cursor, Claude, Codex, and 40+ agents via `.agents/skills/`
+- **Security hardened** — ReDoS protection, path traversal prevention, FTS5 injection sanitization, command injection prevention
 
 ## Installation
 
@@ -152,13 +154,14 @@ npx milens clean --all               # remove all indexes
 
 ## MCP Server
 
-milens exposes **10 tools** via the Model Context Protocol:
+milens exposes **11 tools** via the Model Context Protocol:
 
 | Tool | Description | Key params |
 |---|---|---|
-| `query` | Search symbols by name/keyword (FTS5) | `query`, `limit` |
+| `query` | Search indexed symbol definitions (FTS5) | `query`, `limit` |
+| `grep` | Text search across ALL project files (templates, SCSS, configs, docs) | `pattern`, `isRegex`, `include` |
 | `context` | 360° symbol view — incoming refs, outgoing deps | `name` |
-| `impact` | Blast radius with depth grouping | `target`, `direction`, `depth` |
+| `impact` | Blast radius with depth grouping (code deps only) | `target`, `direction`, `depth` |
 | `status` | Index stats for a repository | `repo` |
 | `detect_changes` | Git diff → affected symbols + dependents | `ref` |
 | `explain_relationship` | Shortest path between two symbols | `from`, `to` |
@@ -166,15 +169,24 @@ milens exposes **10 tools** via the Model Context Protocol:
 | `get_file_symbols` | All symbols in a specific file | `file` |
 | `get_type_hierarchy` | Inheritance/implementation tree | `name` |
 
+> **`query` vs `grep`**: `query` searches indexed symbol definitions only. `grep` searches raw text across every file — essential for finding references in templates, SCSS, configs, routes, and docs that `query`/`impact` cannot see.
+
 > When only one repo is indexed, the `repo` parameter is optional on all tools.
 
 ### Tool Examples
 
 ```
-# Search
+# Search indexed symbols
 query({query: "auth"})
 → AuthService [class] src/auth/service.ts:10
   validateUser [function] src/auth/validate.ts:15
+
+# Grep ALL files (templates, SCSS, configs, docs)
+grep({pattern: "AuthService"})
+→ src/auth/service.ts L10: export class AuthService {
+  src/components/Login.vue L5: <AuthForm @submit="handleAuth" />
+  src/routes/index.ts L12: import { AuthService } from '../auth'
+  docs/api.md L42: The `AuthService` handles JWT...
 
 # Context
 context({name: "validateUser"})
@@ -273,8 +285,10 @@ This creates:
 | `.github/instructions/*.instructions.md` | GitHub Copilot |
 | `.cursor/rules/*.mdc` | Cursor |
 | `.claude/skills/generated/*/SKILL.md` | Claude Code |
+| `.agents/skills/*/SKILL.md` | 40+ agents ([Agent Skills](https://agentskills.io)) |
+| `.milens/skills/*.md` | milens internal |
 
-Each skill file contains: key symbols, entry points, cross-area dependencies, and file listings — so AI agents get targeted context for the area of code you're working in.
+Each skill file contains: key symbols, entry points, cross-area dependencies, file listings, and **MCP tool usage instructions** — so AI agents know both the codebase structure and how to use milens tools effectively.
 
 ## Architecture
 
@@ -293,7 +307,7 @@ src/
     lang-go.ts        — Go
     lang-rust.ts      — Rust
     lang-php.ts       — PHP
-    lang-vue.ts       — Vue (extracts <script>, delegates to TS)
+    lang-vue.ts       — Vue (extracts <script> + <template> refs)
     languages.ts      — Language registry
   analyzer/
     scanner.ts        — File discovery (.gitignore aware)
@@ -304,7 +318,7 @@ src/
     db.ts             — Database adapter (30+ methods, recursive CTEs)
     registry.ts       — Multi-repo registry (~/.milens/)
   server/
-    mcp.ts            — MCP server (10 tools, stdio + HTTP)
+    mcp.ts            — MCP server (11 tools, stdio + HTTP)
 ```
 
 ### How It Works
@@ -335,14 +349,14 @@ Source Files → [Scan] → [Parse] → [Resolve] → [Store] → [Serve]
 
 | Language | Extensions | Symbols | Imports | Calls | Heritage |
 |---|---|---|---|---|---|
-| TypeScript | `.ts`, `.tsx` | functions, classes, methods, interfaces, enums | ✓ | ✓ | ✓ |
-| JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` | functions, classes, methods | ✓ | ✓ | ✓ |
-| Python | `.py` | functions, classes, methods | ✓ | ✓ | ✓ |
-| Java | `.java` | classes, interfaces, methods, enums | ✓ | ✓ | ✓ |
-| Go | `.go` | functions, methods, structs, interfaces | ✓ | ✓ | — |
-| Rust | `.rs` | functions, structs, enums, traits, methods | ✓ | ✓ | ✓ |
-| PHP | `.php` | functions, classes, interfaces, methods | ✓ | ✓ | ✓ |
-| Vue | `.vue` | (delegates to TypeScript on `<script>` block) | ✓ | ✓ | ✓ |
+| TypeScript | `.ts`, `.tsx` | functions, classes, methods, interfaces, enums | ✓ (ESM + require) | ✓ | ✓ |
+| JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` | functions, classes, methods | ✓ (ESM + require) | ✓ | ✓ |
+| Python | `.py` | functions, classes, methods (+ decorated) | ✓ | ✓ (+ decorators) | ✓ |
+| Java | `.java` | classes, records, interfaces, methods, enums | ✓ (+ static) | ✓ (+ annotations, new) | ✓ |
+| Go | `.go` | functions, methods, structs, interfaces, consts, vars | ✓ | ✓ | — |
+| Rust | `.rs` | functions, structs, enums, traits, methods, consts, mods | ✓ | ✓ (+ macros) | ✓ |
+| PHP | `.php` | functions, classes, interfaces, traits, methods, consts | ✓ (+ include) | ✓ | ✓ (+ traits) |
+| Vue | `.vue` | `<script>` symbols + `<template>` refs (components, events, directives, interpolations) | ✓ | ✓ | ✓ |
 
 ## Adding a Language
 

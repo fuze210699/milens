@@ -3,9 +3,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getParser, loadLanguage } from '../../src/parser/loader.js';
 import { extractFromTree } from '../../src/parser/extract.js';
+import { extractVueScript, extractVueTemplateRefs } from '../../src/parser/lang-vue.js';
 import tsSpec from '../../src/parser/lang-ts.js';
 import pySpec from '../../src/parser/lang-py.js';
 import goSpec from '../../src/parser/lang-go.js';
+import vueSpec from '../../src/parser/lang-vue.js';
 
 const FIXTURES = join(import.meta.dirname, '..', 'fixtures');
 
@@ -114,5 +116,41 @@ describe('Go extractor', () => {
     expect(names).toContain('Register');
 
     expect(result.calls.some(c => c.calleeName === 'NewUser')).toBe(true);
+  });
+});
+
+describe('Vue extractor', () => {
+  it('extracts script symbols from Vue SFC', async () => {
+    const source = readFileSync(join(FIXTURES, 'ts-project', 'src', 'UserProfile.vue'), 'utf-8');
+    const script = extractVueScript(source);
+    expect(script).not.toBeNull();
+
+    const parser = await getParser(vueSpec.wasmName);
+    const lang = await loadLanguage(vueSpec.wasmName);
+    const tree = parser.parse(script!.content);
+    const result = extractFromTree(tree, lang, vueSpec, 'src/UserProfile.vue');
+
+    const names = result.symbols.map(s => s.name);
+    expect(names).toContain('handleClick');
+    expect(names).toContain('onSubmit');
+  });
+
+  it('extracts template references from Vue SFC', () => {
+    const source = readFileSync(join(FIXTURES, 'ts-project', 'src', 'UserProfile.vue'), 'utf-8');
+    const calls = extractVueTemplateRefs(source, 'src/UserProfile.vue');
+
+    const calleeNames = calls.map(c => c.calleeName);
+    // Component refs
+    expect(calleeNames).toContain('UserAvatar');
+    expect(calleeNames).toContain('el-button');
+    // Event handlers
+    expect(calleeNames).toContain('handleClick');
+    expect(calleeNames).toContain('onSubmit');
+    // Directive expressions
+    expect(calleeNames).toContain('isVisible');
+    expect(calleeNames).toContain('avatarUrl');
+    expect(calleeNames).toContain('canEdit');
+    // Template interpolations
+    expect(calleeNames).toContain('displayName');
   });
 });

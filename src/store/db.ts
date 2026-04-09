@@ -120,8 +120,20 @@ export class Database {
   // ── Queries ──
 
   searchSymbols(query: string, limit = 20): CodeSymbol[] {
-    const rows = this.stmts.searchFts.all(query, limit) as any[];
-    return rows.map(rowToSymbol);
+    // Sanitize FTS5 query: wrap each token in double-quotes to prevent FTS5 operator injection
+    const sanitized = query
+      .replace(/["]/g, '')           // strip double quotes
+      .split(/\s+/)                  // split into tokens
+      .filter(Boolean)
+      .map(t => `"${t}"`)            // quote each token (treated as literal by FTS5)
+      .join(' ');
+    if (!sanitized) return [];
+    try {
+      const rows = this.stmts.searchFts.all(sanitized, limit) as any[];
+      return rows.map(rowToSymbol);
+    } catch {
+      return [];
+    }
   }
 
   findSymbolByName(name: string): CodeSymbol[] {

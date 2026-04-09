@@ -2,7 +2,7 @@
 
 Follow **AGENTS.md** for canonical rules. This file adds Claude Code–specific guidance.
 
-This project is indexed by **milens** — use MCP tools (`query`, `context`, `impact`, `status`, `detect_changes`, `explain_relationship`, `find_dead_code`, `get_file_symbols`, `get_type_hierarchy`) to understand code before modifying it.
+This project is indexed by **milens** — use MCP tools (`query`, `grep`, `context`, `impact`, `status`, `detect_changes`, `explain_relationship`, `find_dead_code`, `get_file_symbols`, `get_type_hierarchy`) to understand code before modifying it.
 
 > If tools warn the index is stale, run: `npx tsx src/cli.ts analyze -p . --force`
 
@@ -26,7 +26,8 @@ Before completing any task:
 
 See **AGENTS.md** for full tool reference. Quick summary:
 
-- `query({query: "..."})` — find symbols
+- `query({query: "..."})` — find symbol definitions (indexed code only)
+- `grep({pattern: "..."})` — text search across ALL files (templates, SCSS, configs, docs)
 - `context({name: "..."})` — 360° symbol view
 - `impact({target: "...", direction: "upstream"})` — blast radius
 - `detect_changes()` — git diff → affected symbols

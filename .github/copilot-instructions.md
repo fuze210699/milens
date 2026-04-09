@@ -6,9 +6,10 @@ This project is indexed by **milens** — a lightweight code intelligence platfo
 
 | Tool | Purpose | Usage |
 |------|---------|-------|
-| `query` | Find symbols by name or keyword | `query({query: "auth"})` |
+| `query` | Find symbol definitions by name or keyword (indexed code only) | `query({query: "auth"})` |
+| `grep` | Text search across ALL project files (templates, SCSS, configs, docs) | `grep({pattern: "pencil"})` |
 | `context` | 360° view: incoming refs, outgoing deps, hierarchy | `context({name: "AuthService"})` |
-| `impact` | Blast radius — what breaks if a symbol changes | `impact({target: "createUser", direction: "upstream"})` |
+| `impact` | Blast radius in symbol graph — what code breaks if a symbol changes | `impact({target: "createUser", direction: "upstream"})` |
 | `status` | Index stats for a repository | `status()` |
 | `detect_changes` | Git diff → affected symbols + dependents | `detect_changes({ref: "HEAD"})` |
 | `explain_relationship` | Shortest path between two symbols | `explain_relationship({from: "A", to: "B"})` |
@@ -24,10 +25,16 @@ This project is indexed by **milens** — a lightweight code intelligence platfo
 3. If many upstream dependents exist, warn the user before proceeding
 
 ### When Exploring Unfamiliar Code
-- Use `query` to find relevant symbols instead of grepping
+- Use `query` to find relevant symbol definitions
+- Use `grep` to find ALL text references (templates, SCSS, configs, routes, docs)
 - Use `context` on key symbols to understand call chains
 - Use `get_file_symbols` to see everything in a file at a glance
 - Use `get_type_hierarchy` to understand class inheritance
+
+### When Deleting a Feature or Renaming
+1. Use `grep` first to find ALL text references across every file type
+2. Use `impact` to understand the dependency graph for code symbols
+3. Combine both results — `grep` catches templates/configs/docs that `impact` misses
 
 ### When Debugging
 - Use `detect_changes` to find what symbols were affected by recent changes

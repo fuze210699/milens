@@ -222,6 +222,10 @@ export function extractFromTree(
 
   if (spec.queries.exports) {
     for (const match of runQuery(spec.queries.exports)) {
+      // Filter: if query captures @_all (Python __all__), verify identifier text
+      const allCapture = captureText(match, '_all');
+      if (allCapture && allCapture !== '__all__') continue;
+
       const name = captureText(match, 'name');
       if (name) exportedNames.add(name);
     }
@@ -239,6 +243,10 @@ export function extractFromTree(
       const source = captureText(match, 'source');
       const defNode = captureNode(match, 'def');
       if (!source || !defNode) continue;
+
+      // Filter: if query captures @_req (require() pattern), verify identifier text
+      const reqCapture = captureText(match, '_req');
+      if (reqCapture && reqCapture !== 'require') continue;
 
       const cleanSource = source.replace(/^['"]|['"]$/g, '');
       const names = collectImportNames(defNode);

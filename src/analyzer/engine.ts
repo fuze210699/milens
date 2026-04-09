@@ -4,7 +4,7 @@ import { scanFiles } from './scanner.js';
 import { langForFile } from '../parser/languages.js';
 import { getParser, loadLanguage } from '../parser/loader.js';
 import { extractFromTree, clearQueryCache } from '../parser/extract.js';
-import { extractVueScript } from '../parser/lang-vue.js';
+import { extractVueScript, extractVueTemplateRefs } from '../parser/lang-vue.js';
 import { resolveLinks } from './resolver.js';
 import { Database } from '../store/db.js';
 import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, AnalysisStats } from '../types.js';
@@ -180,6 +180,12 @@ function parseFile(
     }
     for (const imp of result.imports) imp.line += lineOffset;
     for (const call of result.calls) call.line += lineOffset;
+  }
+
+  // Vue SFC: also extract references from <template> block
+  if (spec.id === 'vue') {
+    const templateCalls = extractVueTemplateRefs(source, filePath);
+    result.calls.push(...templateCalls);
   }
 
   return result;

@@ -15,6 +15,7 @@ export interface LangSpec {
     enums?: string;
     structs?: string;
     traits?: string;
+    modules?: string;
     imports?: string;
     calls?: string;
     exports?: string;
@@ -154,10 +155,11 @@ const SYMBOL_QUERY_TYPES: ReadonlyArray<{ key: keyof LangSpec['queries']; kind: 
   { key: 'enums', kind: 'enum' },
   { key: 'structs', kind: 'struct' },
   { key: 'traits', kind: 'trait' },
+  { key: 'modules', kind: 'module' },
 ];
 
 // Container kinds for method → parent resolution
-const CONTAINER_KINDS = new Set<SymbolKind>(['class', 'struct', 'trait']);
+const CONTAINER_KINDS = new Set<SymbolKind>(['class', 'struct', 'trait', 'module']);
 
 // ── Universal symbol extractor ──
 
@@ -246,7 +248,7 @@ export function extractFromTree(
 
       // Filter: if query captures @_req (require() pattern), verify identifier text
       const reqCapture = captureText(match, '_req');
-      if (reqCapture && reqCapture !== 'require') continue;
+      if (reqCapture && reqCapture !== 'require' && reqCapture !== 'require_relative') continue;
 
       const cleanSource = source.replace(/^['"]|['"]$/g, '');
       const names = collectImportNames(defNode);

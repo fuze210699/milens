@@ -61,6 +61,11 @@ const spec: LangSpec = {
     calls: `[
       (call_expression function: (identifier) @callee) @def
       (call_expression function: (member_expression object: (_) @receiver property: (property_identifier) @callee)) @def
+      (decorator (identifier) @callee) @def
+      (jsx_self_closing_element name: (identifier) @callee) @def
+      (jsx_opening_element name: (identifier) @callee) @def
+      (jsx_self_closing_element name: (member_expression object: (identifier) @receiver property: (property_identifier) @callee)) @def
+      (jsx_opening_element name: (member_expression object: (identifier) @receiver property: (property_identifier) @callee)) @def
     ]`,
     heritage: `[
       (class_declaration
@@ -90,6 +95,7 @@ const spec: LangSpec = {
     const candidates = [
       base + '.ts', base + '.tsx',
       base + '.js', base + '.jsx',
+      base + '.vue',
       join(base, 'index.ts'), join(base, 'index.tsx'),
       join(base, 'index.js'),
     ];

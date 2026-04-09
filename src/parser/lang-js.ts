@@ -56,7 +56,15 @@ const spec: LangSpec = {
       (class_heritage (identifier) @parent)
     ) @def`,
   },
-  resolveImport(raw, fromFile, root, _aliases) {
+  resolveImport(raw, fromFile, root, aliases) {
+    // Check aliases first (e.g. @ → src)
+    for (const [alias, target] of Object.entries(aliases)) {
+      if (raw.startsWith(alias + '/') || raw === alias) {
+        raw = raw.replace(alias, target);
+        break;
+      }
+    }
+
     if (!raw.startsWith('.') && !raw.startsWith('/')) return null;
     const dir = dirname(join(root, fromFile));
     const base = join(dir, raw);

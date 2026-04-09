@@ -5,7 +5,7 @@ applyTo: "src/**"
 # Root
 
 ## Overview
-Contains 27 symbols (9 exported) across 3 files.
+Contains 28 symbols (9 exported) across 3 files.
 
 ## Key Symbols
 - **`generateSkills`** [function] (src/skills.ts:19) — 1 refs

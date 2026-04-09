@@ -4,12 +4,16 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { resolve, relative, join } from 'node:path';
+import { resolve, relative, join, dirname } from 'node:path';
 import { execSync, execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import ignore from 'ignore';
 import { Database } from '../store/db.js';
 import { RepoRegistry } from '../store/registry.js';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PKG_VERSION: string = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8')).version;
 
 // ── Lazy DB connection with idle eviction ──
 
@@ -161,6 +165,17 @@ function safeRegex(pattern: string, flags: string): RegExp {
   if (pattern.length > 200) throw new Error('Pattern too long');
   // Reject nested quantifiers like (a+)+, (a*)*,  (a{1,})+
   if (/([+*}])\)?[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
+  // Reject overlapping alternation inside quantified groups: (a|a)*, (ab|a)+
+  if (/\((?:[^)]*\|[^)]*)\)[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
+  // Reject backreferences inside quantified groups (exponential matching)
+  if (/\((?:[^)]*\\[1-9][^)]*)\)[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
+  // Reject deeply nested groups (>3 levels)
+  let depth = 0, maxDepth = 0;
+  for (const ch of pattern) {
+    if (ch === '(') { depth++; maxDepth = Math.max(maxDepth, depth); }
+    else if (ch === ')') depth--;
+  }
+  if (maxDepth > 3) throw new Error('Unsafe regex pattern');
   return new RegExp(pattern, flags);
 }
 
@@ -216,6 +231,11 @@ const MILENS_INSTRUCTIONS = `milens is a code intelligence engine. It indexes co
 - **See all symbols in a file** → \`get_file_symbols\`
 - **Class inheritance tree** → \`get_type_hierarchy\`
 
+### \`query\` vs \`grep\` — choosing correctly on first call
+- If the search term contains **spaces** or looks like a **UI label/display string** → use \`grep\`
+- If the search term is **camelCase/PascalCase/snake_case** (a code identifier) → use \`query\`
+- When in doubt → use \`grep\` first (it searches everything)
+
 ### Impact depth guide
 - depth 1: WILL BREAK — direct callers/importers → must update
 - depth 2: LIKELY AFFECTED — indirect dependents → should test
@@ -246,7 +266,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   }
 
   const server = new McpServer(
-    { name: 'milens', version: '0.3.1' },
+    { name: 'milens', version: PKG_VERSION },
     { instructions: MILENS_INSTRUCTIONS },
   );
 

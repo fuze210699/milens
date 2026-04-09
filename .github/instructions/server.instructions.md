@@ -8,9 +8,9 @@ applyTo: "src/server/**"
 Contains 21 symbols (3 exported) across 1 files.
 
 ## Key Symbols
-- **`createMcpServer`** [function] (src/server/mcp.ts:227) — 2 refs
-- **`startStdio`** [function] (src/server/mcp.ts:656) — 1 refs
-- **`startHttp`** [function] (src/server/mcp.ts:664) — 1 refs
+- **`createMcpServer`** [function] (src/server/mcp.ts:247) — 2 refs
+- **`startStdio`** [function] (src/server/mcp.ts:676) — 1 refs
+- **`startHttp`** [function] (src/server/mcp.ts:684) — 1 refs
 
 ## Entry Points
 - **`get`** [method] — 18 incoming references

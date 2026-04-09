@@ -3,13 +3,17 @@ import { Command } from 'commander';
 import { resolve, join, dirname, basename } from 'node:path';
 import { mkdirSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 const program = new Command();
+
+const __filename = fileURLToPath(import.meta.url);
+const PKG_VERSION: string = JSON.parse(readFileSync(join(dirname(__filename), '..', 'package.json'), 'utf-8')).version;
 
 program
   .name('milens')
   .description('Code intelligence engine — analyze codebases, build knowledge graphs, serve via MCP')
-  .version('0.3.1');
+  .version(PKG_VERSION);
 
 program
   .command('analyze')

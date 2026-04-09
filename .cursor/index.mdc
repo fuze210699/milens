@@ -1,4 +1,9 @@
+---
+alwaysApply: true
+---
+
 <!-- milens:start -->
+
 # Milens — Code Intelligence (MCP)
 
 This project is indexed by milens (153 symbols, 234 links, 27 files).
@@ -95,12 +100,13 @@ After significant code changes: `npx milens analyze -p . --force`
 
 | Task | Read this skill file |
 |------|---------------------|
-| General milens tools reference | `.claude/skills/generated/milens/SKILL.md` |
-| Work in the Analyzer area | `.claude/skills/generated/analyzer/SKILL.md` |
-| Work in the Root area | `.claude/skills/generated/root/SKILL.md` |
-| Work in the Parser area | `.claude/skills/generated/parser/SKILL.md` |
-| Work in the Server area | `.claude/skills/generated/server/SKILL.md` |
-| Work in the Store area | `.claude/skills/generated/store/SKILL.md` |
-| Work in the Test area | `.claude/skills/generated/test/SKILL.md` |
+| General milens tools reference | `.cursor/rules/milens.mdc` |
+| Work in the Analyzer area | `.cursor/rules/analyzer.mdc` |
+| Work in the Root area | `.cursor/rules/root.mdc` |
+| Work in the Parser area | `.cursor/rules/parser.mdc` |
+| Work in the Server area | `.cursor/rules/server.mdc` |
+| Work in the Store area | `.cursor/rules/store.mdc` |
+| Work in the Test area | `.cursor/rules/test.mdc` |
+
 
 <!-- milens:end -->

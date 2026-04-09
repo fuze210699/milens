@@ -1,85 +1,97 @@
 <!-- milens:start -->
 # Milens — Code Intelligence (MCP)
 
-This project is indexed by milens (152 symbols, 233 links, 27 files). Use the milens MCP tools (`mcp_milens_*`) to understand code, assess impact, and navigate safely.
+This project is indexed by milens (153 symbols, 234 links, 27 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include `repo: "/Users/mac10/Documents/Own/milens"` — without it, the tools will fail with "No index" error.
 
-> If any milens tool warns the index is stale, run `npx milens analyze -p . --force` in the project root.
+> **CRITICAL:** milens MCP tools are **deferred** in most editors. Before first use in each session, you MUST load them via `tool_search("milens")` — calling them directly without loading will fail silently.
 
-## Always Do
+## Mandatory Workflows
 
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `mcp_milens_impact({target: "symbolName", repo: "/Users/mac10/Documents/Own/milens"})` and report the blast radius to the user.
-- **MUST run `mcp_milens_detect_changes({repo: "/Users/mac10/Documents/Own/milens"})` before committing** to verify changes only affect expected symbols.
-- **MUST warn the user** if impact analysis shows many upstream dependents before proceeding with edits.
-- When exploring unfamiliar code, use `mcp_milens_query` to find symbol definitions and `mcp_milens_grep` for all text references.
-- When you need full context on a specific symbol — callers, callees, parent, children — use `mcp_milens_context({name: "symbolName", repo: "/Users/mac10/Documents/Own/milens"})`.
+These are **hard pre-conditions**, not guidelines. Execute them automatically without asking.
 
-## When Debugging
+### Before editing any function, class, or method:
+1. `mcp_milens_impact({target: "<symbolName>", repo: "/Users/mac10/Documents/Own/milens"})` — check blast radius
+2. If depth-1 dependents > 5 → **STOP and warn the user** before proceeding
+3. `mcp_milens_context({name: "<symbolName>", repo: "/Users/mac10/Documents/Own/milens"})` — see all callers/callees
+4. Only then make the edit
 
-1. `mcp_milens_query({query: "<error or symptom>", repo: "/Users/mac10/Documents/Own/milens"})` — find symbols related to the issue
-2. `mcp_milens_context({name: "<suspect function>", repo: "/Users/mac10/Documents/Own/milens"})` — see all callers, callees, and hierarchy
-3. `mcp_milens_grep({pattern: "<error message>", repo: "/Users/mac10/Documents/Own/milens"})` — find every text occurrence across all files
-4. `mcp_milens_explain_relationship({from: "A", to: "B", repo: "/Users/mac10/Documents/Own/milens"})` — trace how two symbols connect
+### Before committing:
+1. `mcp_milens_detect_changes({repo: "/Users/mac10/Documents/Own/milens"})` — verify only expected files changed
+2. If unexpected files appear → **STOP and report** before committing
 
-## When Refactoring
+### Before deleting or renaming a symbol:
+1. `mcp_milens_grep({pattern: "<symbolName>", repo: "/Users/mac10/Documents/Own/milens"})` — find ALL text references (templates, configs, routes, docs)
+2. `mcp_milens_impact({target: "<symbolName>", direction: "upstream", repo: "/Users/mac10/Documents/Own/milens"})` — find code-level dependents
+3. Combine both results — grep catches what impact misses
 
-- **Before editing**: MUST run `mcp_milens_context` to see all incoming/outgoing refs, then `mcp_milens_impact` to find all upstream dependents.
-- **When deleting features**: MUST use `mcp_milens_grep` first to find ALL text references (templates, configs, routes, docs), then `mcp_milens_impact` for the dependency graph. Combine both — `grep` catches what `impact` misses.
-- **After any refactor**: run `mcp_milens_detect_changes({repo: "/Users/mac10/Documents/Own/milens"})` to verify only expected files changed.
+## Tool Selection Rules
+
+**Choose the right tool on the FIRST call** — do not try `query` then fall back to `grep`.
+
+### Use `mcp_milens_grep` when the search term:
+- Contains **spaces** (e.g. "store purchase header", "user not found")
+- Looks like a **UI label, error message, or display string**
+- Is a **multi-word phrase** that is NOT camelCase/snake_case/PascalCase
+- You need to find references in **templates, styles, configs, routes, or docs**
+
+### Use `mcp_milens_query` when the search term:
+- Looks like a **code identifier** (camelCase, PascalCase, snake_case)
+- Is a **function, class, method, or interface name**
+- You want to find **symbol definitions** in indexed code files
+
+### When in doubt → use `mcp_milens_grep` first
+`grep` searches everything. `query` only searches indexed symbol definitions.
+
+## Workflow Triggers
+
+When the user says... → do this FIRST:
+
+| User intent | First action |
+|---|---|
+| "edit/change/modify/fix `X`" | `mcp_milens_impact({target: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
+| "delete/remove `X`" | `mcp_milens_grep({pattern: "X", repo: "/Users/mac10/Documents/Own/milens"})` then `mcp_milens_impact` |
+| "rename `X`" | `mcp_milens_grep({pattern: "X", repo: "/Users/mac10/Documents/Own/milens"})` then `mcp_milens_impact` |
+| "find/search for `X`" | Choose `query` or `grep` per rules above |
+| "commit" / "push" | `mcp_milens_detect_changes({repo: "/Users/mac10/Documents/Own/milens"})` |
+| "what calls/uses `X`" | `mcp_milens_context({name: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
+| "what happens if I change `X`" | `mcp_milens_impact({target: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
+| "how are `A` and `B` connected" | `mcp_milens_explain_relationship({from: "A", to: "B", repo: "/Users/mac10/Documents/Own/milens"})` |
+| "explore/understand `X`" | `mcp_milens_context({name: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
 
 ## Never Do
 
-- NEVER edit a function, class, or method without first running `mcp_milens_impact` on it.
-- NEVER ignore warnings when impact analysis shows many upstream dependents.
-- NEVER delete or rename symbols without running both `mcp_milens_grep` and `mcp_milens_impact`.
-- NEVER commit changes without running `mcp_milens_detect_changes()` to check affected scope.
+- NEVER edit a symbol without first running `mcp_milens_impact` on it.
+- NEVER delete or rename without running both `mcp_milens_grep` and `mcp_milens_impact`.
+- NEVER commit without running `mcp_milens_detect_changes()`.
 - NEVER call milens MCP tools without the `repo` parameter.
+- NEVER use `mcp_milens_query` for multi-word display text or UI labels — use `mcp_milens_grep`.
 
-## Tools Quick Reference
+---
 
-| Tool | When to use | Example |
-|------|-------------|---------|
-| `mcp_milens_query` | Find symbols by name/concept | `mcp_milens_query({query: "auth validation", repo: "/Users/mac10/Documents/Own/milens"})` |
-| `mcp_milens_context` | 360° view of one symbol | `mcp_milens_context({name: "UserService", repo: "/Users/mac10/Documents/Own/milens"})` |
-| `mcp_milens_impact` | Blast radius before editing | `mcp_milens_impact({target: "X", direction: "upstream", repo: "/Users/mac10/Documents/Own/milens"})` |
-| `mcp_milens_grep` | Text search ALL files (templates, SCSS, configs) | `mcp_milens_grep({pattern: "route name", repo: "/Users/mac10/Documents/Own/milens"})` |
-| `mcp_milens_detect_changes` | Pre-commit scope check | `mcp_milens_detect_changes({repo: "/Users/mac10/Documents/Own/milens"})` |
-| `mcp_milens_explain_relationship` | How two symbols connect | `mcp_milens_explain_relationship({from: "A", to: "B", repo: "/Users/mac10/Documents/Own/milens"})` |
-| `mcp_milens_get_file_symbols` | All symbols in a file | `mcp_milens_get_file_symbols({file: "path/to/file", repo: "/Users/mac10/Documents/Own/milens"})` |
-| `mcp_milens_get_type_hierarchy` | Class inheritance tree | `mcp_milens_get_type_hierarchy({name: "ClassName", repo: "/Users/mac10/Documents/Own/milens"})` |
-| `mcp_milens_find_dead_code` | Unused exported symbols | `mcp_milens_find_dead_code({repo: "/Users/mac10/Documents/Own/milens"})` |
-| `mcp_milens_status` | Check index health | `mcp_milens_status({repo: "/Users/mac10/Documents/Own/milens"})` |
+## Reference
 
-## `query` vs `grep` — When to Use Which
+### Tools
 
-| Scenario | Use `query` | Use `grep` |
-|----------|-------------|------------|
-| Find function/class definitions | ✅ | |
-| Find references in templates/views | | ✅ |
-| Find route definitions in configs | | ✅ |
-| Find text in comments/docs | | ✅ |
-| Find symbol by concept/name | ✅ | |
-| Find every text occurrence | | ✅ |
-| Deleting a feature | ✅ + ✅ | ✅ + ✅ |
+| Tool | Purpose |
+|---|---|
+| `mcp_milens_query` | Find symbol definitions by name (FTS5) |
+| `mcp_milens_grep` | Text search ALL files (templates, styles, configs, docs) |
+| `mcp_milens_context` | 360° view: incoming refs + outgoing deps |
+| `mcp_milens_impact` | Blast radius before editing |
+| `mcp_milens_detect_changes` | Pre-commit scope check |
+| `mcp_milens_explain_relationship` | Shortest path between two symbols |
+| `mcp_milens_get_file_symbols` | All symbols in a file |
+| `mcp_milens_get_type_hierarchy` | Class inheritance tree |
+| `mcp_milens_find_dead_code` | Unused exported symbols |
+| `mcp_milens_status` | Index health check |
 
-## Self-Check Before Finishing
+### Keeping the Index Fresh
 
-Before completing any code modification task, verify:
-1. `mcp_milens_impact` was run for all modified symbols
-2. No warnings about many upstream dependents were ignored
-3. `mcp_milens_detect_changes()` confirms changes match expected scope
-4. All direct dependents (d=1) were updated
+After significant code changes: `npx milens analyze -p . --force`
 
-## Keeping the Index Fresh
-
-After significant code changes, re-index:
-
-```bash
-npx milens analyze -p . --force
-```
-
-## Skills
+### Skills
 
 | Task | Read this skill file |
 |------|---------------------|

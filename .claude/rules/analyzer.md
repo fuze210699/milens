@@ -1,0 +1,33 @@
+---
+paths:
+  - "src/analyzer/**"
+---
+
+# Analyzer
+
+## Overview
+Contains 12 symbols (4 exported) across 3 files.
+
+## Key Symbols
+- **`resolveLinks`** [function] (src/analyzer/resolver.ts:12) — 2 refs
+- **`scanFiles`** [function] (src/analyzer/scanner.ts:11) — 2 refs
+- **`analyze`** [function] (src/analyzer/engine.ts:22) — 1 refs
+- **`ScannedFile`** [interface] (src/analyzer/scanner.ts:6) — 0 refs
+
+## Entry Points
+- **`resolveLinks`** [function] — 2 incoming references
+- **`scanFiles`** [function] — 2 incoming references
+- **`walk`** [function] — 2 incoming references
+- **`analyze`** [function] — 1 incoming references
+- **`parseFile`** [function] — 1 incoming references
+
+## Dependencies
+- **store**: `clear`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction`, `clearSymbolsAndLinks`, `deleteFileData`, `insertSymbol` (+3 more)
+- **parser**: `langForFile`, `getParser`, `loadLanguage`, `resolveImport`, `clearQueryCache`, `extractVueScript`, `extractFromTree`, `extractVueTemplateRefs` (+1 more)
+- **server**: `get`
+- **root**: `has`
+
+## Files
+- src/analyzer/engine.ts
+- src/analyzer/resolver.ts
+- src/analyzer/scanner.ts

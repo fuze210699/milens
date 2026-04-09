@@ -1,3 +1,8 @@
+---
+paths:
+  - "src/**"
+---
+
 # Root
 
 ## Overview

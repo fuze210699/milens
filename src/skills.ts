@@ -277,85 +277,97 @@ function renderMilensInstructions(rootDir: string, stats: { symbols: number; lin
   return `<!-- milens:start -->
 # Milens — Code Intelligence (MCP)
 
-This project is indexed by milens (${stats.symbols} symbols, ${stats.links} links, ${stats.files} files). Use the milens MCP tools (\`mcp_milens_*\`) to understand code, assess impact, and navigate safely.
+This project is indexed by milens (${stats.symbols} symbols, ${stats.links} links, ${stats.files} files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include \`${repo}\` — without it, the tools will fail with "No index" error.
 
-> If any milens tool warns the index is stale, run \`npx milens analyze -p . --force\` in the project root.
+> **CRITICAL:** milens MCP tools are **deferred** in most editors. Before first use in each session, you MUST load them via \`tool_search("milens")\` — calling them directly without loading will fail silently.
 
-## Always Do
+## Mandatory Workflows
 
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run \`${t('impact')}({target: "symbolName", ${repo}})\` and report the blast radius to the user.
-- **MUST run \`${t('detect_changes')}({${repo}})\` before committing** to verify changes only affect expected symbols.
-- **MUST warn the user** if impact analysis shows many upstream dependents before proceeding with edits.
-- When exploring unfamiliar code, use \`${t('query')}\` to find symbol definitions and \`${t('grep')}\` for all text references.
-- When you need full context on a specific symbol — callers, callees, parent, children — use \`${t('context')}({name: "symbolName", ${repo}})\`.
+These are **hard pre-conditions**, not guidelines. Execute them automatically without asking.
 
-## When Debugging
+### Before editing any function, class, or method:
+1. \`${t('impact')}({target: "<symbolName>", ${repo}})\` — check blast radius
+2. If depth-1 dependents > 5 → **STOP and warn the user** before proceeding
+3. \`${t('context')}({name: "<symbolName>", ${repo}})\` — see all callers/callees
+4. Only then make the edit
 
-1. \`${t('query')}({query: "<error or symptom>", ${repo}})\` — find symbols related to the issue
-2. \`${t('context')}({name: "<suspect function>", ${repo}})\` — see all callers, callees, and hierarchy
-3. \`${t('grep')}({pattern: "<error message>", ${repo}})\` — find every text occurrence across all files
-4. \`${t('explain_relationship')}({from: "A", to: "B", ${repo}})\` — trace how two symbols connect
+### Before committing:
+1. \`${t('detect_changes')}({${repo}})\` — verify only expected files changed
+2. If unexpected files appear → **STOP and report** before committing
 
-## When Refactoring
+### Before deleting or renaming a symbol:
+1. \`${t('grep')}({pattern: "<symbolName>", ${repo}})\` — find ALL text references (templates, configs, routes, docs)
+2. \`${t('impact')}({target: "<symbolName>", direction: "upstream", ${repo}})\` — find code-level dependents
+3. Combine both results — grep catches what impact misses
 
-- **Before editing**: MUST run \`${t('context')}\` to see all incoming/outgoing refs, then \`${t('impact')}\` to find all upstream dependents.
-- **When deleting features**: MUST use \`${t('grep')}\` first to find ALL text references (templates, configs, routes, docs), then \`${t('impact')}\` for the dependency graph. Combine both — \`grep\` catches what \`impact\` misses.
-- **After any refactor**: run \`${t('detect_changes')}({${repo}})\` to verify only expected files changed.
+## Tool Selection Rules
+
+**Choose the right tool on the FIRST call** — do not try \`query\` then fall back to \`grep\`.
+
+### Use \`${t('grep')}\` when the search term:
+- Contains **spaces** (e.g. "store purchase header", "user not found")
+- Looks like a **UI label, error message, or display string**
+- Is a **multi-word phrase** that is NOT camelCase/snake_case/PascalCase
+- You need to find references in **templates, styles, configs, routes, or docs**
+
+### Use \`${t('query')}\` when the search term:
+- Looks like a **code identifier** (camelCase, PascalCase, snake_case)
+- Is a **function, class, method, or interface name**
+- You want to find **symbol definitions** in indexed code files
+
+### When in doubt → use \`${t('grep')}\` first
+\`grep\` searches everything. \`query\` only searches indexed symbol definitions.
+
+## Workflow Triggers
+
+When the user says... → do this FIRST:
+
+| User intent | First action |
+|---|---|
+| "edit/change/modify/fix \`X\`" | \`${t('impact')}({target: "X", ${repo}})\` |
+| "delete/remove \`X\`" | \`${t('grep')}({pattern: "X", ${repo}})\` then \`${t('impact')}\` |
+| "rename \`X\`" | \`${t('grep')}({pattern: "X", ${repo}})\` then \`${t('impact')}\` |
+| "find/search for \`X\`" | Choose \`query\` or \`grep\` per rules above |
+| "commit" / "push" | \`${t('detect_changes')}({${repo}})\` |
+| "what calls/uses \`X\`" | \`${t('context')}({name: "X", ${repo}})\` |
+| "what happens if I change \`X\`" | \`${t('impact')}({target: "X", ${repo}})\` |
+| "how are \`A\` and \`B\` connected" | \`${t('explain_relationship')}({from: "A", to: "B", ${repo}})\` |
+| "explore/understand \`X\`" | \`${t('context')}({name: "X", ${repo}})\` |
 
 ## Never Do
 
-- NEVER edit a function, class, or method without first running \`${t('impact')}\` on it.
-- NEVER ignore warnings when impact analysis shows many upstream dependents.
-- NEVER delete or rename symbols without running both \`${t('grep')}\` and \`${t('impact')}\`.
-- NEVER commit changes without running \`${t('detect_changes')}()\` to check affected scope.
+- NEVER edit a symbol without first running \`${t('impact')}\` on it.
+- NEVER delete or rename without running both \`${t('grep')}\` and \`${t('impact')}\`.
+- NEVER commit without running \`${t('detect_changes')}()\`.
 - NEVER call milens MCP tools without the \`repo\` parameter.
+- NEVER use \`${t('query')}\` for multi-word display text or UI labels — use \`${t('grep')}\`.
 
-## Tools Quick Reference
+---
 
-| Tool | When to use | Example |
-|------|-------------|---------|
-| \`${t('query')}\` | Find symbols by name/concept | \`${t('query')}({query: "auth validation", ${repo}})\` |
-| \`${t('context')}\` | 360° view of one symbol | \`${t('context')}({name: "UserService", ${repo}})\` |
-| \`${t('impact')}\` | Blast radius before editing | \`${t('impact')}({target: "X", direction: "upstream", ${repo}})\` |
-| \`${t('grep')}\` | Text search ALL files (templates, SCSS, configs) | \`${t('grep')}({pattern: "route name", ${repo}})\` |
-| \`${t('detect_changes')}\` | Pre-commit scope check | \`${t('detect_changes')}({${repo}})\` |
-| \`${t('explain_relationship')}\` | How two symbols connect | \`${t('explain_relationship')}({from: "A", to: "B", ${repo}})\` |
-| \`${t('get_file_symbols')}\` | All symbols in a file | \`${t('get_file_symbols')}({file: "path/to/file", ${repo}})\` |
-| \`${t('get_type_hierarchy')}\` | Class inheritance tree | \`${t('get_type_hierarchy')}({name: "ClassName", ${repo}})\` |
-| \`${t('find_dead_code')}\` | Unused exported symbols | \`${t('find_dead_code')}({${repo}})\` |
-| \`${t('status')}\` | Check index health | \`${t('status')}({${repo}})\` |
+## Reference
 
-## \`query\` vs \`grep\` — When to Use Which
+### Tools
 
-| Scenario | Use \`query\` | Use \`grep\` |
-|----------|-------------|------------|
-| Find function/class definitions | ✅ | |
-| Find references in templates/views | | ✅ |
-| Find route definitions in configs | | ✅ |
-| Find text in comments/docs | | ✅ |
-| Find symbol by concept/name | ✅ | |
-| Find every text occurrence | | ✅ |
-| Deleting a feature | ✅ + ✅ | ✅ + ✅ |
+| Tool | Purpose |
+|---|---|
+| \`${t('query')}\` | Find symbol definitions by name (FTS5) |
+| \`${t('grep')}\` | Text search ALL files (templates, styles, configs, docs) |
+| \`${t('context')}\` | 360° view: incoming refs + outgoing deps |
+| \`${t('impact')}\` | Blast radius before editing |
+| \`${t('detect_changes')}\` | Pre-commit scope check |
+| \`${t('explain_relationship')}\` | Shortest path between two symbols |
+| \`${t('get_file_symbols')}\` | All symbols in a file |
+| \`${t('get_type_hierarchy')}\` | Class inheritance tree |
+| \`${t('find_dead_code')}\` | Unused exported symbols |
+| \`${t('status')}\` | Index health check |
 
-## Self-Check Before Finishing
+### Keeping the Index Fresh
 
-Before completing any code modification task, verify:
-1. \`${t('impact')}\` was run for all modified symbols
-2. No warnings about many upstream dependents were ignored
-3. \`${t('detect_changes')}()\` confirms changes match expected scope
-4. All direct dependents (d=1) were updated
+After significant code changes: \`npx milens analyze -p . --force\`
 
-## Keeping the Index Fresh
-
-After significant code changes, re-index:
-
-\`\`\`bash
-npx milens analyze -p . --force
-\`\`\`
-
-## Skills
+### Skills
 
 | Task | Read this skill file |
 |------|---------------------|

@@ -6,12 +6,12 @@ paths:
 # Server
 
 ## Overview
-Contains 22 symbols (3 exported) across 1 files.
+Contains 23 symbols (3 exported) across 1 files.
 
 ## Key Symbols
-- **`createMcpServer`** [function] (src/server/mcp.ts:249) — 2 refs
-- **`startStdio`** [function] (src/server/mcp.ts:875) — 1 refs
-- **`startHttp`** [function] (src/server/mcp.ts:883) — 1 refs
+- **`createMcpServer`** [function] (src/server/mcp.ts:259) — 2 refs
+- **`startStdio`** [function] (src/server/mcp.ts:913) — 1 refs
+- **`startHttp`** [function] (src/server/mcp.ts:921) — 1 refs
 
 ## Entry Points
 - **`get`** [method] — 24 incoming references
@@ -21,7 +21,7 @@ Contains 22 symbols (3 exported) across 1 files.
 - **`resolveRoot`** [function] — 2 incoming references
 
 ## Dependencies
-- **store**: `close`, `findByRoot`, `listAll`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks`, `findSymbolById` (+9 more)
+- **store**: `close`, `findByRoot`, `listAll`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks`, `findSymbolById` (+10 more)
 - **root**: `has`
 
 ## Used By

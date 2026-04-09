@@ -134,13 +134,37 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   if (opts.verbose) {
     console.log(`[link] Resolved ${links.length} relationships`);
     if (resolution.unresolvedImports > 0 || resolution.unresolvedCalls > 0) {
-      console.log(`[link] ⚠ ${resolution.unresolvedImports} unresolved imports, ${resolution.unresolvedCalls} unresolved calls`);
+      console.log(`[link] ⚠ ${resolution.unresolvedImports} unresolved imports, ${resolution.unresolvedCalls} unresolved calls (internal)`);
+    }
+    if (resolution.externalImports > 0 || resolution.externalCalls > 0) {
+      console.log(`[link] ✓ ${resolution.externalImports} external imports, ${resolution.externalCalls} external calls (expected)`);
     }
   }
 
   // Phase 6: Enrich — compute roles, heat, zones from resolved graph
   const enriched = enrichMetadata({ symbols: allSymbols, links });
   if (opts.verbose) console.log(`[enrich] Computed metadata for ${allSymbols.length} symbols, ${enriched.zones.size} zones`);
+
+  // Phase 6.5: Test coverage — count symbols referenced from test files
+  const testFileSymbolIds = new Set<string>();
+  const testFiles = new Set<string>();
+  for (const sym of allSymbols) {
+    if (isTestFile(sym.filePath)) {
+      testFileSymbolIds.add(sym.id);
+      testFiles.add(sym.filePath);
+    }
+  }
+  const testedSymbolIds = new Set<string>();
+  for (const link of links) {
+    if (link.type === 'contains') continue;
+    // Link from test file symbol → production symbol
+    const fromIsTest = testFileSymbolIds.has(link.fromId) ||
+      [...testFiles].some(f => link.fromId.startsWith(f + '#'));
+    if (fromIsTest && !testFileSymbolIds.has(link.toId)) {
+      testedSymbolIds.add(link.toId);
+    }
+  }
+  const exportedProduction = allSymbols.filter(s => s.exported && !isTestFile(s.filePath));
 
   // Phase 7: Persist to database in single transaction
   db.transaction(() => {
@@ -156,6 +180,11 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     for (const [filePath, zone] of enriched.zones) db.setFileZone(filePath, zone);
     db.setMeta('unresolved_imports', String(resolution.unresolvedImports));
     db.setMeta('unresolved_calls', String(resolution.unresolvedCalls));
+    db.setMeta('external_imports', String(resolution.externalImports));
+    db.setMeta('external_calls', String(resolution.externalCalls));
+    db.setMeta('test_files', String(testFiles.size));
+    db.setMeta('tested_symbols', String(testedSymbolIds.size));
+    db.setMeta('exported_production_symbols', String(exportedProduction.length));
     db.rebuildSearch();
   });
 
@@ -167,6 +196,8 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     durationMs: Date.now() - t0,
     unresolvedImports: resolution.unresolvedImports,
     unresolvedCalls: resolution.unresolvedCalls,
+    externalImports: resolution.externalImports,
+    externalCalls: resolution.externalCalls,
   };
 
   if (opts.verbose) {
@@ -216,4 +247,13 @@ function parseFile(
   }
 
   return result;
+}
+
+/** Check if a file path looks like a test/spec file */
+function isTestFile(filePath: string): boolean {
+  return /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
+    /^tests?[/\\]/.test(filePath) ||
+    /__tests__[/\\]/.test(filePath) ||
+    /_test\.(go|py|rb|rs|java|php)$/.test(filePath) ||
+    /^test_.*\.py$/.test(filePath.split('/').pop() ?? '');
 }

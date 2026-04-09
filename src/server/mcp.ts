@@ -79,6 +79,15 @@ function fmtImpact(items: Array<{ symbol: any; depth: number; via: string }>, de
   return lines.join('\n');
 }
 
+/** Check if a file path looks like a test/spec file */
+function isTestFilePath(filePath: string): boolean {
+  return /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
+    /^tests?[/\\]/.test(filePath) ||
+    /__tests__[/\\]/.test(filePath) ||
+    /_test\.(go|py|rb|rs|java|php)$/.test(filePath) ||
+    /^test_.*\.py$/.test(filePath.split('/').pop() ?? '');
+}
+
 // ── Text grep across project files ──
 
 const GREP_SKIP_DIRS = new Set([
@@ -228,7 +237,7 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - \`context\` — 360° view: incoming + outgoing for a symbol
 - \`impact\` — blast radius: what breaks if symbol changes
 - \`overview\` — combined context + impact + grep in one call (preferred for editing workflows)
-- \`edit_check\` — pre-edit safety: callers + export status + re-export chains + ⚠ warnings (fastest for edits)
+- \`edit_check\` — pre-edit safety: callers + export status + re-export chains + test coverage + ⚠ warnings (fastest for edits)
 - \`detect_changes\` — git diff → affected symbols
 - \`explain_relationship\` — shortest path between two symbols
 - \`find_dead_code\` — unused exports
@@ -241,7 +250,8 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - Use \`query\` for camelCase/PascalCase identifiers, \`grep\` for display text or multi-word strings
 - Use \`grep\` with scope=imports to find only import lines, scope=definitions for declarations
 - impact depth: 1=WILL BREAK, 2=LIKELY AFFECTED, 3=MAY NEED TESTING
-- ⚠ markers indicate unresolved references — callers list may be incomplete
+- ⚠ markers indicate unresolved INTERNAL references — external package imports/calls are tracked separately
+- ✓ test coverage shown on edit_check — symbols with no test coverage get a warning
 `;
 
 // ── Server setup ──
@@ -455,9 +465,19 @@ export function createMcpServer(rootPath?: string): McpServer {
       const { db, root } = getDb(repo);
       const stats = db.getStats();
       const unresolved = db.getUnresolvedStats();
+      const coverage = db.getTestCoverage();
       let text = `repo: ${root}\nsymbols: ${stats.symbols}\nlinks: ${stats.links}\nfiles: ${stats.files}`;
       if (unresolved.imports > 0 || unresolved.calls > 0) {
-        text += `\n⚠ unresolved: ${unresolved.imports} imports, ${unresolved.calls} calls`;
+        text += `\n⚠ unresolved (internal): ${unresolved.imports} imports, ${unresolved.calls} calls — callers may be incomplete`;
+      }
+      if (unresolved.externalImports > 0 || unresolved.externalCalls > 0) {
+        text += `\nexternal (expected): ${unresolved.externalImports} imports, ${unresolved.externalCalls} calls`;
+      }
+      if (coverage.testFiles > 0) {
+        const pct = coverage.exportedProductionSymbols > 0
+          ? Math.round(coverage.testedSymbols / coverage.exportedProductionSymbols * 100)
+          : 0;
+        text += `\ntest coverage: ${coverage.testedSymbols}/${coverage.exportedProductionSymbols} exported symbols (${pct}%) from ${coverage.testFiles} test files`;
       }
       return { content: [{ type: 'text' as const, text }] };
     },
@@ -542,10 +562,10 @@ export function createMcpServer(rootPath?: string): McpServer {
         sections.push(`[grep] No text matches.`);
       }
 
-      // Section 5: Unresolved warnings
+      // Section 5: Unresolved warnings (only for internal)
       const unresolved = db.getUnresolvedStats();
       if (unresolved.imports > 0 || unresolved.calls > 0) {
-        sections.push(`[⚠ unresolved] ${unresolved.imports} imports, ${unresolved.calls} calls — some references may be missing`);
+        sections.push(`[⚠ unresolved internal] ${unresolved.imports} imports, ${unresolved.calls} calls — some references may be missing`);
       }
 
       return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
@@ -791,10 +811,28 @@ export function createMcpServer(rootPath?: string): McpServer {
         }
       }
 
-      // 5. Unresolved warning
+      // 5. Unresolved warning (only for internal)
       const unresolved = db.getUnresolvedStats();
       if (unresolved.imports > 0 || unresolved.calls > 0) {
-        sections.push(`⚠ index has ${unresolved.imports} unresolved imports, ${unresolved.calls} unresolved calls — callers list may be incomplete`);
+        sections.push(`⚠ index has ${unresolved.imports} unresolved internal imports, ${unresolved.calls} unresolved internal calls — callers list may be incomplete`);
+      }
+
+      // 6. Test coverage for this symbol
+      for (const sym of symbols) {
+        const incoming = db.getIncomingLinks(sym.id);
+        const testRefs = incoming.filter(l => {
+          const from = db.findSymbolById(l.fromId);
+          return from && isTestFilePath(from.filePath);
+        });
+        if (testRefs.length > 0) {
+          const testFiles = [...new Set(testRefs.map(l => {
+            const from = db.findSymbolById(l.fromId);
+            return from?.filePath;
+          }).filter(Boolean))];
+          sections.push(`✓ tested from: ${testFiles.join(', ')}`);
+        } else if (sym.exported) {
+          sections.push(`⚠ no test coverage for this exported symbol`);
+        }
       }
 
       return { content: [{ type: 'text' as const, text: sections.join('\n') }] };

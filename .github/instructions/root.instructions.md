@@ -17,10 +17,10 @@ Contains 28 symbols (10 exported) across 3 files.
 - **`ExtractionResult`** [interface] (src/types.ts:59) — 0 refs
 - **`RawReExport`** [interface] (src/types.ts:68) — 0 refs
 - **`AnalysisStats`** [interface] (src/types.ts:75) — 0 refs
-- **`RepoEntry`** [interface] (src/types.ts:85) — 0 refs
+- **`RepoEntry`** [interface] (src/types.ts:87) — 0 refs
 
 ## Entry Points
-- **`has`** [function] — 16 incoming references
+- **`has`** [function] — 17 incoming references
 - **`getAreaName`** [function] — 2 incoming references
 - **`capitalize`** [function] — 2 incoming references
 - **`deleteIndex`** [function] — 1 incoming references

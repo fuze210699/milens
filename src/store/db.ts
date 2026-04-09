@@ -324,10 +324,20 @@ export class Database {
     return row?.value;
   }
 
-  getUnresolvedStats(): { imports: number; calls: number } {
+  getUnresolvedStats(): { imports: number; calls: number; externalImports: number; externalCalls: number } {
     return {
       imports: parseInt(this.getMeta('unresolved_imports') ?? '0', 10),
       calls: parseInt(this.getMeta('unresolved_calls') ?? '0', 10),
+      externalImports: parseInt(this.getMeta('external_imports') ?? '0', 10),
+      externalCalls: parseInt(this.getMeta('external_calls') ?? '0', 10),
+    };
+  }
+
+  getTestCoverage(): { testFiles: number; testedSymbols: number; exportedProductionSymbols: number } {
+    return {
+      testFiles: parseInt(this.getMeta('test_files') ?? '0', 10),
+      testedSymbols: parseInt(this.getMeta('tested_symbols') ?? '0', 10),
+      exportedProductionSymbols: parseInt(this.getMeta('exported_production_symbols') ?? '0', 10),
     };
   }
 

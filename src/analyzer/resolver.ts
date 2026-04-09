@@ -15,6 +15,8 @@ export interface ResolutionResult {
   links: SymbolLink[];
   unresolvedImports: number;
   unresolvedCalls: number;
+  externalImports: number;
+  externalCalls: number;
 }
 
 export function resolveLinks(input: ResolutionInput): SymbolLink[] {
@@ -28,6 +30,11 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
   const symbolById = buildIdIndex(input.allSymbols);
   let unresolvedImports = 0;
   let unresolvedCalls = 0;
+  let externalImports = 0;
+  let externalCalls = 0;
+
+  // Track names imported from external (non-local) modules per file
+  const externalNamesPerFile = new Map<string, Set<string>>();
 
   // Build re-export map: file → (name → sourceFile)
   const reExportMap = buildReExportMap(input.reExports ?? [], input.resolvedImportPaths);
@@ -60,7 +67,23 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
   // ── Resolve imports ──
   for (const imp of input.imports) {
     const targetFile = input.resolvedImportPaths.get(`${imp.filePath}::${imp.modulePath}`);
-    if (!targetFile) { unresolvedImports++; continue; }
+    if (!targetFile) {
+      if (isExternalModule(imp.modulePath)) {
+        externalImports++;
+        // Track externally imported names for call classification
+        let extNames = externalNamesPerFile.get(imp.filePath);
+        if (!extNames) { extNames = new Set(); externalNamesPerFile.set(imp.filePath, extNames); }
+        for (const { name } of imp.names) extNames.add(name);
+        if (imp.isDefault || imp.isWildcard) {
+          // For default/wildcard, track the module base name as a hint
+          const base = imp.modulePath.split('/').pop()?.replace(/\.[^.]+$/, '');
+          if (base) extNames.add(base);
+        }
+      } else {
+        unresolvedImports++;
+      }
+      continue;
+    }
 
     const targetSymbols = input.symbolsByFile.get(targetFile);
     if (!targetSymbols) { unresolvedImports++; continue; }
@@ -107,7 +130,19 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
   // ── Resolve calls (receiver-aware + proximity scoring) ──
   for (const call of input.calls) {
     const candidates = symbolByName.get(call.calleeName);
-    if (!candidates || candidates.length === 0) { unresolvedCalls++; continue; }
+    if (!candidates || candidates.length === 0) {
+      // Classify: external (built-in/imported from external pkg) vs truly unresolved
+      const extNames = externalNamesPerFile.get(call.filePath);
+      if (BUILTIN_GLOBALS.has(call.calleeName) ||
+          BUILTIN_GLOBALS.has(call.receiver ?? '') ||
+          extNames?.has(call.calleeName) ||
+          (call.receiver && extNames?.has(call.receiver))) {
+        externalCalls++;
+      } else {
+        unresolvedCalls++;
+      }
+      continue;
+    }
 
     // Fast path: unique name globally
     if (candidates.length === 1) {
@@ -173,7 +208,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     }
   }
 
-  return { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls };
+  return { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls, externalImports, externalCalls };
 }
 
 // ── Receiver-aware call narrowing ──
@@ -379,3 +414,44 @@ function findDefaultExport(targetSymbols: CodeSymbol[]): CodeSymbol | undefined 
   // Fallback to first
   return exported[0];
 }
+
+// ── External module detection ──
+
+/** Returns true if the module path refers to an external package (not a relative local import) */
+function isExternalModule(modulePath: string): boolean {
+  // Relative imports are internal
+  if (modulePath.startsWith('.') || modulePath.startsWith('/')) return false;
+  // Everything else: node:*, @scope/pkg, bare specifiers → external
+  return true;
+}
+
+/** Well-known built-in globals that are never in a project's symbol index */
+const BUILTIN_GLOBALS = new Set([
+  // JavaScript / TypeScript
+  'console', 'Math', 'Object', 'Array', 'String', 'Number', 'Boolean',
+  'Symbol', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Promise', 'Date',
+  'Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError',
+  'JSON', 'RegExp', 'Proxy', 'Reflect', 'Intl', 'Atomics', 'SharedArrayBuffer',
+  'ArrayBuffer', 'DataView', 'Float32Array', 'Float64Array',
+  'Int8Array', 'Int16Array', 'Int32Array', 'Uint8Array', 'Uint16Array', 'Uint32Array',
+  'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'encodeURIComponent', 'decodeURIComponent',
+  'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'setImmediate', 'clearImmediate',
+  'queueMicrotask', 'structuredClone', 'atob', 'btoa', 'fetch',
+  'Buffer', 'process', 'global', 'globalThis', 'require', '__dirname', '__filename',
+  // Python
+  'print', 'len', 'range', 'str', 'int', 'float', 'list', 'dict', 'tuple', 'set', 'type',
+  'isinstance', 'issubclass', 'hasattr', 'getattr', 'setattr', 'delattr',
+  'enumerate', 'zip', 'map', 'filter', 'sorted', 'reversed', 'min', 'max', 'sum', 'abs',
+  'open', 'input', 'super', 'property', 'staticmethod', 'classmethod',
+  // Go
+  'fmt', 'log', 'panic', 'make', 'append', 'cap', 'new', 'delete', 'close', 'copy',
+  'recover', 'complex', 'real', 'imag',
+  // Rust
+  'println', 'eprintln', 'vec', 'format', 'todo', 'unimplemented',
+  'assert', 'assert_eq', 'assert_ne', 'dbg', 'cfg',
+  // Java / PHP
+  'System', 'Arrays', 'Collections',
+  'var_dump', 'echo', 'isset', 'unset', 'empty', 'die', 'exit',
+  'array_map', 'array_filter', 'array_merge', 'array_keys', 'array_values',
+  'count', 'strlen', 'substr', 'explode', 'implode', 'trim',
+]);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveLinks } from '../../src/analyzer/resolver.js';
+import { resolveLinks, resolveLinksWithStats } from '../../src/analyzer/resolver.js';
 import type { CodeSymbol, RawImport, RawCall, RawHeritage } from '../../src/types.js';
 
 describe('Resolver', () => {
@@ -100,5 +100,123 @@ describe('Resolver', () => {
 
     const extendsLinks = links.filter(l => l.type === 'extends');
     expect(extendsLinks.length).toBe(1);
+  });
+
+  it('classifies external imports separately from unresolved', () => {
+    const imports: RawImport[] = [
+      {
+        filePath: 'auth.ts',
+        modulePath: '@modelcontextprotocol/sdk',
+        names: [{ name: 'McpServer' }],
+        isDefault: false,
+        isWildcard: false,
+        line: 1,
+      },
+      {
+        filePath: 'auth.ts',
+        modulePath: 'node:path',
+        names: [{ name: 'resolve' }],
+        isDefault: false,
+        isWildcard: false,
+        line: 2,
+      },
+      {
+        filePath: 'auth.ts',
+        modulePath: './missing-file',
+        names: [{ name: 'Something' }],
+        isDefault: false,
+        isWildcard: false,
+        line: 3,
+      },
+    ];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile,
+      allSymbols,
+      imports,
+      calls: [],
+      heritage: [],
+      resolvedImportPaths: new Map(),
+    });
+
+    // @modelcontextprotocol/sdk and node:path → external (not relative paths)
+    expect(result.externalImports).toBe(2);
+    // ./missing-file → truly unresolved (relative path that didn't resolve)
+    expect(result.unresolvedImports).toBe(1);
+  });
+
+  it('classifies calls to built-in globals as external', () => {
+    const calls: RawCall[] = [
+      {
+        filePath: 'auth.ts',
+        enclosingSymbolId: 'auth.ts#method:register:5',
+        calleeName: 'log',
+        receiver: 'console',
+        line: 6,
+      },
+      {
+        filePath: 'auth.ts',
+        enclosingSymbolId: 'auth.ts#method:register:5',
+        calleeName: 'stringify',
+        receiver: 'JSON',
+        line: 7,
+      },
+      {
+        filePath: 'auth.ts',
+        enclosingSymbolId: 'auth.ts#method:register:5',
+        calleeName: 'unknownFunc',
+        line: 8,
+      },
+    ];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile,
+      allSymbols,
+      imports: [],
+      calls,
+      heritage: [],
+      resolvedImportPaths: new Map(),
+    });
+
+    // console.log and JSON.stringify → external (built-in globals)
+    expect(result.externalCalls).toBe(2);
+    // unknownFunc → truly unresolved
+    expect(result.unresolvedCalls).toBe(1);
+  });
+
+  it('classifies calls to externally imported names as external', () => {
+    const imports: RawImport[] = [
+      {
+        filePath: 'auth.ts',
+        modulePath: 'better-sqlite3',
+        names: [{ name: 'BetterSqlite3' }],
+        isDefault: false,
+        isWildcard: false,
+        line: 1,
+      },
+    ];
+
+    const calls: RawCall[] = [
+      {
+        filePath: 'auth.ts',
+        enclosingSymbolId: 'auth.ts#method:register:5',
+        calleeName: 'prepare',
+        receiver: 'BetterSqlite3',
+        line: 6,
+      },
+    ];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile,
+      allSymbols,
+      imports,
+      calls,
+      heritage: [],
+      resolvedImportPaths: new Map(),
+    });
+
+    // BetterSqlite3 was imported from external module → call to its method is external
+    expect(result.externalCalls).toBe(1);
+    expect(result.unresolvedCalls).toBe(0);
   });
 });

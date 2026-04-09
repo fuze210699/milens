@@ -80,6 +80,8 @@ export interface AnalysisStats {
   durationMs: number;
   unresolvedImports: number;
   unresolvedCalls: number;
+  externalImports: number;
+  externalCalls: number;
 }
 
 export interface RepoEntry {

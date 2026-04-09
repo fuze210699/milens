@@ -6,7 +6,7 @@ paths:
 # Store
 
 ## Overview
-Contains 50 symbols (2 exported) across 2 files.
+Contains 52 symbols (2 exported) across 2 files.
 
 ## Key Symbols
 - **`Database`** [class] (src/store/db.ts:10) — 0 refs
@@ -22,11 +22,12 @@ Contains 50 symbols (2 exported) across 2 files.
 ## Dependencies
 - **root**: `has`
 - **server**: `get`
+- **analyzer**: `find`
 
 ## Used By
-- **analyzer**: `clear`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction`, `clearSymbolsAndLinks`, `deleteFileData`, `insertSymbol` (+5 more)
+- **analyzer**: `clear`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction`, `clearSymbolsAndLinks`, `deleteFileData`, `insertSymbol` (+6 more)
 - **parser**: `clear`, `load`
-- **server**: `close`, `findByRoot`, `listAll`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks`, `findSymbolById` (+11 more)
+- **server**: `close`, `findByRoot`, `listAll`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks`, `findSymbolById` (+13 more)
 - **root**: `getAllSymbols`, `getAllLinks`
 
 ## Files

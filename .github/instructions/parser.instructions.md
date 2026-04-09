@@ -30,6 +30,7 @@ Contains 30 symbols (10 exported) across 12 files.
 - **root**: `has`
 - **server**: `get`
 - **store**: `clear`, `load`
+- **analyzer**: `find`
 
 ## Used By
 - **analyzer**: `langForFile`, `getParser`, `loadLanguage`, `resolveImport`, `clearQueryCache`, `extractVueScript`, `extractFromTree`, `extractVueTemplateRefs` (+1 more)

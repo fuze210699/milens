@@ -401,6 +401,32 @@ export class Database {
     return rows.map(rowToSymbol);
   }
 
+  // ── Domain clustering stats ──
+
+  getDomainStats(): Array<{ domain: string; files: number; symbols: number }> {
+    const rows = this.db.prepare(`
+      SELECT fh.zone AS domain, COUNT(DISTINCT fh.path) AS file_count,
+             COUNT(s.id) AS symbol_count
+      FROM file_hashes fh
+      LEFT JOIN symbols s ON s.file_path = fh.path
+      WHERE fh.zone IS NOT NULL
+      GROUP BY fh.zone
+      ORDER BY symbol_count DESC
+    `).all() as any[];
+    return rows.map((r: any) => ({ domain: r.domain, files: r.file_count, symbols: r.symbol_count }));
+  }
+
+  // ── Staleness detection ──
+
+  getStaleFiles(hoursOld = 24): string[] {
+    const rows = this.db.prepare(`
+      SELECT path FROM file_hashes
+      WHERE analyzed_at < datetime('now', '-' || ? || ' hours')
+      ORDER BY analyzed_at ASC
+    `).all(hoursOld) as any[];
+    return rows.map((r: any) => r.path);
+  }
+
   clear(): void {
     this.db.exec('DELETE FROM symbols');
     this.db.exec('DELETE FROM links');

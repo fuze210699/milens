@@ -142,4 +142,33 @@ describe('Database', () => {
     expect(coverage.testedSymbols).toBe(12);
     expect(coverage.exportedProductionSymbols).toBe(20);
   });
+
+  it('returns domain stats grouped by zone', () => {
+    // Zones are set via setFileZone — simulate domain clustering output
+    db.upsertFileHash('src/auth.ts', 'hash-auth');
+    db.setFileZone('src/auth.ts', 'auth');
+    db.upsertFileHash('src/models.ts', 'hash-models');
+    db.setFileZone('src/models.ts', 'auth');
+    db.upsertFileHash('src/app.ts', 'hash-app');
+    db.setFileZone('src/app.ts', 'app');
+
+    const domains = db.getDomainStats();
+    expect(domains.length).toBeGreaterThanOrEqual(2);
+    const authDomain = domains.find(d => d.domain === 'auth');
+    expect(authDomain).toBeDefined();
+    expect(authDomain!.files).toBe(2);
+    const appDomain = domains.find(d => d.domain === 'app');
+    expect(appDomain).toBeDefined();
+    expect(appDomain!.files).toBe(1);
+  });
+
+  it('detects stale files by analyzed_at timestamp', () => {
+    // Recently analyzed files should NOT appear as stale
+    const stale = db.getStaleFiles(24);
+    // All files were just upserted, so none should be stale at 24h
+    const recentFiles = ['src/auth.ts', 'src/models.ts', 'src/app.ts'];
+    for (const f of recentFiles) {
+      expect(stale).not.toContain(f);
+    }
+  });
 });

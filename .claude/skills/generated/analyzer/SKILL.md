@@ -1,7 +1,7 @@
 # Analyzer
 
 ## Overview
-Contains 35 symbols (8 exported) across 5 files.
+Contains 37 symbols (8 exported) across 5 files.
 
 ## Key Symbols
 - **`resolveLinksWithStats`** [function] (src/analyzer/resolver.ts:27) — 3 refs
@@ -14,17 +14,23 @@ Contains 35 symbols (8 exported) across 5 files.
 - **`ScannedFile`** [interface] (src/analyzer/scanner.ts:6) — 0 refs
 
 ## Entry Points
+- **`find`** [function] — 13 incoming references
 - **`resolveLinksWithStats`** [function] — 3 incoming references
 - **`readTsConfigPaths`** [function] — 2 incoming references
 - **`followReExportChain`** [function] — 2 incoming references
 - **`scanFiles`** [function] — 2 incoming references
-- **`walk`** [function] — 2 incoming references
 
 ## Dependencies
-- **store**: `clear`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction`, `clearSymbolsAndLinks`, `deleteFileData`, `insertSymbol` (+5 more)
+- **store**: `clear`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction`, `clearSymbolsAndLinks`, `deleteFileData`, `insertSymbol` (+6 more)
 - **parser**: `langForFile`, `getParser`, `loadLanguage`, `resolveImport`, `clearQueryCache`, `extractVueScript`, `extractFromTree`, `extractVueTemplateRefs` (+1 more)
 - **server**: `get`
 - **root**: `has`
+
+## Used By
+- **parser**: `find`
+- **server**: `find`
+- **store**: `find`
+- **test**: `find`
 
 ## Files
 - src/analyzer/config.ts

@@ -16,6 +16,9 @@ Contains 23 symbols (4 exported) across 7 files.
 - **`NewUser`** [function] — 1 incoming references
 - **`create_user`** [function] — 1 incoming references
 
+## Dependencies
+- **analyzer**: `find`
+
 ## Files
 - test/fixtures/go-project/models/user.go
 - test/fixtures/go-project/service/handler.go

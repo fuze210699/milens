@@ -241,6 +241,7 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - \`trace\` — execution flow: call chains from entrypoints to a symbol (or downstream from it)
 - \`routes\` — detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Go, PHP, Rails)
 - \`smart_context\` — intent-aware context: understand/edit/debug/test (returns only what matters for intent)
+- \`domains\` — show domain clusters: groups of files forming logical modules based on dependency graph
 - \`detect_changes\` — git diff → affected symbols
 - \`explain_relationship\` — shortest path between two symbols
 - \`find_dead_code\` — unused exports
@@ -256,6 +257,7 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - impact depth: 1=WILL BREAK, 2=LIKELY AFFECTED, 3=MAY NEED TESTING
 - ⚠ markers indicate unresolved INTERNAL references — external package imports/calls are tracked separately
 - ✓ test coverage shown on edit_check — symbols with no test coverage get a warning
+- ⏳ staleness: files not re-analyzed in 24h are flagged — consider re-running \`milens analyze\`
 `;
 
 // ── Server setup ──
@@ -483,7 +485,43 @@ export function createMcpServer(rootPath?: string): McpServer {
           : 0;
         text += `\ntest coverage: ${coverage.testedSymbols}/${coverage.exportedProductionSymbols} exported symbols (${pct}%) from ${coverage.testFiles} test files`;
       }
+      const domains = db.getDomainStats();
+      if (domains.length > 0) {
+        text += `\ndomains: ${domains.map(d => `${d.domain}(${d.files}f/${d.symbols}s)`).join(', ')}`;
+      }
+      const staleFiles = db.getStaleFiles(24);
+      if (staleFiles.length > 0) {
+        text += `\n⏳ ${staleFiles.length} files not analyzed in 24h`;
+      }
       return { content: [{ type: 'text' as const, text }] };
+    },
+  );
+
+  // ── Tool: domains ──
+  server.tool(
+    'domains',
+    'Show domain clusters — groups of files forming logical modules based on dependency graph. Helps understand codebase structure at a glance.',
+    {
+      repo: z.string().optional(),
+    },
+    async ({ repo }) => {
+      const { db } = getDb(repo);
+      const domains = db.getDomainStats();
+      if (domains.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No domains detected. Run `milens analyze` first.' }] };
+      }
+      const totalFiles = domains.reduce((s, d) => s + d.files, 0);
+      const totalSymbols = domains.reduce((s, d) => s + d.symbols, 0);
+      const lines: string[] = [`${domains.length} domains (${totalFiles} files, ${totalSymbols} symbols):\n`];
+      for (const d of domains) {
+        const pct = totalSymbols > 0 ? Math.round(d.symbols / totalSymbols * 100) : 0;
+        lines.push(`  ${d.domain}: ${d.files} files, ${d.symbols} symbols (${pct}%)`);
+      }
+      const staleFiles = db.getStaleFiles(24);
+      if (staleFiles.length > 0) {
+        lines.push(`\n⏳ ${staleFiles.length} files stale (>24h) — re-run \`milens analyze\` for fresh clusters`);
+      }
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },
   );
 

@@ -176,6 +176,14 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     for (const sym of allSymbols) {
       if (opts.force || parsedFiles.has(sym.filePath)) db.insertSymbol(sym);
     }
+    // Incremental: update role/heat for unchanged files (enrichment recomputes all)
+    if (!opts.force) {
+      for (const sym of allSymbols) {
+        if (!parsedFiles.has(sym.filePath)) {
+          db.updateSymbolMetadata(sym.id, sym.role ?? 'leaf', sym.heat ?? 0);
+        }
+      }
+    }
     for (const link of links) db.insertLink(link);
     for (const [filePath, zone] of enriched.zones) db.setFileZone(filePath, zone);
     db.setMeta('unresolved_imports', String(resolution.unresolvedImports));

@@ -451,6 +451,74 @@ export class Database {
     this.db.exec('DELETE FROM file_hashes');
   }
 
+  // ── Tool usage tracking ──
+
+  logToolUsage(tool: string, durationMs: number, tokensOut: number, tokensSaved: number, repo?: string): void {
+    this.db.prepare(
+      `INSERT INTO tool_usage (tool, duration_ms, tokens_out, tokens_saved, repo)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(tool, durationMs, tokensOut, tokensSaved, repo ?? null);
+  }
+
+  getToolUsageStats(): {
+    totalCalls: number;
+    totalTokensSaved: number;
+    totalTokensOut: number;
+    totalDurationMs: number;
+    byTool: Array<{ tool: string; calls: number; tokensSaved: number; tokensOut: number; avgDurationMs: number }>;
+    byDay: Array<{ date: string; calls: number; tokensSaved: number }>;
+    recentCalls: Array<{ tool: string; calledAt: string; durationMs: number; tokensSaved: number }>;
+  } {
+    const totals = this.db.prepare(`
+      SELECT COUNT(*) as total_calls,
+             COALESCE(SUM(tokens_saved), 0) as total_saved,
+             COALESCE(SUM(tokens_out), 0) as total_out,
+             COALESCE(SUM(duration_ms), 0) as total_ms
+      FROM tool_usage
+    `).get() as any;
+
+    const byTool = this.db.prepare(`
+      SELECT tool, COUNT(*) as calls,
+             COALESCE(SUM(tokens_saved), 0) as tokens_saved,
+             COALESCE(SUM(tokens_out), 0) as tokens_out,
+             CAST(COALESCE(AVG(duration_ms), 0) AS INTEGER) as avg_ms
+      FROM tool_usage
+      GROUP BY tool
+      ORDER BY calls DESC
+    `).all() as any[];
+
+    const byDay = this.db.prepare(`
+      SELECT date(called_at) as date, COUNT(*) as calls,
+             COALESCE(SUM(tokens_saved), 0) as tokens_saved
+      FROM tool_usage
+      GROUP BY date(called_at)
+      ORDER BY date DESC
+      LIMIT 30
+    `).all() as any[];
+
+    const recentCalls = this.db.prepare(`
+      SELECT tool, called_at, duration_ms, tokens_saved
+      FROM tool_usage
+      ORDER BY id DESC
+      LIMIT 50
+    `).all() as any[];
+
+    return {
+      totalCalls: totals.total_calls,
+      totalTokensSaved: totals.total_saved,
+      totalTokensOut: totals.total_out,
+      totalDurationMs: totals.total_ms,
+      byTool: byTool.map((r: any) => ({
+        tool: r.tool, calls: r.calls, tokensSaved: r.tokens_saved,
+        tokensOut: r.tokens_out, avgDurationMs: r.avg_ms,
+      })),
+      byDay: byDay.map((r: any) => ({ date: r.date, calls: r.calls, tokensSaved: r.tokens_saved })).reverse(),
+      recentCalls: recentCalls.map((r: any) => ({
+        tool: r.tool, calledAt: r.called_at, durationMs: r.duration_ms, tokensSaved: r.tokens_saved,
+      })),
+    };
+  }
+
   transaction<T>(fn: () => T): T {
     return this.db.transaction(fn)();
   }

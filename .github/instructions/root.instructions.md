@@ -5,7 +5,7 @@ applyTo: "src/**"
 # Root
 
 ## Overview
-Contains 28 symbols (10 exported) across 3 files.
+Contains 29 symbols (10 exported) across 3 files.
 
 ## Key Symbols
 - **`generateSkills`** [function] (src/skills.ts:19) — 1 refs
@@ -24,7 +24,7 @@ Contains 28 symbols (10 exported) across 3 files.
 - **`getAreaName`** [function] — 2 incoming references
 - **`capitalize`** [function] — 2 incoming references
 - **`deleteIndex`** [function] — 1 incoming references
-- **`generateSkills`** [function] — 1 incoming references
+- **`generateDashboardHtml`** [function] — 1 incoming references
 
 ## Dependencies
 - **store**: `getAllSymbols`, `getAllLinks`

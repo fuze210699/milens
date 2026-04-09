@@ -6,7 +6,8 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { resolve, relative, join, dirname } from 'node:path';
 import { execSync, execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import ignore from 'ignore';
 import { Database } from '../store/db.js';
 import { RepoRegistry } from '../store/registry.js';
@@ -46,6 +47,55 @@ class LazyDb {
     this.instance?.close();
     this.instance = null;
   }
+}
+
+// ── Tool usage tracking ──
+
+// Estimated tokens an agent would spend WITHOUT milens (manual exploration cost per tool)
+const TOKEN_SAVINGS_MULTIPLIER: Record<string, number> = {
+  query: 3,           // vs 3+ separate grep/file reads
+  grep: 2,            // vs terminal grep + manual filtering
+  context: 5,         // vs incoming + outgoing + file reads
+  impact: 6,          // vs recursive manual upstream/downstream exploration
+  edit_check: 8,      // vs context + impact + grep + coverage check
+  smart_context: 6,   // vs multiple tool calls based on intent
+  overview: 8,        // vs context + impact + grep combined
+  trace: 5,           // vs manually tracing call chains
+  routes: 3,          // vs searching for route patterns
+  domains: 3,         // vs exploring file structure
+  status: 2,          // vs checking multiple stats
+  detect_changes: 4,  // vs git diff + manual symbol mapping
+  explain_relationship: 4, // vs manual path finding
+  find_dead_code: 3,  // vs manual export usage search
+  get_file_symbols: 2,// vs reading entire file
+  get_type_hierarchy: 4, // vs manual inheritance traversal
+  repos: 1,           // simple listing
+};
+
+function estimateTokens(text: string): number {
+  // Rough token estimate: ~4 chars per token for English/code
+  return Math.ceil(text.length / 4);
+}
+
+function getTrackingDb(): Database | null {
+  try {
+    const dir = join(homedir(), '.milens');
+    mkdirSync(dir, { recursive: true });
+    return new Database(join(dir, 'tracking.db'));
+  } catch {
+    return null; // tracking is best-effort, never block
+  }
+}
+
+function trackToolCall(trackDb: Database | null, tool: string, startMs: number, responseText: string, repo?: string): void {
+  if (!trackDb) return;
+  try {
+    const durationMs = Date.now() - startMs;
+    const tokensOut = estimateTokens(responseText);
+    const multiplier = TOKEN_SAVINGS_MULTIPLIER[tool] ?? 2;
+    const tokensSaved = tokensOut * (multiplier - 1); // net savings = what agent would spend minus what milens returned
+    trackDb.logToolUsage(tool, durationMs, tokensOut, tokensSaved, repo);
+  } catch { /* best-effort */ }
 }
 
 // ── Compact formatters (token-efficient for AI agents) ──
@@ -272,6 +322,7 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 export function createMcpServer(rootPath?: string): McpServer {
   const registry = new RepoRegistry();
   const pools = new Map<string, LazyDb>();
+  const trackDb = getTrackingDb();
 
   function resolveRoot(repoPath?: string): string {
     if (repoPath) {
@@ -306,6 +357,24 @@ export function createMcpServer(rootPath?: string): McpServer {
     { name: 'milens', version: PKG_VERSION },
     { instructions: MILENS_INSTRUCTIONS },
   );
+
+  // Auto-wrap every tool handler with usage tracking
+  const origTool = server.tool.bind(server);
+  server.tool = ((...args: any[]) => {
+    const toolName = args[0] as string;
+    const handler = args[args.length - 1];
+    if (typeof handler === 'function') {
+      args[args.length - 1] = async (...handlerArgs: any[]) => {
+        const start = Date.now();
+        const result = await handler(...handlerArgs);
+        const responseText = result?.content?.map((c: any) => c.text).join('\n') ?? '';
+        const repo = handlerArgs[0]?.repo;
+        trackToolCall(trackDb, toolName, start, responseText, repo);
+        return result;
+      };
+    }
+    return (origTool as any)(...args);
+  }) as typeof server.tool;
 
   // ── Tool: query ──
   server.tool(

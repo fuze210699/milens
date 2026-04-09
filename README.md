@@ -28,35 +28,37 @@
 
 ## The Problem
 
-AI coding agents (**Copilot**, **Cursor**, **Claude Code**, **Codex**, **Windsurf**) are powerful — but they navigate your codebase by **text search alone**. They don't know the dependency graph.
+AI agents are blind to structure. They see files as text, not as a connected graph of dependencies.
 
-**What happens:**
+**A real scenario:**
 
-1. Agent edits `UserService.validate()`
-2. Doesn't know 12 functions depend on its return type
-3. **Breaking changes ship**
+1. You ask your agent to refactor `resolveLinks()` in your codebase
+2. The agent searches for `"resolveLinks"` — finds matches in code, tests, comments, and docs
+3. It renames the function, but misses that `resolveLinksWithStats` wraps it and `analyze()` calls the wrapper — a chain invisible to text search
+4. **Your pipeline breaks. The agent didn't know the call graph.**
 
-### Text Search vs Knowledge Graph
+The root cause: text search can't distinguish a caller from a comment from a type annotation. It has no concept of "what actually depends on this at the code level."
+
+### How milens Solves This
 
 ```mermaid
-flowchart TB
-  subgraph OLD["❌ Text Search Only"]
+flowchart LR
+  subgraph WITHOUT["Without milens"]
     direction TB
-    A1["Agent: edit UserService"] --> A2["grep 'UserService'"]
-    A2 --> A3["47 text matches — which matter?"]
-    A3 --> A4["Misses template refs, skips indirect callers"]
-    A4 --> A5["💥 Ships breaking change"]
+    W1["Agent: rename resolveLinks"] --> W2["grep for text matches"]
+    W2 --> W3["Finds 8 results — code, tests, configs, docs"]
+    W3 --> W4["Misses: resolveLinksWithStats wraps it,\nanalyze() calls the wrapper"]
   end
 
-  subgraph NEW["✅ milens Knowledge Graph"]
+  subgraph WITH["With milens"]
     direction TB
-    B1["Agent: edit UserService"] --> B2["edit_check UserService"]
-    B2 --> B3["12 direct callers, 3 re-export chains,\n2 depth-2 dependents, ⚠ no test coverage"]
-    B3 --> B4["✓ Safe, complete edit"]
+    M1["Agent: rename resolveLinks"] --> M2["edit_check resolveLinks"]
+    M2 --> M3["1 caller (resolveLinksWithStats),\nwhich has 1 upstream (analyze).\nTest file imports it directly."]
+    M3 --> M4["Complete chain — safe rename"]
   end
 ```
 
-**milens precomputes structure at index time** — every dependency, call chain, and domain cluster — so tools return complete context in **one call**, not a 10-query chain.
+milens builds a **pre-indexed knowledge graph** at analysis time — resolving every import, call, and inheritance chain — so that any tool query returns the full dependency picture instantly, without multi-step exploration.
 
 ---
 
@@ -266,6 +268,10 @@ npx milens status -p .                      # index stats
 npx milens list                             # all indexed repos
 npx milens clean -p .                       # remove index
 npx milens clean --all                      # remove all indexes
+
+# ── Dashboard ──
+npx milens dashboard                        # usage analytics on port 3200
+npx milens dashboard --port 8080            # custom port
 ```
 
 ---
@@ -321,33 +327,32 @@ milens uses a **global registry** — one MCP server serves all indexed repos. N
 
 ```mermaid
 flowchart TD
-  subgraph CLI["CLI"]
-    Analyze["milens analyze"]
-    Serve["milens serve"]
+  subgraph Commands["CLI"]
+    Idx["milens analyze -p /repo/A"]
+    Srv["milens serve"]
   end
 
-  subgraph Registry["~/.milens/"]
-    RegFile["registry.json"]
+  subgraph Global["~/.milens/"]
+    Reg["registry.json\n(repo paths + DB locations)"]
   end
 
-  subgraph Repos["Projects"]
-    A[".milens/ in repo A"]
-    B[".milens/ in repo B"]
+  subgraph Projects["Per-Repo Indexes"]
+    DbA["repo-A/.milens/milens.db"]
+    DbB["repo-B/.milens/milens.db"]
   end
 
-  subgraph MCP["MCP Server"]
-    Pool["Lazy Connection Pool\n(5min idle eviction)"]
+  subgraph Server["MCP Server"]
+    ConnPool["On-demand DB pool\nidle timeout: 5 min"]
   end
 
-  Analyze -->|"registers"| RegFile
-  Analyze -->|"stores index"| A
-  Analyze -->|"stores index"| B
-  Serve -->|"reads registry"| RegFile
-  Pool -->|"lazy open"| A
-  Pool -->|"lazy open"| B
+  Idx -- "adds entry" --> Reg
+  Idx -- "writes SQLite" --> DbA
+  Srv -- "loads list" --> Reg
+  ConnPool -- "opens on first query" --> DbA
+  ConnPool -- "opens on first query" --> DbB
 ```
 
-> When only one repo is indexed, the `repo` parameter is optional on all tools.
+> With a single indexed repo, all tools work without specifying `repo`. When multiple repos are registered, pass `repo` to target a specific one.
 
 ### Design Decisions
 
@@ -366,54 +371,62 @@ flowchart TD
 
 ## Security & Privacy
 
-- **100% local** — no network calls, no telemetry, no cloud. Your code never leaves your machine
-- **SQLite index** stored in `.milens/` (gitignored). Global registry at `~/.milens/` stores only paths
-- **ReDoS protection** — user-supplied regex validated against catastrophic backtracking patterns
-- **FTS5 injection prevention** — search queries sanitized (each token quoted as literal)
-- **Path traversal prevention** — file operations bounded to repo root
-- **Command injection prevention** — git commands use `execFileSync` (no shell interpolation)
+milens is **offline by design** — zero network calls, zero telemetry. Everything executes on your machine.
+
+| Layer | Protection |
+|---|---|
+| **Data locality** | Index lives in `.milens/` per repo (gitignored). Global registry (`~/.milens/`) stores only file paths — no source code |
+| **HTTP transport** | Binds to `127.0.0.1` only — requires explicit `--http` flag, never auto-exposed |
+| **User-supplied regex** | Validated against ReDoS patterns before execution |
+| **FTS5 queries** | Each search token quoted as a literal — no query injection |
+| **File access** | All reads bounded to the repo root — no path traversal |
+| **Git integration** | Uses `execFileSync` with argument arrays — no shell interpolation |
 
 ---
 
 ## Tool Examples
 
+These examples are from **milens indexing itself** (`npx milens analyze -p .`):
+
 ```
-# Pre-edit safety check
-edit_check({name: "UserService"})
-→ UserService [class] src/services/user.ts:10 (exported)
-  callers (3):
-    calls: handleLogin [function] src/api/auth.ts:45
-    calls: handleRegister [function] src/api/auth.ts:78
-    imports: UserController [class] src/controllers/user.ts:12
-  re-exported via:
-    src/services/index.ts:3
-  ⚠ no test coverage for this exported symbol
+# Pre-edit safety check — real output from milens self-index
+edit_check({name: "createMcpServer"})
+→ createMcpServer [function] src/server/mcp.ts:272 {utility,heat:70} (exported)
+  callers (2):
+    calls: startStdio [function] src/server/mcp.ts:1475
+    calls: startHttp [function] src/server/mcp.ts:1483
+  deps (32): searchSymbols, findSymbolByName, getIncomingLinks, findUpstream,
+             grepFiles, traceToEntrypoints, getDomainStats, getStaleFiles, ...
 
-# Intent-aware context
-smart_context({name: "validateUser", intent: "debug"})
-→ execution paths (2):
-    main → authRouter → handleLogin → validateUser
-    main → authRouter → handleRegister → validateUser
-  calls (2):
-    checkPassword [function] src/auth/hash.ts:15
-    createSession [function] src/auth/session.ts:8
-  data types: AuthConfig, UserCredentials
+# Context — 360° view with callers and callees
+context({name: "analyze"})
+→ analyze [function] src/analyzer/engine.ts:23 {utility,heat:55} (exported)
+  incoming:
+    calls: src/cli.ts (CLI entry point)
+  outgoing (26 deps):
+    calls: scanFiles [function] src/analyzer/scanner.ts:11
+    calls: resolveLinksWithStats [function] src/analyzer/resolver.ts:27
+    calls: enrichMetadata [function] src/analyzer/enrich.ts:21
+    calls: loadLanguage [function] src/parser/loader.ts:20
+    calls: transaction, insertSymbol, insertLink, rebuildSearch ... (db ops)
 
-# Impact analysis
-impact({target: "createUser", direction: "upstream"})
+# Impact analysis — what breaks if searchSymbols changes?
+impact({target: "searchSymbols", direction: "upstream"})
 → depth 1:
-    handleRegister [function] src/api/auth.ts:78 (calls)
-    UserController [class] src/controllers/user.ts:12 (calls)
+    createMcpServer [function] src/server/mcp.ts:272 (calls)
   depth 2:
-    authRouter [module] src/routes/auth.ts (imports)
+    startStdio [function] src/server/mcp.ts:1475 (calls)
+    startHttp [function] src/server/mcp.ts:1483 (calls)
 
-# Domain clusters
-domains()
-→ 4 domains (30 files, 196 symbols):
-    auth: 8 files, 42 symbols (21%)
-    api: 6 files, 35 symbols (18%)
-    store: 5 files, 52 symbols (27%)
-    parser: 11 files, 67 symbols (34%)
+# File symbols — what's inside a file?
+get_file_symbols({file: "src/store/db.ts"})
+→ src/store/db.ts: 45 symbols
+    Database [class] L10-461 (exported) ← 0 refs, → 0 deps
+    searchSymbols [method] L150-165 ← 3 refs, → 0 deps
+    findUpstream [method] L192-195 ← 3 refs, → 1 deps
+    traceToEntrypoints [method] L346-388 ← 2 refs, → 2 deps
+    getDomainStats [method] L406-417 ← 3 refs, → 0 deps
+    ... (40 more)
 ```
 
 ---
@@ -454,6 +467,7 @@ npm test                 # vitest (32 tests)
 npm run lint             # tsc --noEmit
 npm run self-analyze     # index this repo
 npm run self-serve       # start MCP server on port 3100
+npx milens dashboard     # open usage analytics dashboard
 ```
 
 ---

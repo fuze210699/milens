@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS file_hashes (
   zone        TEXT
 );
 
+CREATE TABLE IF NOT EXISTS repo_meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT

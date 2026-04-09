@@ -1,5 +1,5 @@
 import type Parser from 'web-tree-sitter';
-import type { CodeSymbol, RawImport, RawCall, RawHeritage, ExtractionResult, SymbolKind } from '../types.js';
+import type { CodeSymbol, RawImport, RawCall, RawHeritage, RawReExport, ExtractionResult, SymbolKind } from '../types.js';
 
 // ── Declarative language specification ──
 
@@ -19,6 +19,7 @@ export interface LangSpec {
     imports?: string;
     calls?: string;
     exports?: string;
+    reExports?: string;
     heritage?: string;
   };
   resolveImport(raw: string, fromFile: string, root: string, aliases: Record<string, string>): string | null;
@@ -173,6 +174,7 @@ export function extractFromTree(
   const imports: RawImport[] = [];
   const calls: RawCall[] = [];
   const heritage: RawHeritage[] = [];
+  const reExports: RawReExport[] = [];
   const exportedNames = new Set<string>();
 
   const root = tree.rootNode;
@@ -306,5 +308,30 @@ export function extractFromTree(
     }
   }
 
-  return { symbols, imports, calls, heritage, exportedNames };
+  // ── Extract re-exports (export { X } from './y', export * from './y') ──
+
+  if (spec.queries.reExports) {
+    for (const match of runQuery(spec.queries.reExports)) {
+      const source = captureText(match, 'source');
+      const defNode = captureNode(match, 'def');
+      if (!source || !defNode) continue;
+
+      const cleanSource = source.replace(/^['"]|['"]$/g, '');
+      const names: string[] = [];
+
+      // Collect re-exported names from export_clause
+      for (const capture of match.captures) {
+        if (capture.name === 'name') names.push(capture.node.text);
+      }
+
+      reExports.push({
+        filePath,
+        modulePath: cleanSource,
+        names,
+        line: defNode.startPosition.row + 1,
+      });
+    }
+  }
+
+  return { symbols, imports, calls, heritage, exportedNames, reExports };
 }

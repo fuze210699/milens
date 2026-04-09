@@ -5,10 +5,10 @@ import { langForFile } from '../parser/languages.js';
 import { getParser, loadLanguage } from '../parser/loader.js';
 import { extractFromTree, clearQueryCache } from '../parser/extract.js';
 import { extractVueScript, extractVueTemplateRefs } from '../parser/lang-vue.js';
-import { resolveLinks } from './resolver.js';
+import { resolveLinks, resolveLinksWithStats } from './resolver.js';
 import { enrichMetadata } from './enrich.js';
 import { Database } from '../store/db.js';
-import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, AnalysisStats } from '../types.js';
+import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, AnalysisStats } from '../types.js';
 import type Parser from 'web-tree-sitter';
 import type { LangSpec } from '../parser/extract.js';
 
@@ -49,6 +49,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const allImports: RawImport[] = [];
   const allCalls: RawCall[] = [];
   const allHeritage: RawHeritage[] = [];
+  const allReExports: RawReExport[] = [];
   const resolvedImportPaths = new Map<string, string>();
   const parsedFiles = new Set<string>();
   let filesParsed = 0;
@@ -76,12 +77,21 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
         allImports.push(...result.imports);
         allCalls.push(...result.calls);
         allHeritage.push(...result.heritage);
+        allReExports.push(...result.reExports);
 
         // Resolve import paths eagerly
         for (const imp of result.imports) {
           const resolved = file.spec.resolveImport(imp.modulePath, imp.filePath, rootPath, aliases);
           if (resolved) {
             resolvedImportPaths.set(`${imp.filePath}::${imp.modulePath}`, resolved);
+          }
+        }
+
+        // Resolve re-export paths
+        for (const re of result.reExports) {
+          const resolved = file.spec.resolveImport(re.modulePath, re.filePath, rootPath, aliases);
+          if (resolved) {
+            resolvedImportPaths.set(`${re.filePath}::${re.modulePath}`, resolved);
           }
         }
 
@@ -111,15 +121,22 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   }
 
   // Phase 5: Resolve cross-file links
-  const links = resolveLinks({
+  const resolution = resolveLinksWithStats({
     symbolsByFile,
     allSymbols,
     imports: allImports,
     calls: allCalls,
     heritage: allHeritage,
+    reExports: allReExports,
     resolvedImportPaths,
   });
-  if (opts.verbose) console.log(`[link] Resolved ${links.length} relationships`);
+  const links = resolution.links;
+  if (opts.verbose) {
+    console.log(`[link] Resolved ${links.length} relationships`);
+    if (resolution.unresolvedImports > 0 || resolution.unresolvedCalls > 0) {
+      console.log(`[link] ⚠ ${resolution.unresolvedImports} unresolved imports, ${resolution.unresolvedCalls} unresolved calls`);
+    }
+  }
 
   // Phase 6: Enrich — compute roles, heat, zones from resolved graph
   const enriched = enrichMetadata({ symbols: allSymbols, links });
@@ -137,6 +154,8 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     }
     for (const link of links) db.insertLink(link);
     for (const [filePath, zone] of enriched.zones) db.setFileZone(filePath, zone);
+    db.setMeta('unresolved_imports', String(resolution.unresolvedImports));
+    db.setMeta('unresolved_calls', String(resolution.unresolvedCalls));
     db.rebuildSearch();
   });
 
@@ -146,6 +165,8 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     symbolCount: allSymbols.length,
     linkCount: links.length,
     durationMs: Date.now() - t0,
+    unresolvedImports: resolution.unresolvedImports,
+    unresolvedCalls: resolution.unresolvedCalls,
   };
 
   if (opts.verbose) {

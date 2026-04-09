@@ -55,6 +55,16 @@ const spec: LangSpec = {
       name: (identifier) @child
       (class_heritage (identifier) @parent)
     ) @def`,
+    reExports: `[
+      (export_statement
+        source: (string (string_fragment) @source)
+        (export_clause (export_specifier name: (identifier) @name))
+      ) @def
+      (export_statement
+        source: (string (string_fragment) @source)
+        "*"
+      ) @def
+    ]`,
   },
   resolveImport(raw, fromFile, root, aliases) {
     // Check aliases first (e.g. @ → src)

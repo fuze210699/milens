@@ -170,6 +170,16 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Line-level scope matching for scoped grep */
+function matchesScope(lineText: string, scope: 'imports' | 'definitions'): boolean {
+  const trimmed = lineText.trimStart();
+  if (scope === 'imports') {
+    return /^(import\s|from\s|require\(|use\s|include\s|require_relative|require\s)/.test(trimmed);
+  }
+  // definitions: function, class, interface, struct, trait, enum, type, def, fn, pub fn, etc.
+  return /^(export\s+)?(async\s+)?(function|class|interface|type|enum|struct|trait|const|let|var|def|fn|pub\s+fn|pub\s+struct|pub\s+enum|module)\s/.test(trimmed);
+}
+
 /** Validate user-supplied regex is safe from catastrophic backtracking (ReDoS). */
 function safeRegex(pattern: string, flags: string): RegExp {
   if (pattern.length > 200) throw new Error('Pattern too long');
@@ -214,10 +224,11 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 
 ## Tool selection
 - \`query\` — find symbol definitions (code identifiers only)
-- \`grep\` — text search ALL files (templates, configs, styles, docs)
+- \`grep\` — text search ALL files. Use \`scope\` param: all (default), code (source only), imports, definitions
 - \`context\` — 360° view: incoming + outgoing for a symbol
 - \`impact\` — blast radius: what breaks if symbol changes
 - \`overview\` — combined context + impact + grep in one call (preferred for editing workflows)
+- \`edit_check\` — pre-edit safety: callers + export status + re-export chains + ⚠ warnings (fastest for edits)
 - \`detect_changes\` — git diff → affected symbols
 - \`explain_relationship\` — shortest path between two symbols
 - \`find_dead_code\` — unused exports
@@ -225,10 +236,12 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - \`get_type_hierarchy\` — inheritance tree
 
 ## Rules
-- Before editing a symbol: run \`overview\` or \`impact\`(upstream) + \`grep\`
+- Before editing a symbol: run \`edit_check\` or \`overview\`
 - \`impact\` only tracks code deps — always pair with \`grep\` for templates/configs
 - Use \`query\` for camelCase/PascalCase identifiers, \`grep\` for display text or multi-word strings
+- Use \`grep\` with scope=imports to find only import lines, scope=definitions for declarations
 - impact depth: 1=WILL BREAK, 2=LIKELY AFFECTED, 3=MAY NEED TESTING
+- ⚠ markers indicate unresolved references — callers list may be incomplete
 `;
 
 // ── Server setup ──
@@ -301,27 +314,37 @@ export function createMcpServer(rootPath?: string): McpServer {
       isRegex: z.boolean().optional().default(false).describe('Treat pattern as regex'),
       caseSensitive: z.boolean().optional().default(false),
       include: z.string().optional().describe('Glob filter for file paths (e.g. "**/*.vue", "*.scss")'),
+      scope: z.enum(['all', 'code', 'imports', 'definitions']).optional().default('all')
+        .describe('Scope: all=everything, code=source files only (no configs/docs), imports=import/require lines only, definitions=function/class/interface declarations only'),
       limit: z.number().optional().default(50).describe('Max results'),
     },
-    async ({ pattern, repo, isRegex, caseSensitive, include, limit }) => {
+    async ({ pattern, repo, isRegex, caseSensitive, include, scope, limit }) => {
       const root = resolveRoot(repo);
+      const effectiveInclude = scope === 'code' && !include
+        ? '**/*.{ts,tsx,js,jsx,mjs,cjs,vue,py,go,rs,java,php,rb}'
+        : include;
       const matches = grepFiles(root, pattern, {
-        isRegex, caseSensitive, maxResults: limit, includePattern: include,
+        isRegex, caseSensitive, maxResults: limit, includePattern: effectiveInclude,
       });
 
-      if (matches.length === 0) {
-        return { content: [{ type: 'text' as const, text: `No matches for "${pattern}"` }] };
+      // Apply scope-specific line filtering
+      const filtered = scope === 'all' || scope === 'code'
+        ? matches
+        : matches.filter(m => matchesScope(m.text, scope));
+
+      if (filtered.length === 0) {
+        return { content: [{ type: 'text' as const, text: `No matches for "${pattern}"${scope !== 'all' ? ` (scope: ${scope})` : ''}` }] };
       }
 
       // Group by file for compact output
       const grouped = new Map<string, { line: number; text: string }[]>();
-      for (const m of matches) {
+      for (const m of filtered) {
         const arr = grouped.get(m.file) ?? [];
         arr.push({ line: m.line, text: m.text });
         grouped.set(m.file, arr);
       }
 
-      const lines: string[] = [`${matches.length} matches in ${grouped.size} files:\n`];
+      const lines: string[] = [`${filtered.length} matches in ${grouped.size} files${scope !== 'all' ? ` (scope: ${scope})` : ''}:\n`];
       for (const [file, hits] of grouped) {
         lines.push(file);
         for (const h of hits) {
@@ -329,7 +352,7 @@ export function createMcpServer(rootPath?: string): McpServer {
         }
       }
 
-      if (matches.length >= limit) {
+      if (filtered.length >= limit) {
         lines.push(`\n(truncated at ${limit} results — increase limit or narrow pattern)`);
       }
 
@@ -431,7 +454,11 @@ export function createMcpServer(rootPath?: string): McpServer {
     async ({ repo }) => {
       const { db, root } = getDb(repo);
       const stats = db.getStats();
-      const text = `repo: ${root}\nsymbols: ${stats.symbols}\nlinks: ${stats.links}\nfiles: ${stats.files}`;
+      const unresolved = db.getUnresolvedStats();
+      let text = `repo: ${root}\nsymbols: ${stats.symbols}\nlinks: ${stats.links}\nfiles: ${stats.files}`;
+      if (unresolved.imports > 0 || unresolved.calls > 0) {
+        text += `\n⚠ unresolved: ${unresolved.imports} imports, ${unresolved.calls} calls`;
+      }
       return { content: [{ type: 'text' as const, text }] };
     },
   );
@@ -513,6 +540,12 @@ export function createMcpServer(rootPath?: string): McpServer {
         }
       } else {
         sections.push(`[grep] No text matches.`);
+      }
+
+      // Section 5: Unresolved warnings
+      const unresolved = db.getUnresolvedStats();
+      if (unresolved.imports > 0 || unresolved.calls > 0) {
+        sections.push(`[⚠ unresolved] ${unresolved.imports} imports, ${unresolved.calls} calls — some references may be missing`);
       }
 
       return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
@@ -699,6 +732,72 @@ export function createMcpServer(rootPath?: string): McpServer {
       }
 
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ── Tool: edit_check ──
+  server.tool(
+    'edit_check',
+    'Pre-edit safety check: callers, export status, re-export chains, ⚠ warnings. Focused for editing intent — no downstream deps, no outgoing calls. Use BEFORE modifying a symbol.',
+    {
+      name: z.string().describe('Symbol name to check before editing'),
+      repo: z.string().optional(),
+    },
+    async ({ name, repo }) => {
+      const { db, root } = getDb(repo);
+      const symbols = db.findSymbolByName(name);
+      const sections: string[] = [];
+
+      if (symbols.length === 0) {
+        sections.push(`"${name}" not found in index. Try \`grep\`.`);
+        return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
+      }
+
+      for (const sym of symbols) {
+        // 1. Symbol info
+        sections.push(`${fmtSymbol(sym)}${sym.exported ? ' (exported)' : ''}`);
+
+        // 2. Who calls/uses this? (direct upstream only — what WILL break)
+        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+        if (incoming.length > 0) {
+          sections.push(`callers (${incoming.length}):`);
+          for (const l of incoming) {
+            const from = db.findSymbolById(l.fromId);
+            sections.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
+          }
+        } else {
+          sections.push(`callers: none`);
+        }
+
+        // 3. Export chain — is this re-exported from barrel files?
+        const grepMatches = grepFiles(root, name, { maxResults: 10, includePattern: '**/index.{ts,js,mjs}' });
+        const reExportMatches = grepMatches.filter(m =>
+          /export\s*\{[^}]*/.test(m.text) && m.text.includes('from')
+        );
+        if (reExportMatches.length > 0) {
+          sections.push(`re-exported via:`);
+          for (const m of reExportMatches) {
+            sections.push(`  ${m.file}:${m.line}`);
+          }
+        }
+
+        // 4. Heritage — is this a parent class?
+        const descendants = db.getTypeHierarchy(sym.id).descendants;
+        if (descendants.length > 0) {
+          sections.push(`⚠ inherited by ${descendants.length} types:`);
+          for (const { symbol: d } of descendants) {
+            sections.push(`  ${fmtSymbol(d)}`);
+          }
+        }
+      }
+
+      // 5. Unresolved warning
+      const unresolved = db.getUnresolvedStats();
+      if (unresolved.imports > 0 || unresolved.calls > 0) {
+        sections.push(`⚠ index has ${unresolved.imports} unresolved imports, ${unresolved.calls} unresolved calls — callers list may be incomplete`);
+      }
+
+      return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
     },
   );
 

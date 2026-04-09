@@ -7,7 +7,7 @@ alwaysApply: false
 # Root
 
 ## Overview
-Contains 28 symbols (9 exported) across 3 files.
+Contains 28 symbols (10 exported) across 3 files.
 
 ## Key Symbols
 - **`generateSkills`** [function] (src/skills.ts:19) — 1 refs
@@ -17,15 +17,16 @@ Contains 28 symbols (9 exported) across 3 files.
 - **`RawCall`** [interface] (src/types.ts:43) — 0 refs
 - **`RawHeritage`** [interface] (src/types.ts:51) — 0 refs
 - **`ExtractionResult`** [interface] (src/types.ts:59) — 0 refs
-- **`AnalysisStats`** [interface] (src/types.ts:67) — 0 refs
-- **`RepoEntry`** [interface] (src/types.ts:75) — 0 refs
+- **`RawReExport`** [interface] (src/types.ts:68) — 0 refs
+- **`AnalysisStats`** [interface] (src/types.ts:75) — 0 refs
+- **`RepoEntry`** [interface] (src/types.ts:85) — 0 refs
 
 ## Entry Points
 - **`has`** [function] — 16 incoming references
 - **`getAreaName`** [function] — 2 incoming references
 - **`capitalize`** [function] — 2 incoming references
-- **`loadAliases`** [function] — 1 incoming references
 - **`deleteIndex`** [function] — 1 incoming references
+- **`generateSkills`** [function] — 1 incoming references
 
 ## Dependencies
 - **store**: `getAllSymbols`, `getAllLinks`

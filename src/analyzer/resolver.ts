@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import type { CodeSymbol, SymbolLink, RawImport, RawCall, RawHeritage, LinkType } from '../types.js';
+import type { CodeSymbol, SymbolLink, RawImport, RawCall, RawHeritage, RawReExport, LinkType } from '../types.js';
 
 interface ResolutionInput {
   symbolsByFile: Map<string, CodeSymbol[]>;
@@ -7,13 +7,30 @@ interface ResolutionInput {
   imports: RawImport[];
   calls: RawCall[];
   heritage: RawHeritage[];
+  reExports?: RawReExport[];
   resolvedImportPaths: Map<string, string>; // raw module path → resolved file path
 }
 
+export interface ResolutionResult {
+  links: SymbolLink[];
+  unresolvedImports: number;
+  unresolvedCalls: number;
+}
+
 export function resolveLinks(input: ResolutionInput): SymbolLink[] {
+  const result = resolveLinksWithStats(input);
+  return result.links;
+}
+
+export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult {
   const links: SymbolLink[] = [];
   const symbolByName = buildNameIndex(input.allSymbols);
   const symbolById = buildIdIndex(input.allSymbols);
+  let unresolvedImports = 0;
+  let unresolvedCalls = 0;
+
+  // Build re-export map: file → (name → sourceFile)
+  const reExportMap = buildReExportMap(input.reExports ?? [], input.resolvedImportPaths);
 
   // Build imported names per file: file → (name → targetFile)
   const importedNamesPerFile = new Map<string, Map<string, string>>();
@@ -43,25 +60,46 @@ export function resolveLinks(input: ResolutionInput): SymbolLink[] {
   // ── Resolve imports ──
   for (const imp of input.imports) {
     const targetFile = input.resolvedImportPaths.get(`${imp.filePath}::${imp.modulePath}`);
-    if (!targetFile) continue;
+    if (!targetFile) { unresolvedImports++; continue; }
 
     const targetSymbols = input.symbolsByFile.get(targetFile);
-    if (!targetSymbols) continue;
+    if (!targetSymbols) { unresolvedImports++; continue; }
 
     const fromId = `${imp.filePath}#module:_top:0`;
 
     if (imp.names.length > 0) {
       for (const { name } of imp.names) {
-        const target = targetSymbols.find(s => s.name === name && s.exported);
+        // Direct match in target file
+        let target = targetSymbols.find(s => s.name === name && s.exported);
+
+        // Follow re-export chain if not found directly
+        if (!target) {
+          target = followReExportChain(name, targetFile, reExportMap, input.symbolsByFile);
+        }
+
         if (target) {
           links.push(makeLink(fromId, target.id, 'imports', 0.95, imp.line));
+        } else {
+          unresolvedImports++;
         }
       }
+    } else if (imp.isDefault) {
+      // Default import — find default-exported symbol or single primary export
+      const defaultTarget = findDefaultExport(targetSymbols);
+      if (defaultTarget) {
+        links.push(makeLink(fromId, defaultTarget.id, 'imports', 0.85, imp.line));
+      } else {
+        unresolvedImports++;
+      }
     } else {
-      // Wildcard or default import — link to ALL exported symbols
+      // Wildcard import — link to ALL exported symbols
       const exported = targetSymbols.filter(s => s.exported);
-      for (const target of exported) {
-        links.push(makeLink(fromId, target.id, 'imports', 0.65, imp.line));
+      if (exported.length > 0) {
+        for (const target of exported) {
+          links.push(makeLink(fromId, target.id, 'imports', 0.65, imp.line));
+        }
+      } else {
+        unresolvedImports++;
       }
     }
   }
@@ -69,7 +107,7 @@ export function resolveLinks(input: ResolutionInput): SymbolLink[] {
   // ── Resolve calls (receiver-aware + proximity scoring) ──
   for (const call of input.calls) {
     const candidates = symbolByName.get(call.calleeName);
-    if (!candidates || candidates.length === 0) continue;
+    if (!candidates || candidates.length === 0) { unresolvedCalls++; continue; }
 
     // Fast path: unique name globally
     if (candidates.length === 1) {
@@ -135,7 +173,7 @@ export function resolveLinks(input: ResolutionInput): SymbolLink[] {
     }
   }
 
-  return deduplicateLinks(links);
+  return { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls };
 }
 
 // ── Receiver-aware call narrowing ──
@@ -263,4 +301,81 @@ function deduplicateLinks(links: SymbolLink[]): SymbolLink[] {
     seen.add(l.id);
     return true;
   });
+}
+
+// ── Re-export chain resolution ──
+
+/** Build a map: file → (exportedName → sourceFile) from re-export declarations */
+function buildReExportMap(
+  reExports: RawReExport[],
+  resolvedPaths: Map<string, string>,
+): Map<string, Map<string, string>> {
+  const map = new Map<string, Map<string, string>>();
+  for (const re of reExports) {
+    const sourceFile = resolvedPaths.get(`${re.filePath}::${re.modulePath}`);
+    if (!sourceFile) continue;
+
+    let fileMap = map.get(re.filePath);
+    if (!fileMap) { fileMap = new Map(); map.set(re.filePath, fileMap); }
+
+    if (re.names.length > 0) {
+      for (const name of re.names) {
+        fileMap.set(name, sourceFile);
+      }
+    } else {
+      // Wildcard re-export: export * from './x' — mark with '*'
+      fileMap.set('*', sourceFile);
+    }
+  }
+  return map;
+}
+
+/** Follow re-export chain: barrel file re-exports name from another file */
+function followReExportChain(
+  name: string,
+  fromFile: string,
+  reExportMap: Map<string, Map<string, string>>,
+  symbolsByFile: Map<string, CodeSymbol[]>,
+  depth = 0,
+): CodeSymbol | undefined {
+  if (depth > 5) return undefined; // prevent infinite loops
+
+  const fileReExports = reExportMap.get(fromFile);
+  if (!fileReExports) return undefined;
+
+  // Check named re-export first
+  let sourceFile = fileReExports.get(name);
+  if (!sourceFile) {
+    // Check wildcard re-export (export * from)
+    sourceFile = fileReExports.get('*');
+  }
+  if (!sourceFile) return undefined;
+
+  // Look for the symbol in the source file
+  const sourceSymbols = symbolsByFile.get(sourceFile);
+  if (sourceSymbols) {
+    const found = sourceSymbols.find(s => s.name === name && s.exported);
+    if (found) return found;
+  }
+
+  // Recurse: source file might also re-export
+  return followReExportChain(name, sourceFile, reExportMap, symbolsByFile, depth + 1);
+}
+
+/** Find the best match for a default import */
+function findDefaultExport(targetSymbols: CodeSymbol[]): CodeSymbol | undefined {
+  const exported = targetSymbols.filter(s => s.exported);
+  if (exported.length === 0) return undefined;
+
+  // If only one exported symbol, it's likely the default
+  if (exported.length === 1) return exported[0];
+
+  // Prefer class > function in default export scenarios
+  const cls = exported.find(s => s.kind === 'class');
+  if (cls) return cls;
+  const fn = exported.find(s => s.kind === 'function');
+  if (fn) return fn;
+
+  // Fallback to first
+  return exported[0];
 }

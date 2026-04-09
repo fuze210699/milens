@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { resolve, join, dirname, basename } from 'node:path';
-import { mkdirSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { loadAliases } from './analyzer/config.js';
 
 const program = new Command();
 
@@ -240,36 +241,6 @@ program
 program.parse();
 
 // ── Helpers ──
-
-function loadAliases(rootPath: string): Record<string, string> {
-  const aliases: Record<string, string> = {};
-  const tsconfigPath = join(rootPath, 'tsconfig.json');
-  if (existsSync(tsconfigPath)) {
-    try {
-      const raw = readFileSync(tsconfigPath, 'utf-8')
-        .replace(/\/\/.*$/gm, '')
-        .replace(/\/\*[\s\S]*?\*\//g, '');
-      const cfg = JSON.parse(raw);
-      const paths = cfg.compilerOptions?.paths ?? {};
-      for (const [alias, targets] of Object.entries(paths)) {
-        const clean = alias.replace('/*', '');
-        const target = (targets as string[])[0]?.replace('/*', '').replace('./', '') ?? '';
-        if (clean && target) aliases[clean] = target;
-      }
-    } catch { /* ignore */ }
-  }
-  // PSR-4 from composer.json
-  const composerPath = join(rootPath, 'composer.json');
-  if (existsSync(composerPath)) {
-    try {
-      const composer = JSON.parse(readFileSync(composerPath, 'utf-8'));
-      for (const [ns, dir] of Object.entries(composer.autoload?.['psr-4'] ?? {})) {
-        aliases[ns] = (dir as string).replace(/\/$/, '');
-      }
-    } catch { /* ignore */ }
-  }
-  return aliases;
-}
 
 function deleteIndex(dbPath: string): void {
   const dir = dirname(dbPath);

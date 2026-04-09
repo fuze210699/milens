@@ -62,6 +62,14 @@ export interface ExtractionResult {
   calls: RawCall[];
   heritage: RawHeritage[];
   exportedNames: Set<string>;
+  reExports: RawReExport[];
+}
+
+export interface RawReExport {
+  filePath: string;
+  modulePath: string;
+  names: string[];    // specific names, empty = wildcard (export * from)
+  line: number;
 }
 
 export interface AnalysisStats {
@@ -70,6 +78,8 @@ export interface AnalysisStats {
   symbolCount: number;
   linkCount: number;
   durationMs: number;
+  unresolvedImports: number;
+  unresolvedCalls: number;
 }
 
 export interface RepoEntry {

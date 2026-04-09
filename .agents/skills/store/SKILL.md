@@ -6,7 +6,7 @@ description: Code intelligence for the store area — symbols, dependencies, and
 # Store
 
 ## Overview
-Contains 43 symbols (2 exported) across 2 files.
+Contains 46 symbols (2 exported) across 2 files.
 
 ## Key Symbols
 - **`Database`** [class] (src/store/db.ts:10) — 0 refs
@@ -24,9 +24,9 @@ Contains 43 symbols (2 exported) across 2 files.
 - **server**: `get`
 
 ## Used By
-- **analyzer**: `clear`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction`, `clearSymbolsAndLinks`, `deleteFileData`, `insertSymbol` (+4 more)
+- **analyzer**: `clear`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction`, `clearSymbolsAndLinks`, `deleteFileData`, `insertSymbol` (+5 more)
 - **parser**: `clear`, `load`
-- **server**: `close`, `findByRoot`, `listAll`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks`, `findSymbolById` (+8 more)
+- **server**: `close`, `findByRoot`, `listAll`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks`, `findSymbolById` (+9 more)
 - **root**: `getAllSymbols`, `getAllLinks`
 
 ## Files

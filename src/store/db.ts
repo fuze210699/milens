@@ -313,6 +313,24 @@ export class Database {
     this.db.exec('DELETE FROM links');
   }
 
+  // ── Repo metadata (unresolved counts, etc.) ──
+
+  setMeta(key: string, value: string): void {
+    this.db.prepare('INSERT OR REPLACE INTO repo_meta (key, value) VALUES (?, ?)').run(key, value);
+  }
+
+  getMeta(key: string): string | undefined {
+    const row = this.db.prepare('SELECT value FROM repo_meta WHERE key = ?').get(key) as any;
+    return row?.value;
+  }
+
+  getUnresolvedStats(): { imports: number; calls: number } {
+    return {
+      imports: parseInt(this.getMeta('unresolved_imports') ?? '0', 10),
+      calls: parseInt(this.getMeta('unresolved_calls') ?? '0', 10),
+    };
+  }
+
   clear(): void {
     this.db.exec('DELETE FROM symbols');
     this.db.exec('DELETE FROM links');

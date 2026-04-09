@@ -6,7 +6,7 @@ description: Code intelligence MCP tools — symbol search, text grep, impact an
 <!-- milens:start -->
 # Milens — Code Intelligence (MCP)
 
-This project is indexed by milens (166 symbols, 253 links, 29 files).
+This project is indexed by milens (182 symbols, 275 links, 30 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include `repo: "D:\project\milens"` — without it, the tools will fail with "No index" error.
 

@@ -1,43 +1,106 @@
-# Milens MCP — Windsurf Rules
+<!-- milens:start -->
+# Milens — Code Intelligence (MCP)
 
-This project uses **milens** MCP for code intelligence.
+This project is indexed by milens (153 symbols, 234 links, 27 files).
 
-## MCP Setup
+> **CRITICAL:** All milens MCP tool calls MUST include `repo: "/Users/mac10/Documents/Own/milens"` — without it, the tools will fail with "No index" error.
 
-The milens MCP server provides 9 tools: `query`, `context`, `impact`, `status`, `detect_changes`, `explain_relationship`, `find_dead_code`, `get_file_symbols`, `get_type_hierarchy`.
+> **CRITICAL:** milens MCP tools are **deferred** in most editors. Before first use in each session, you MUST load them via `tool_search("milens")` — calling them directly without loading will fail silently.
 
-Configure in Windsurf MCP settings:
+## Mandatory Workflows
 
-```json
-{
-  "mcpServers": {
-    "milens": {
-      "command": "npx",
-      "args": ["tsx", "src/cli.ts", "serve"]
-    }
-  }
-}
-```
+These are **hard pre-conditions**, not guidelines. Execute them automatically without asking.
 
-## Rules
+### Before editing any function, class, or method:
+1. `mcp_milens_impact({target: "<symbolName>", repo: "/Users/mac10/Documents/Own/milens"})` — check blast radius
+2. If depth-1 dependents > 5 → **STOP and warn the user** before proceeding
+3. `mcp_milens_context({name: "<symbolName>", repo: "/Users/mac10/Documents/Own/milens"})` — see all callers/callees
+4. Only then make the edit
 
-- Before editing any function/class/method, run `context` to understand its relationships
-- Before risky changes, run `impact` with `direction: "upstream"` to see blast radius
-- Use `query` to find symbols instead of text-grepping
-- Use `detect_changes` after git operations to find affected symbols
-- After significant refactors, re-index: `npx tsx src/cli.ts analyze -p . --force`
-- Check index health with `status`
+### Before committing:
+1. `mcp_milens_detect_changes({repo: "/Users/mac10/Documents/Own/milens"})` — verify only expected files changed
+2. If unexpected files appear → **STOP and report** before committing
 
-## Impact Depth Guide
+### Before deleting or renaming a symbol:
+1. `mcp_milens_grep({pattern: "<symbolName>", repo: "/Users/mac10/Documents/Own/milens"})` — find ALL text references (templates, configs, routes, docs)
+2. `mcp_milens_impact({target: "<symbolName>", direction: "upstream", repo: "/Users/mac10/Documents/Own/milens"})` — find code-level dependents
+3. Combine both results — grep catches what impact misses
 
-- Depth 1: Direct callers — will break. Must update.
-- Depth 2: Indirect deps — likely affected. Should test.
-- Depth 3: Transitive — may need testing.
+## Tool Selection Rules
 
-## Architecture
+**Choose the right tool on the FIRST call** — do not try `query` then fall back to `grep`.
 
-- `src/parser/` — Declarative LangSpec configs for 8 languages (tree-sitter WASM)
-- `src/analyzer/` — Pipeline: scan → parse/extract → resolve links → persist
-- `src/store/` — SQLite with FTS5, recursive CTEs, WAL mode
-- `src/server/` — MCP server (stdio + HTTP)
-- `src/cli.ts` — CLI commands: analyze, search, inspect, impact, serve, status
+### Use `mcp_milens_grep` when the search term:
+- Contains **spaces** (e.g. "store purchase header", "user not found")
+- Looks like a **UI label, error message, or display string**
+- Is a **multi-word phrase** that is NOT camelCase/snake_case/PascalCase
+- You need to find references in **templates, styles, configs, routes, or docs**
+
+### Use `mcp_milens_query` when the search term:
+- Looks like a **code identifier** (camelCase, PascalCase, snake_case)
+- Is a **function, class, method, or interface name**
+- You want to find **symbol definitions** in indexed code files
+
+### When in doubt → use `mcp_milens_grep` first
+`grep` searches everything. `query` only searches indexed symbol definitions.
+
+## Workflow Triggers
+
+When the user says... → do this FIRST:
+
+| User intent | First action |
+|---|---|
+| "edit/change/modify/fix `X`" | `mcp_milens_impact({target: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
+| "delete/remove `X`" | `mcp_milens_grep({pattern: "X", repo: "/Users/mac10/Documents/Own/milens"})` then `mcp_milens_impact` |
+| "rename `X`" | `mcp_milens_grep({pattern: "X", repo: "/Users/mac10/Documents/Own/milens"})` then `mcp_milens_impact` |
+| "find/search for `X`" | Choose `query` or `grep` per rules above |
+| "commit" / "push" | `mcp_milens_detect_changes({repo: "/Users/mac10/Documents/Own/milens"})` |
+| "what calls/uses `X`" | `mcp_milens_context({name: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
+| "what happens if I change `X`" | `mcp_milens_impact({target: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
+| "how are `A` and `B` connected" | `mcp_milens_explain_relationship({from: "A", to: "B", repo: "/Users/mac10/Documents/Own/milens"})` |
+| "explore/understand `X`" | `mcp_milens_context({name: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
+
+## Never Do
+
+- NEVER edit a symbol without first running `mcp_milens_impact` on it.
+- NEVER delete or rename without running both `mcp_milens_grep` and `mcp_milens_impact`.
+- NEVER commit without running `mcp_milens_detect_changes()`.
+- NEVER call milens MCP tools without the `repo` parameter.
+- NEVER use `mcp_milens_query` for multi-word display text or UI labels — use `mcp_milens_grep`.
+
+---
+
+## Reference
+
+### Tools
+
+| Tool | Purpose |
+|---|---|
+| `mcp_milens_query` | Find symbol definitions by name (FTS5) |
+| `mcp_milens_grep` | Text search ALL files (templates, styles, configs, docs) |
+| `mcp_milens_context` | 360° view: incoming refs + outgoing deps |
+| `mcp_milens_impact` | Blast radius before editing |
+| `mcp_milens_detect_changes` | Pre-commit scope check |
+| `mcp_milens_explain_relationship` | Shortest path between two symbols |
+| `mcp_milens_get_file_symbols` | All symbols in a file |
+| `mcp_milens_get_type_hierarchy` | Class inheritance tree |
+| `mcp_milens_find_dead_code` | Unused exported symbols |
+| `mcp_milens_status` | Index health check |
+
+### Keeping the Index Fresh
+
+After significant code changes: `npx milens analyze -p . --force`
+
+### Skills
+
+| Task | Read this skill file |
+|------|---------------------|
+| General milens tools reference | `.windsurfrules` |
+| Work in the Analyzer area | `.windsurfrules` |
+| Work in the Root area | `.windsurfrules` |
+| Work in the Parser area | `.windsurfrules` |
+| Work in the Server area | `.windsurfrules` |
+| Work in the Store area | `.windsurfrules` |
+| Work in the Test area | `.windsurfrules` |
+
+<!-- milens:end -->

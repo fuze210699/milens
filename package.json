@@ -1,6 +1,6 @@
 {
   "name": "milens",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Lightweight Code Intelligence Platform — analyze codebases and build knowledge graphs",
   "type": "module",
   "bin": {
@@ -18,7 +18,7 @@
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run build && npm test",
-    "self-analyze": "tsx src/cli.ts analyze -p . --force --verbose",
+    "self-analyze": "tsx src/cli.ts analyze -p . --force --verbose --skills",
     "self-serve": "tsx src/cli.ts serve -p . --http --port 3100"
   },
   "keywords": [

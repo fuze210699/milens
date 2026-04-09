@@ -1,7 +1,6 @@
 ---
-description: Code intelligence for server area
-globs: src/server/**
-alwaysApply: false
+paths:
+  - "src/server/**"
 ---
 
 # Server

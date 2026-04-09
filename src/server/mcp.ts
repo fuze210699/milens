@@ -50,15 +50,25 @@ class LazyDb {
 
 // ── Compact formatters (token-efficient for AI agents) ──
 
-function fmtSymbol(s: { id?: string; name: string; kind: string; filePath: string; startLine: number }) {
-  return `${s.name} [${s.kind}] ${s.filePath}:${s.startLine}`;
+type DetailLevel = 'L0' | 'L1' | 'L2';
+
+function fmtSymbol(s: { id?: string; name: string; kind: string; filePath: string; startLine: number; role?: string; heat?: number }, detail: DetailLevel = 'L1') {
+  const base = `${s.name} [${s.kind}] ${s.filePath}:${s.startLine}`;
+  if (detail === 'L0') return `${s.name} [${s.kind}]`;
+  if (detail === 'L2') {
+    const meta: string[] = [];
+    if (s.role) meta.push(s.role);
+    if (s.heat != null && s.heat > 0) meta.push(`heat:${s.heat}`);
+    return meta.length > 0 ? `${base} {${meta.join(',')}}` : base;
+  }
+  return base;
 }
 
-function fmtImpact(items: Array<{ symbol: any; depth: number; via: string }>) {
+function fmtImpact(items: Array<{ symbol: any; depth: number; via: string }>, detail: DetailLevel = 'L1') {
   const grouped = new Map<number, string[]>();
   for (const { symbol, depth, via } of items) {
     const arr = grouped.get(depth) ?? [];
-    arr.push(`${fmtSymbol(symbol)} (${via})`);
+    arr.push(`${fmtSymbol(symbol, detail)} (${via})`);
     grouped.set(depth, arr);
   }
   const lines: string[] = [];
@@ -200,46 +210,25 @@ function loadGrepIgnoreRules(rootPath: string): ReturnType<typeof ignore> {
 
 // ── Server instructions (sent to client via MCP protocol on initialize) ──
 
-const MILENS_INSTRUCTIONS = `milens is a code intelligence engine. It indexes codebases into knowledge graphs and provides tools for navigating and understanding code.
+const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codebases into symbol graphs.
 
-## Critical Workflow Rules
+## Tool selection
+- \`query\` — find symbol definitions (code identifiers only)
+- \`grep\` — text search ALL files (templates, configs, styles, docs)
+- \`context\` — 360° view: incoming + outgoing for a symbol
+- \`impact\` — blast radius: what breaks if symbol changes
+- \`overview\` — combined context + impact + grep in one call (preferred for editing workflows)
+- \`detect_changes\` — git diff → affected symbols
+- \`explain_relationship\` — shortest path between two symbols
+- \`find_dead_code\` — unused exports
+- \`get_file_symbols\` — all symbols in a file
+- \`get_type_hierarchy\` — inheritance tree
 
-### Always combine \`impact\` with \`grep\`
-\`impact\` only tracks code-level symbol dependencies (calls, imports, extends).
-\`grep\` finds ALL text references including templates, styles, configs, routes, and docs.
-**After running \`impact\`, always run \`grep\` for the same symbol to catch non-code references.**
-
-### Before editing a symbol
-1. Run \`context\` to see all incoming/outgoing relationships
-2. Run \`impact\` with direction "upstream" to find what depends on it
-3. Run \`grep\` to find ALL text references (templates, SCSS, configs, routes, docs)
-
-### When deleting a feature or renaming
-1. Run \`grep\` first — finds every text occurrence across all file types
-2. Run \`impact\` — finds code-level dependency graph
-3. Combine both results — grep catches what impact misses and vice versa
-
-### Tool selection guide
-- **Find symbol definitions** → \`query\`
-- **Find ALL text references** (templates, styles, configs, docs) → \`grep\`
-- **Understand a symbol's relationships** → \`context\`
-- **What breaks if I change this?** → \`impact\` (upstream) + \`grep\`
-- **What does this call/depend on?** → \`impact\` (downstream)
-- **How are two symbols connected?** → \`explain_relationship\`
-- **What changed recently?** → \`detect_changes\`
-- **Find unused exports** → \`find_dead_code\`
-- **See all symbols in a file** → \`get_file_symbols\`
-- **Class inheritance tree** → \`get_type_hierarchy\`
-
-### \`query\` vs \`grep\` — choosing correctly on first call
-- If the search term contains **spaces** or looks like a **UI label/display string** → use \`grep\`
-- If the search term is **camelCase/PascalCase/snake_case** (a code identifier) → use \`query\`
-- When in doubt → use \`grep\` first (it searches everything)
-
-### Impact depth guide
-- depth 1: WILL BREAK — direct callers/importers → must update
-- depth 2: LIKELY AFFECTED — indirect dependents → should test
-- depth 3: MAY NEED TESTING — transitive → test if critical path
+## Rules
+- Before editing a symbol: run \`overview\` or \`impact\`(upstream) + \`grep\`
+- \`impact\` only tracks code deps — always pair with \`grep\` for templates/configs
+- Use \`query\` for camelCase/PascalCase identifiers, \`grep\` for display text or multi-word strings
+- impact depth: 1=WILL BREAK, 2=LIKELY AFFECTED, 3=MAY NEED TESTING
 `;
 
 // ── Server setup ──
@@ -249,11 +238,23 @@ export function createMcpServer(rootPath?: string): McpServer {
   const pools = new Map<string, LazyDb>();
 
   function resolveRoot(repoPath?: string): string {
-    const root = resolve(repoPath ?? rootPath ?? '.');
-    // Prevent path traversal — repo must be registered in the index
-    const entry = registry.findByRoot(root);
-    if (!entry) throw new Error(`No index for ${root}. Run \`milens analyze\` first.`);
-    return root;
+    if (repoPath) {
+      const root = resolve(repoPath);
+      const entry = registry.findByRoot(root);
+      if (!entry) throw new Error(`No index for ${root}. Run \`milens analyze\` first.`);
+      return root;
+    }
+    if (rootPath) {
+      const root = resolve(rootPath);
+      const entry = registry.findByRoot(root);
+      if (!entry) throw new Error(`No index for ${root}. Run \`milens analyze\` first.`);
+      return root;
+    }
+    // Auto-resolve: if exactly 1 repo is indexed, use it
+    const all = registry.listAll();
+    if (all.length === 1) return all[0].rootPath;
+    if (all.length === 0) throw new Error('No indexed repositories. Run `milens analyze` first.');
+    throw new Error(`Multiple repos indexed (${all.length}). Specify \`repo\` parameter.`);
   }
 
   function getDb(repoPath?: string): { db: Database; root: string } {
@@ -273,8 +274,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: query ──
   server.tool(
     'query',
-    'Search indexed symbol definitions (functions, classes, exports) by name, kind, or file path. ' +
-    'Only finds symbols in indexed code files. For text references in templates, SCSS, configs, or docs, use `grep` instead.',
+    'Search indexed symbol definitions by name/kind. For text in templates/configs/docs, use `grep`.',
     {
       query: z.string().describe('Symbol name, kind, or keyword to search'),
       repo: z.string().optional().describe('Repository root path (optional if only one indexed)'),
@@ -284,7 +284,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const { db } = getDb(repo);
       const results = db.searchSymbols(query, limit);
       if (results.length === 0) {
-        return { content: [{ type: 'text' as const, text: `No symbols matching "${query}". NOTE: query only searches indexed symbol definitions. Use \`grep\` to search ALL project files (templates, styles, configs, docs).` }] };
+        return { content: [{ type: 'text' as const, text: `No symbols matching "${query}". Try \`grep\` for non-code references.` }] };
       }
       const text = results.map(s => fmtSymbol(s)).join('\n');
       return { content: [{ type: 'text' as const, text }] };
@@ -294,9 +294,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: grep ──
   server.tool(
     'grep',
-    'Text search across ALL project files (templates, styles, configs, docs, routes, etc.). ' +
-    'Unlike `query` which only searches indexed symbol definitions, grep finds every text occurrence. ' +
-    'Essential for: deleting features, renaming across templates/SCSS/configs, finding route/config references.',
+    'Text search ALL project files (templates, styles, configs, docs). Finds every text occurrence, not just symbols.',
     {
       pattern: z.string().describe('Text or regex pattern to search for'),
       repo: z.string().optional().describe('Repository root path (optional)'),
@@ -342,37 +340,40 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: context ──
   server.tool(
     'context',
-    'Get 360° context of a symbol: incoming refs, outgoing deps, parent, children.',
+    'Symbol 360°: incoming refs + outgoing deps. Use `overview` for combined context+impact+grep.',
     {
       name: z.string().describe('Symbol name to inspect'),
       repo: z.string().optional(),
+      detail: z.enum(['L0', 'L1', 'L2']).optional().default('L1').describe('Output detail: L0=names only, L1=default, L2=full metadata'),
     },
-    async ({ name, repo }) => {
+    async ({ name, repo, detail }) => {
       const { db } = getDb(repo);
       const symbols = db.findSymbolByName(name);
       if (symbols.length === 0) {
-        return { content: [{ type: 'text' as const, text: `Symbol "${name}" not found in index. Use \`grep\` to search ALL project files for text references.` }] };
+        return { content: [{ type: 'text' as const, text: `"${name}" not found. Try \`grep\`.` }] };
       }
 
       const lines: string[] = [];
       for (const sym of symbols) {
-        lines.push(`## ${fmtSymbol(sym)}${sym.exported ? ' (exported)' : ''}`);
+        lines.push(`## ${fmtSymbol(sym, detail)}${sym.exported ? ' (exported)' : ''}`);
 
         const incoming = db.getIncomingLinks(sym.id);
         if (incoming.length > 0) {
           lines.push('incoming:');
-          for (const l of incoming) {
-            const from = db.findSymbolById(l.fromId);
-            lines.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
+          const inSyms = incoming.map(l => ({ link: l, sym: db.findSymbolById(l.fromId) }));
+          if (detail === 'L2') inSyms.sort((a, b) => ((b.sym as any)?.heat ?? 0) - ((a.sym as any)?.heat ?? 0));
+          for (const { link: l, sym: from } of inSyms) {
+            lines.push(`  ${l.type}: ${from ? fmtSymbol(from, detail) : l.fromId}`);
           }
         }
 
         const outgoing = db.getOutgoingLinks(sym.id);
         if (outgoing.length > 0) {
           lines.push('outgoing:');
-          for (const l of outgoing) {
-            const to = db.findSymbolById(l.toId);
-            lines.push(`  ${l.type}: ${to ? fmtSymbol(to) : l.toId}`);
+          const outSyms = outgoing.map(l => ({ link: l, sym: db.findSymbolById(l.toId) }));
+          if (detail === 'L2') outSyms.sort((a, b) => ((b.sym as any)?.heat ?? 0) - ((a.sym as any)?.heat ?? 0));
+          for (const { link: l, sym: to } of outSyms) {
+            lines.push(`  ${l.type}: ${to ? fmtSymbol(to, detail) : l.toId}`);
           }
         }
         lines.push('');
@@ -385,34 +386,33 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: impact ──
   server.tool(
     'impact',
-    'Blast radius analysis via symbol dependency graph. Shows what code-level symbols break if a symbol changes. ' +
-    'Note: only tracks code dependencies (calls, imports, extends). For template/SCSS/config references, also use `grep`.',
+    'Blast radius: what symbols break if target changes. Code deps only — pair with `grep` for templates/configs.',
     {
       target: z.string().describe('Symbol name to analyze'),
       direction: z.enum(['upstream', 'downstream']).default('upstream'),
       depth: z.number().optional().default(3),
       repo: z.string().optional(),
+      detail: z.enum(['L0', 'L1', 'L2']).optional().default('L1').describe('Output detail: L0=names only, L1=default, L2=full metadata'),
     },
-    async ({ target, direction, depth, repo }) => {
+    async ({ target, direction, depth, repo, detail }) => {
       const { db } = getDb(repo);
       const symbols = db.findSymbolByName(target);
       if (symbols.length === 0) {
-        return { content: [{ type: 'text' as const, text: `Symbol "${target}" not found in index. Use \`grep\` to search ALL project files for text references.` }] };
+        return { content: [{ type: 'text' as const, text: `"${target}" not found. Try \`grep\`.` }] };
       }
 
       const lines: string[] = [];
       for (const sym of symbols) {
-        lines.push(`TARGET: ${fmtSymbol(sym)}`);
+        lines.push(`TARGET: ${fmtSymbol(sym, detail)}`);
         const refs = direction === 'upstream'
           ? db.findUpstream(sym.id, depth)
           : db.findDownstream(sym.id, depth);
 
         if (refs.length === 0) {
-          lines.push(`No ${direction} dependencies found in symbol graph. IMPORTANT: Also run \`grep\` for "${target}" to find references in templates, styles, configs, routes, and docs that are not tracked by impact analysis.`);
+          lines.push(`No ${direction} deps found.`);
         } else {
           lines.push(`${direction} (${refs.length} symbols):`);
-          lines.push(fmtImpact(refs));
-          lines.push(`\nNOTE: impact only tracks code-level dependencies. Also run \`grep\` for "${target}" to find template/style/config/doc references.`);
+          lines.push(fmtImpact(refs, detail));
         }
         lines.push('');
       }
@@ -424,7 +424,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: status ──
   server.tool(
     'status',
-    'Show index stats for a repository.',
+    'Index stats for a repository.',
     {
       repo: z.string().optional(),
     },
@@ -436,10 +436,93 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
+  // ── Tool: overview ──
+  server.tool(
+    'overview',
+    'Combined context + impact + grep in ONE call. Preferred before editing/deleting/renaming a symbol. Saves 2-3 round trips.',
+    {
+      name: z.string().describe('Symbol name'),
+      repo: z.string().optional(),
+      depth: z.number().optional().default(2).describe('Impact traversal depth (default: 2)'),
+      detail: z.enum(['L0', 'L1', 'L2']).optional().default('L1').describe('Output detail level'),
+    },
+    async ({ name, repo, depth, detail }) => {
+      const { db, root } = getDb(repo);
+      const symbols = db.findSymbolByName(name);
+      const sections: string[] = [];
+
+      // Section 1: Symbol definitions
+      if (symbols.length === 0) {
+        sections.push(`[symbol] "${name}" not found in index.`);
+      } else {
+        for (const sym of symbols) {
+          sections.push(`[symbol] ${fmtSymbol(sym, detail)}${sym.exported ? ' (exported)' : ''}`);
+        }
+      }
+
+      // Section 2: Context (incoming + outgoing) for each symbol
+      if (symbols.length > 0) {
+        for (const sym of symbols) {
+          const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+          const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+
+          if (incoming.length > 0) {
+            sections.push(`[incoming] ${incoming.length} refs:`);
+            const inSyms = incoming.map(l => {
+              const s = db.findSymbolById(l.fromId);
+              return s ? `  ${l.type}: ${fmtSymbol(s, detail)}` : `  ${l.type}: ${l.fromId}`;
+            });
+            sections.push(...inSyms);
+          }
+
+          if (outgoing.length > 0) {
+            sections.push(`[outgoing] ${outgoing.length} deps:`);
+            const outSyms = outgoing.map(l => {
+              const s = db.findSymbolById(l.toId);
+              return s ? `  ${l.type}: ${fmtSymbol(s, detail)}` : `  ${l.type}: ${l.toId}`;
+            });
+            sections.push(...outSyms);
+          }
+        }
+
+        // Section 3: Impact (upstream)
+        for (const sym of symbols) {
+          const upstream = db.findUpstream(sym.id, depth);
+          if (upstream.length > 0) {
+            sections.push(`[impact] ${upstream.length} upstream deps:`);
+            sections.push(fmtImpact(upstream, detail));
+          } else {
+            sections.push(`[impact] No upstream deps.`);
+          }
+        }
+      }
+
+      // Section 4: Grep (text references across all files)
+      const grepMatches = grepFiles(root, name, { maxResults: 20 });
+      if (grepMatches.length > 0) {
+        const grouped = new Map<string, { line: number; text: string }[]>();
+        for (const m of grepMatches) {
+          const arr = grouped.get(m.file) ?? [];
+          arr.push({ line: m.line, text: m.text });
+          grouped.set(m.file, arr);
+        }
+        sections.push(`[grep] ${grepMatches.length} text matches in ${grouped.size} files:`);
+        for (const [file, hits] of grouped) {
+          sections.push(`  ${file}`);
+          for (const h of hits) sections.push(`    L${h.line}: ${h.text}`);
+        }
+      } else {
+        sections.push(`[grep] No text matches.`);
+      }
+
+      return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
+    },
+  );
+
   // ── Tool: detect_changes ──
   server.tool(
     'detect_changes',
-    'Detect changed files via git diff and find affected symbols with upstream impact.',
+    'Git diff → affected symbols + direct dependents.',
     {
       ref: z.string().optional().default('HEAD').describe('Git ref to diff against (default: HEAD)'),
       repo: z.string().optional(),
@@ -488,7 +571,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: explain_relationship ──
   server.tool(
     'explain_relationship',
-    'Explain how two symbols are connected. Finds the shortest path in the dependency graph.',
+    'Shortest dependency path between two symbols.',
     {
       from: z.string().describe('Source symbol name'),
       to: z.string().describe('Target symbol name'),
@@ -498,7 +581,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const { db } = getDb(repo);
       const path = db.findPath(from, to);
       if (!path) {
-        return { content: [{ type: 'text' as const, text: `No relationship found between "${from}" and "${to}" in the symbol graph. Use \`grep\` to search for text references that may connect them.` }] };
+        return { content: [{ type: 'text' as const, text: `No path between "${from}" and "${to}".` }] };
       }
 
       const fromSym = db.findSymbolByName(from)[0];
@@ -513,7 +596,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: find_dead_code ──
   server.tool(
     'find_dead_code',
-    'Find exported symbols with zero incoming references (potentially unused code).',
+    'Exported symbols with zero incoming references (potentially unused).',
     {
       kind: z.string().optional().describe('Filter by symbol kind (function, class, method, etc.)'),
       limit: z.number().optional().default(30),
@@ -536,23 +619,40 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: get_file_symbols ──
   server.tool(
     'get_file_symbols',
-    'List all symbols defined in a specific file with their relationships.',
+    'All symbols in a file with ref/dep counts.',
     {
       file: z.string().describe('File path (relative to repo root)'),
       repo: z.string().optional(),
+      detail: z.enum(['L0', 'L1', 'L2']).optional().default('L1').describe('Output detail: L0=names only, L1=default, L2=full metadata'),
     },
-    async ({ file, repo }) => {
+    async ({ file, repo, detail }) => {
       const { db } = getDb(repo);
       const symbols = db.getSymbolsByFile(file);
       if (symbols.length === 0) {
         return { content: [{ type: 'text' as const, text: `No symbols found in "${file}". Is the path relative to repo root?` }] };
       }
+
+      // Sort by heat descending in L2 mode for relevance-first output
+      const sorted = detail === 'L2'
+        ? [...symbols].sort((a, b) => ((b as any).heat ?? 0) - ((a as any).heat ?? 0))
+        : symbols;
+
       const lines: string[] = [`${file}: ${symbols.length} symbols\n`];
-      for (const sym of symbols) {
+      for (const sym of sorted) {
         const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
         const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
         const exp = sym.exported ? ' (exported)' : '';
-        lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp} ← ${incoming.length} refs, → ${outgoing.length} deps`);
+        if (detail === 'L0') {
+          lines.push(`${sym.name} [${sym.kind}]${exp}`);
+        } else if (detail === 'L2') {
+          const meta: string[] = [];
+          if (sym.role) meta.push(sym.role);
+          if (sym.heat != null && sym.heat > 0) meta.push(`heat:${sym.heat}`);
+          const metaStr = meta.length > 0 ? ` {${meta.join(',')}}` : '';
+          lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp}${metaStr} ← ${incoming.length} refs, → ${outgoing.length} deps`);
+        } else {
+          lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp} ← ${incoming.length} refs, → ${outgoing.length} deps`);
+        }
       }
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },
@@ -561,7 +661,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: get_type_hierarchy ──
   server.tool(
     'get_type_hierarchy',
-    'Show the inheritance/implementation hierarchy of a class, interface, or trait.',
+    'Inheritance/implementation tree for a class, interface, or trait.',
     {
       name: z.string().describe('Symbol name to show hierarchy for'),
       repo: z.string().optional(),
@@ -570,7 +670,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const { db } = getDb(repo);
       const symbols = db.findSymbolByName(name);
       if (symbols.length === 0) {
-        return { content: [{ type: 'text' as const, text: `Symbol "${name}" not found in index. Use \`grep\` to search ALL project files for text references.` }] };
+        return { content: [{ type: 'text' as const, text: `"${name}" not found. Try \`grep\`.` }] };
       }
 
       const lines: string[] = [];
@@ -586,14 +686,14 @@ export function createMcpServer(rootPath?: string): McpServer {
         }
 
         if (descendants.length > 0) {
-          lines.push('implemented/extended by:');
+          lines.push('extended/implemented by:');
           for (const { symbol: d, depth } of descendants) {
             lines.push(`  ${'↓'.repeat(depth)} ${fmtSymbol(d)}`);
           }
         }
 
         if (ancestors.length === 0 && descendants.length === 0) {
-          lines.push('No inheritance relationships found.');
+          lines.push('No inheritance relationships.');
         }
         lines.push('');
       }

@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS symbols (
   end_line    INTEGER,
   exported    INTEGER DEFAULT 0,
   parent_id   TEXT,
-  signature   TEXT
+  signature   TEXT,
+  role        TEXT,
+  heat        INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS links (
@@ -24,7 +26,8 @@ CREATE TABLE IF NOT EXISTS links (
 CREATE TABLE IF NOT EXISTS file_hashes (
   path        TEXT PRIMARY KEY,
   hash        TEXT NOT NULL,
-  analyzed_at TEXT NOT NULL DEFAULT (datetime('now'))
+  analyzed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  zone        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS meta (

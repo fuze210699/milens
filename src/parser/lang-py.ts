@@ -37,7 +37,7 @@ const spec: LangSpec = {
     )`,
     calls: `[
       (call function: (identifier) @callee) @def
-      (call function: (attribute attribute: (identifier) @callee)) @def
+      (call function: (attribute object: (_) @receiver attribute: (identifier) @callee)) @def
       (decorator (identifier) @callee) @def
       (decorator (call function: (identifier) @callee)) @def
     ]`,

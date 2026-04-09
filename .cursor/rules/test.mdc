@@ -16,9 +16,9 @@ Contains 23 symbols (4 exported) across 7 files.
 - **`User`** [interface] (test/fixtures/ts-project/src/models.ts:1) — 0 refs
 
 ## Entry Points
+- **`createUser`** [function] — 1 incoming references
 - **`handleClick`** [function] — 1 incoming references
 - **`onSubmit`** [function] — 1 incoming references
-- **`createUser`** [function] — 1 incoming references
 - **`NewUser`** [function] — 1 incoming references
 - **`create_user`** [function] — 1 incoming references
 

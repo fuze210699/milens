@@ -29,8 +29,14 @@ export class Database {
          ON CONFLICT(path) DO UPDATE SET hash = excluded.hash, analyzed_at = datetime('now')`
       ),
       insertSym: this.db.prepare(
-        `INSERT OR REPLACE INTO symbols (id, name, kind, file_path, start_line, end_line, exported, parent_id, signature)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT OR REPLACE INTO symbols (id, name, kind, file_path, start_line, end_line, exported, parent_id, signature, role, heat)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ),
+      updateMeta: this.db.prepare(
+        `UPDATE symbols SET role = ?, heat = ? WHERE id = ?`
+      ),
+      upsertZone: this.db.prepare(
+        `UPDATE file_hashes SET zone = ? WHERE path = ?`
       ),
       insertLink: this.db.prepare(
         `INSERT OR REPLACE INTO links (id, from_id, to_id, type, confidence, line_number)
@@ -85,6 +91,19 @@ export class Database {
       sql = readFileSync(join(__dirname, '..', '..', 'src', 'store', 'schema.sql'), 'utf-8');
     }
     this.db.exec(sql);
+    this.migrateSchema();
+  }
+
+  private migrateSchema(): void {
+    // Add columns introduced after initial schema (safe to re-run)
+    const cols = this.db.prepare(`PRAGMA table_info(symbols)`).all() as any[];
+    const colNames = new Set(cols.map((c: any) => c.name));
+    if (!colNames.has('role')) this.db.exec(`ALTER TABLE symbols ADD COLUMN role TEXT`);
+    if (!colNames.has('heat')) this.db.exec(`ALTER TABLE symbols ADD COLUMN heat INTEGER DEFAULT 0`);
+
+    const fhCols = this.db.prepare(`PRAGMA table_info(file_hashes)`).all() as any[];
+    const fhNames = new Set(fhCols.map((c: any) => c.name));
+    if (!fhNames.has('zone')) this.db.exec(`ALTER TABLE file_hashes ADD COLUMN zone TEXT`);
   }
 
   // ── File hash tracking ──
@@ -107,6 +126,7 @@ export class Database {
       sym.id, sym.name, sym.kind, sym.filePath,
       sym.startLine, sym.endLine, sym.exported ? 1 : 0,
       sym.parentId ?? null, sym.signature ?? null,
+      sym.role ?? null, sym.heat ?? 0,
     );
   }
 
@@ -115,6 +135,14 @@ export class Database {
       link.id, link.fromId, link.toId, link.type,
       link.confidence, link.line ?? null,
     );
+  }
+
+  updateSymbolMetadata(id: string, role: string, heat: number): void {
+    this.stmts.updateMeta.run(role, heat, id);
+  }
+
+  setFileZone(filePath: string, zone: string): void {
+    this.stmts.upsertZone.run(zone, filePath);
   }
 
   // ── Queries ──
@@ -313,6 +341,8 @@ function rowToSymbol(row: any): CodeSymbol {
     exported: row.exported === 1,
     parentId: row.parent_id ?? undefined,
     signature: row.signature ?? undefined,
+    role: row.role ?? undefined,
+    heat: row.heat ?? undefined,
   };
 }
 

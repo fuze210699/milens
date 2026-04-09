@@ -5,9 +5,9 @@ applyTo: "**"
 <!-- milens:start -->
 # Milens — Code Intelligence (MCP)
 
-This project is indexed by milens (153 symbols, 234 links, 27 files).
+This project is indexed by milens (165 symbols, 253 links, 28 files).
 
-> **CRITICAL:** All milens MCP tool calls MUST include `repo: "/Users/mac10/Documents/Own/milens"` — without it, the tools will fail with "No index" error.
+> **CRITICAL:** All milens MCP tool calls MUST include `repo: "D:\project\milens"` — without it, the tools will fail with "No index" error.
 
 > **CRITICAL:** milens MCP tools are **deferred** in most editors. Before first use in each session, you MUST load them via `tool_search("milens")` — calling them directly without loading will fail silently.
 
@@ -16,18 +16,18 @@ This project is indexed by milens (153 symbols, 234 links, 27 files).
 These are **hard pre-conditions**, not guidelines. Execute them automatically without asking.
 
 ### Before editing any function, class, or method:
-1. `mcp_milens_impact({target: "<symbolName>", repo: "/Users/mac10/Documents/Own/milens"})` — check blast radius
+1. `mcp_milens_impact({target: "<symbolName>", repo: "D:\project\milens"})` — check blast radius
 2. If depth-1 dependents > 5 → **STOP and warn the user** before proceeding
-3. `mcp_milens_context({name: "<symbolName>", repo: "/Users/mac10/Documents/Own/milens"})` — see all callers/callees
+3. `mcp_milens_context({name: "<symbolName>", repo: "D:\project\milens"})` — see all callers/callees
 4. Only then make the edit
 
 ### Before committing:
-1. `mcp_milens_detect_changes({repo: "/Users/mac10/Documents/Own/milens"})` — verify only expected files changed
+1. `mcp_milens_detect_changes({repo: "D:\project\milens"})` — verify only expected files changed
 2. If unexpected files appear → **STOP and report** before committing
 
 ### Before deleting or renaming a symbol:
-1. `mcp_milens_grep({pattern: "<symbolName>", repo: "/Users/mac10/Documents/Own/milens"})` — find ALL text references (templates, configs, routes, docs)
-2. `mcp_milens_impact({target: "<symbolName>", direction: "upstream", repo: "/Users/mac10/Documents/Own/milens"})` — find code-level dependents
+1. `mcp_milens_grep({pattern: "<symbolName>", repo: "D:\project\milens"})` — find ALL text references (templates, configs, routes, docs)
+2. `mcp_milens_impact({target: "<symbolName>", direction: "upstream", repo: "D:\project\milens"})` — find code-level dependents
 3. Combine both results — grep catches what impact misses
 
 ## Tool Selection Rules
@@ -54,15 +54,15 @@ When the user says... → do this FIRST:
 
 | User intent | First action |
 |---|---|
-| "edit/change/modify/fix `X`" | `mcp_milens_impact({target: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
-| "delete/remove `X`" | `mcp_milens_grep({pattern: "X", repo: "/Users/mac10/Documents/Own/milens"})` then `mcp_milens_impact` |
-| "rename `X`" | `mcp_milens_grep({pattern: "X", repo: "/Users/mac10/Documents/Own/milens"})` then `mcp_milens_impact` |
+| "edit/change/modify/fix `X`" | `mcp_milens_impact({target: "X", repo: "D:\project\milens"})` |
+| "delete/remove `X`" | `mcp_milens_grep({pattern: "X", repo: "D:\project\milens"})` then `mcp_milens_impact` |
+| "rename `X`" | `mcp_milens_grep({pattern: "X", repo: "D:\project\milens"})` then `mcp_milens_impact` |
 | "find/search for `X`" | Choose `query` or `grep` per rules above |
-| "commit" / "push" | `mcp_milens_detect_changes({repo: "/Users/mac10/Documents/Own/milens"})` |
-| "what calls/uses `X`" | `mcp_milens_context({name: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
-| "what happens if I change `X`" | `mcp_milens_impact({target: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
-| "how are `A` and `B` connected" | `mcp_milens_explain_relationship({from: "A", to: "B", repo: "/Users/mac10/Documents/Own/milens"})` |
-| "explore/understand `X`" | `mcp_milens_context({name: "X", repo: "/Users/mac10/Documents/Own/milens"})` |
+| "commit" / "push" | `mcp_milens_detect_changes({repo: "D:\project\milens"})` |
+| "what calls/uses `X`" | `mcp_milens_context({name: "X", repo: "D:\project\milens"})` |
+| "what happens if I change `X`" | `mcp_milens_impact({target: "X", repo: "D:\project\milens"})` |
+| "how are `A` and `B` connected" | `mcp_milens_explain_relationship({from: "A", to: "B", repo: "D:\project\milens"})` |
+| "explore/understand `X`" | `mcp_milens_context({name: "X", repo: "D:\project\milens"})` |
 
 ## Never Do
 

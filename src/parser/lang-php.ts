@@ -23,14 +23,15 @@ const spec: LangSpec = {
         (include_expression (string (string_content) @source))
       ) @def
     ]`,
-    calls: `
+    calls: `[
       (function_call_expression
         function: (name) @callee
       ) @def
       (member_call_expression
+        object: (_) @receiver
         name: (name) @callee
       ) @def
-    `,
+    ]`,
     heritage: `[
       (class_declaration
         name: (name) @child

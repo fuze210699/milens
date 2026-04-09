@@ -14,7 +14,11 @@ export interface CodeSymbol {
   exported: boolean;
   parentId?: string;
   signature?: string;
+  role?: SymbolRole;
+  heat?: number;
 }
+
+export type SymbolRole = 'entrypoint' | 'hub' | 'utility' | 'leaf' | 'datatype';
 
 export type LinkType = 'imports' | 'calls' | 'extends' | 'implements' | 'contains';
 

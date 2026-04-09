@@ -47,10 +47,10 @@ const spec: LangSpec = {
         (export_clause (export_specifier name: (identifier) @name))
       )
     ]`,
-    calls: `
+    calls: `[
       (call_expression function: (identifier) @callee) @def
-      (call_expression function: (member_expression property: (property_identifier) @callee)) @def
-    `,
+      (call_expression function: (member_expression object: (_) @receiver property: (property_identifier) @callee)) @def
+    ]`,
     heritage: `(class_declaration
       name: (identifier) @child
       (class_heritage (identifier) @parent)

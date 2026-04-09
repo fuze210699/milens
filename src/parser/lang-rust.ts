@@ -32,7 +32,7 @@ const spec: LangSpec = {
     calls: `[
       (call_expression function: (identifier) @callee) @def
       (call_expression function: (scoped_identifier name: (identifier) @callee)) @def
-      (call_expression function: (field_expression field: (field_identifier) @callee)) @def
+      (call_expression function: (field_expression value: (_) @receiver field: (field_identifier) @callee)) @def
       (macro_invocation macro: (identifier) @callee) @def
     ]`,
     heritage: `(impl_item

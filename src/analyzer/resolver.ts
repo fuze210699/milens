@@ -1,3 +1,4 @@
+import { dirname } from 'node:path';
 import type { CodeSymbol, SymbolLink, RawImport, RawCall, RawHeritage, LinkType } from '../types.js';
 
 interface ResolutionInput {
@@ -12,6 +13,7 @@ interface ResolutionInput {
 export function resolveLinks(input: ResolutionInput): SymbolLink[] {
   const links: SymbolLink[] = [];
   const symbolByName = buildNameIndex(input.allSymbols);
+  const symbolById = buildIdIndex(input.allSymbols);
 
   // Build imported names per file: file → (name → targetFile)
   const importedNamesPerFile = new Map<string, Map<string, string>>();
@@ -28,6 +30,16 @@ export function resolveLinks(input: ResolutionInput): SymbolLink[] {
     }
   }
 
+  // Build set of files directly imported by each file (for proximity scoring)
+  const directImportsPerFile = new Map<string, Set<string>>();
+  for (const imp of input.imports) {
+    const targetFile = input.resolvedImportPaths.get(`${imp.filePath}::${imp.modulePath}`);
+    if (!targetFile) continue;
+    let s = directImportsPerFile.get(imp.filePath);
+    if (!s) { s = new Set(); directImportsPerFile.set(imp.filePath, s); }
+    s.add(targetFile);
+  }
+
   // ── Resolve imports ──
   for (const imp of input.imports) {
     const targetFile = input.resolvedImportPaths.get(`${imp.filePath}::${imp.modulePath}`);
@@ -36,7 +48,6 @@ export function resolveLinks(input: ResolutionInput): SymbolLink[] {
     const targetSymbols = input.symbolsByFile.get(targetFile);
     if (!targetSymbols) continue;
 
-    // Find the importing symbol (file-level or specific)
     const fromId = `${imp.filePath}#module:_top:0`;
 
     if (imp.names.length > 0) {
@@ -47,27 +58,42 @@ export function resolveLinks(input: ResolutionInput): SymbolLink[] {
         }
       }
     } else {
-      // Wildcard or default import — link to file module
-      const target = targetSymbols.find(s => s.exported);
-      if (target) {
-        links.push(makeLink(fromId, target.id, 'imports', 0.7, imp.line));
+      // Wildcard or default import — link to ALL exported symbols
+      const exported = targetSymbols.filter(s => s.exported);
+      for (const target of exported) {
+        links.push(makeLink(fromId, target.id, 'imports', 0.65, imp.line));
       }
     }
   }
 
-  // ── Resolve calls (import-aware) ──
+  // ── Resolve calls (receiver-aware + proximity scoring) ──
   for (const call of input.calls) {
     const candidates = symbolByName.get(call.calleeName);
     if (!candidates || candidates.length === 0) continue;
 
-    // Priority: same file > imported symbol > unique global > ambiguous
+    // Fast path: unique name globally
+    if (candidates.length === 1) {
+      links.push(makeLink(call.enclosingSymbolId, candidates[0].id, 'calls', 0.9, call.line));
+      continue;
+    }
+
+    // ── Receiver-aware narrowing (highest priority for member calls) ──
+    if (call.receiver) {
+      const narrowed = narrowByReceiver(call, candidates, symbolById, symbolByName, importedNamesPerFile, input.symbolsByFile);
+      if (narrowed) {
+        links.push(makeLink(call.enclosingSymbolId, narrowed.symbol.id, 'calls', narrowed.confidence, call.line));
+        continue;
+      }
+    }
+
+    // ── Same file match ──
     const sameFile = candidates.filter(s => s.filePath === call.filePath);
     if (sameFile.length > 0) {
       links.push(makeLink(call.enclosingSymbolId, sameFile[0].id, 'calls', 0.9, call.line));
       continue;
     }
 
-    // Check if callee was imported into this file
+    // ── Imported symbol match ──
     const fileImports = importedNamesPerFile.get(call.filePath);
     const importedFromFile = fileImports?.get(call.calleeName);
     if (importedFromFile) {
@@ -78,19 +104,25 @@ export function resolveLinks(input: ResolutionInput): SymbolLink[] {
       }
     }
 
-    const match = candidates[0];
-    const confidence = candidates.length === 1 ? 0.8 : 0.5;
-    links.push(makeLink(call.enclosingSymbolId, match.id, 'calls', confidence, call.line));
+    // ── Proximity scoring fallback (replaces blind candidates[0]) ──
+    const best = scoreCandidates(call, candidates, directImportsPerFile);
+    links.push(makeLink(call.enclosingSymbolId, best.symbol.id, 'calls', best.confidence, call.line));
   }
 
-  // ── Resolve heritage (extends/implements) ──
+  // ── Resolve heritage (import-aware cross-file) ──
   for (const h of input.heritage) {
     const children = symbolByName.get(h.childName);
     const parents = symbolByName.get(h.parentName);
     if (!children || !parents) continue;
 
     const child = children.find(s => s.filePath === h.filePath) ?? children[0];
-    const parent = parents[0];
+
+    // Prefer imported parent > same-file parent > first match
+    const importedFile = importedNamesPerFile.get(h.filePath)?.get(h.parentName);
+    const parent = (importedFile ? parents.find(s => s.filePath === importedFile) : undefined)
+      ?? parents.find(s => s.filePath === h.filePath)
+      ?? parents[0];
+
     if (child && parent) {
       links.push(makeLink(child.id, parent.id, h.type, 0.95, h.line));
     }
@@ -106,6 +138,95 @@ export function resolveLinks(input: ResolutionInput): SymbolLink[] {
   return deduplicateLinks(links);
 }
 
+// ── Receiver-aware call narrowing ──
+
+function narrowByReceiver(
+  call: RawCall,
+  candidates: CodeSymbol[],
+  symbolById: Map<string, CodeSymbol>,
+  symbolByName: Map<string, CodeSymbol[]>,
+  importedNamesPerFile: Map<string, Map<string, string>>,
+  symbolsByFile: Map<string, CodeSymbol[]>,
+): { symbol: CodeSymbol; confidence: number } | null {
+  const receiver = call.receiver!;
+
+  // Strategy 1: this/self → method of enclosing class
+  if (receiver === 'this' || receiver === 'self') {
+    const enclosing = symbolById.get(call.enclosingSymbolId);
+    const parentId = enclosing?.parentId;
+    if (parentId) {
+      const method = candidates.find(c => c.parentId === parentId);
+      if (method) return { symbol: method, confidence: 0.95 };
+    }
+  }
+
+  // Strategy 2: receiver is an imported type name (static call or PascalCase)
+  const importedFile = importedNamesPerFile.get(call.filePath)?.get(receiver);
+  if (importedFile) {
+    const method = candidates.find(c => {
+      if (c.filePath !== importedFile) return false;
+      const parent = c.parentId ? symbolById.get(c.parentId) : null;
+      return parent?.name === receiver;
+    });
+    if (method) return { symbol: method, confidence: 0.92 };
+    // Fallback: any candidate from the imported file
+    const fromFile = candidates.find(c => c.filePath === importedFile);
+    if (fromFile) return { symbol: fromFile, confidence: 0.85 };
+  }
+
+  // Strategy 3: receiver → PascalCase naming convention (userService → UserService)
+  const pascal = receiver.charAt(0).toUpperCase() + receiver.slice(1);
+  const byConvention = candidates.find(c => {
+    const parent = c.parentId ? symbolById.get(c.parentId) : null;
+    return parent?.name === pascal;
+  });
+  if (byConvention) return { symbol: byConvention, confidence: 0.82 };
+
+  // Strategy 4: receiver matches a class in the same file
+  const localSymbols = symbolsByFile.get(call.filePath);
+  if (localSymbols) {
+    const localClass = localSymbols.find(s =>
+      (s.kind === 'class' || s.kind === 'struct' || s.kind === 'trait') &&
+      (s.name === receiver || s.name === pascal)
+    );
+    if (localClass) {
+      const method = candidates.find(c => c.parentId === localClass.id);
+      if (method) return { symbol: method, confidence: 0.90 };
+    }
+  }
+
+  return null;
+}
+
+// ── Proximity scoring for ambiguous calls ──
+
+function scoreCandidates(
+  call: RawCall,
+  candidates: CodeSymbol[],
+  directImportsPerFile: Map<string, Set<string>>,
+): { symbol: CodeSymbol; confidence: number } {
+  const callDir = dirname(call.filePath);
+  const imports = directImportsPerFile.get(call.filePath);
+  let best = candidates[0];
+  let bestScore = 0;
+
+  for (const c of candidates) {
+    let score: number;
+    if (c.filePath === call.filePath) {
+      score = 0.90;
+    } else if (imports?.has(c.filePath)) {
+      score = 0.85;
+    } else if (dirname(c.filePath) === callDir) {
+      score = 0.60;
+    } else {
+      score = 0.35;
+    }
+    if (score > bestScore) { bestScore = score; best = c; }
+  }
+
+  return { symbol: best, confidence: bestScore };
+}
+
 // ── Helpers ──
 
 function buildNameIndex(symbols: CodeSymbol[]): Map<string, CodeSymbol[]> {
@@ -118,6 +239,11 @@ function buildNameIndex(symbols: CodeSymbol[]): Map<string, CodeSymbol[]> {
   return index;
 }
 
+function buildIdIndex(symbols: CodeSymbol[]): Map<string, CodeSymbol> {
+  const index = new Map<string, CodeSymbol>();
+  for (const s of symbols) index.set(s.id, s);
+  return index;
+}
 
 function makeLink(fromId: string, toId: string, type: LinkType, confidence: number, line?: number): SymbolLink {
   return {

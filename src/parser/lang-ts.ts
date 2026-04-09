@@ -58,10 +58,10 @@ const spec: LangSpec = {
         declaration: (type_alias_declaration name: (type_identifier) @name)
       )
     ]`,
-    calls: `
+    calls: `[
       (call_expression function: (identifier) @callee) @def
-      (call_expression function: (member_expression property: (property_identifier) @callee)) @def
-    `,
+      (call_expression function: (member_expression object: (_) @receiver property: (property_identifier) @callee)) @def
+    ]`,
     heritage: `[
       (class_declaration
         name: (type_identifier) @child

@@ -6,6 +6,7 @@ import { getParser, loadLanguage } from '../parser/loader.js';
 import { extractFromTree, clearQueryCache } from '../parser/extract.js';
 import { extractVueScript, extractVueTemplateRefs } from '../parser/lang-vue.js';
 import { resolveLinks } from './resolver.js';
+import { enrichMetadata } from './enrich.js';
 import { Database } from '../store/db.js';
 import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, AnalysisStats } from '../types.js';
 import type Parser from 'web-tree-sitter';
@@ -120,7 +121,11 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   });
   if (opts.verbose) console.log(`[link] Resolved ${links.length} relationships`);
 
-  // Phase 6: Persist to database in single transaction
+  // Phase 6: Enrich — compute roles, heat, zones from resolved graph
+  const enriched = enrichMetadata({ symbols: allSymbols, links });
+  if (opts.verbose) console.log(`[enrich] Computed metadata for ${allSymbols.length} symbols, ${enriched.zones.size} zones`);
+
+  // Phase 7: Persist to database in single transaction
   db.transaction(() => {
     if (opts.force) {
       db.clearSymbolsAndLinks();
@@ -131,6 +136,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
       if (opts.force || parsedFiles.has(sym.filePath)) db.insertSymbol(sym);
     }
     for (const link of links) db.insertLink(link);
+    for (const [filePath, zone] of enriched.zones) db.setFileZone(filePath, zone);
     db.rebuildSearch();
   });
 

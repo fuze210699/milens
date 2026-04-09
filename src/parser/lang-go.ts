@@ -30,10 +30,10 @@ const spec: LangSpec = {
     imports: `(import_spec
       path: (interpreted_string_literal) @source
     ) @def`,
-    calls: `
+    calls: `[
       (call_expression function: (identifier) @callee) @def
-      (call_expression function: (selector_expression field: (field_identifier) @callee)) @def
-    `,
+      (call_expression function: (selector_expression operand: (_) @receiver field: (field_identifier) @callee)) @def
+    ]`,
   },
   resolveImport(raw, fromFile, root, _aliases) {
     // Go imports are package paths — only resolve local packages

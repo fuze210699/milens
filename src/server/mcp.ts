@@ -324,15 +324,23 @@ export function createMcpServer(rootPath?: string): McpServer {
   const pools = new Map<string, LazyDb>();
   const trackDb = getTrackingDb();
 
+  function normalizePath(p: string): string {
+    const abs = resolve(p);
+    if (process.platform === 'win32') {
+      return abs.replace(/^([a-z]):/, (_, d) => d.toUpperCase() + ':');
+    }
+    return abs;
+  }
+
   function resolveRoot(repoPath?: string): string {
     if (repoPath) {
-      const root = resolve(repoPath);
+      const root = normalizePath(repoPath);
       const entry = registry.findByRoot(root);
       if (!entry) throw new Error(`No index for ${root}. Run \`milens analyze\` first.`);
       return root;
     }
     if (rootPath) {
-      const root = resolve(rootPath);
+      const root = normalizePath(rootPath);
       const entry = registry.findByRoot(root);
       if (!entry) throw new Error(`No index for ${root}. Run \`milens analyze\` first.`);
       return root;

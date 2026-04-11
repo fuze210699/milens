@@ -1,45 +1,28 @@
----
-applyTo: "src/**"
----
-
 # Root
 
 ## Overview
-Contains 34 symbols (13 exported) across 3 files.
+Contains 79 symbols (76 exported) across 5 files.
 
 ## Key Symbols
-- **`generateSkills`** [function] (src/skills.ts:19) — 1 refs
-- **`CodeSymbol`** [interface] (src/types.ts:7) — 0 refs
-- **`SymbolLink`** [interface] (src/types.ts:25) — 0 refs
-- **`RawImport`** [interface] (src/types.ts:34) — 0 refs
-- **`RawCall`** [interface] (src/types.ts:43) — 0 refs
-- **`RawHeritage`** [interface] (src/types.ts:51) — 0 refs
-- **`ExtractionResult`** [interface] (src/types.ts:59) — 0 refs
-- **`RawReExport`** [interface] (src/types.ts:68) — 0 refs
-- **`AnalysisStats`** [interface] (src/types.ts:75) — 0 refs
-- **`RepoEntry`** [interface] (src/types.ts:87) — 0 refs
-- **`SymbolKind`** [type] (src/types.ts:3) — 0 refs
-- **`SymbolRole`** [type] (src/types.ts:21) — 0 refs
-- **`LinkType`** [type] (src/types.ts:23) — 0 refs
-
-## Entry Points
-- **`has`** [function] — 19 incoming references
-- **`getAreaName`** [function] — 2 incoming references
-- **`capitalize`** [function] — 2 incoming references
-- **`deleteIndex`** [function] — 1 incoming references
-- **`generateDashboardHtml`** [function] — 1 incoming references
-
-## Dependencies
-- **store**: `getAllSymbols`, `getAllLinks`
-- **server**: `get`
-
-## Used By
-- **analyzer**: `has`
-- **parser**: `has`
-- **server**: `has`
-- **store**: `has`
+- **`Milens — Code Intelligence (MCP)`** [section] (AGENTS.md:2) — 0 refs
+- **`Mandatory Workflows`** [section] (AGENTS.md:10) — 0 refs
+- **`Before editing any function, class, or method:`** [section] (AGENTS.md:14) — 0 refs
+- **`Before committing:`** [section] (AGENTS.md:20) — 0 refs
+- **`Before deleting or renaming a symbol:`** [section] (AGENTS.md:24) — 0 refs
+- **`Tool Selection Rules`** [section] (AGENTS.md:29) — 0 refs
+- **`Use `mcp_milens_grep` when the search term:`** [section] (AGENTS.md:33) — 0 refs
+- **`Use `mcp_milens_query` when the search term:`** [section] (AGENTS.md:39) — 0 refs
+- **`When in doubt → use `mcp_milens_grep` first`** [section] (AGENTS.md:44) — 0 refs
+- **`Workflow Triggers`** [section] (AGENTS.md:47) — 0 refs
+- **`Never Do`** [section] (AGENTS.md:63) — 0 refs
+- **`Reference`** [section] (AGENTS.md:73) — 0 refs
+- **`Tools`** [section] (AGENTS.md:75) — 0 refs
+- **`Keeping the Index Fresh`** [section] (AGENTS.md:90) — 0 refs
+- **`Skills`** [section] (AGENTS.md:94) — 0 refs
 
 ## Files
-- src/cli.ts
+- AGENTS.md
+- CLAUDE.md
+- README.md
 - src/skills.ts
 - src/types.ts

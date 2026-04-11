@@ -1565,7 +1565,27 @@ export async function startHttp(port: number, rootPath?: string): Promise<void> 
   }, 5 * 60_000);
   evictTimer.unref(); // don't prevent process exit
 
+  // Simple per-IP rate limiter: max 60 requests per minute
+  const RATE_WINDOW = 60_000;
+  const RATE_MAX = 60;
+  const hits = new Map<string, { count: number; resetAt: number }>();
+
   const httpServer = createServer(async (req, res) => {
+    // Rate limiting
+    const ip = req.socket.remoteAddress ?? 'unknown';
+    const now = Date.now();
+    let bucket = hits.get(ip);
+    if (!bucket || now > bucket.resetAt) {
+      bucket = { count: 0, resetAt: now + RATE_WINDOW };
+      hits.set(ip, bucket);
+    }
+    bucket.count++;
+    if (bucket.count > RATE_MAX) {
+      res.writeHead(429, { 'Retry-After': String(Math.ceil((bucket.resetAt - now) / 1000)) });
+      res.end('Too many requests');
+      return;
+    }
+
     if (req.method === 'POST' && req.url === '/mcp') {
       try {
         const body = await readBody(req);

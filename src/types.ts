@@ -2,7 +2,8 @@
 
 export type SymbolKind =
   | 'function' | 'class' | 'method' | 'interface'
-  | 'variable' | 'type' | 'enum' | 'struct' | 'trait' | 'module';
+  | 'variable' | 'type' | 'enum' | 'struct' | 'trait' | 'module'
+  | 'section';
 
 export interface CodeSymbol {
   id: string;

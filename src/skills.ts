@@ -334,6 +334,26 @@ When the user says... → do this FIRST:
 | "what happens if I change \`X\`" | \`${t('impact')}({target: "X", repo: "<workspaceRoot>"})\` |
 | "how are \`A\` and \`B\` connected" | \`${t('explain_relationship')}({from: "A", to: "B", repo: "<workspaceRoot>"})\` |
 | "explore/understand \`X\`" | \`${t('context')}({name: "X", repo: "<workspaceRoot>"})\` |
+| "update/write docs for \`X\`" | \`${t('grep')}({pattern: "X", include: "**/*.md"})\` — find existing docs mentioning X, then \`${t('context')}({name: "X"})\` for full symbol info |
+| "research/explore docs" | \`${t('get_file_symbols')}({file: "<doc.md>"})\` — see document outline (headings as sections) |
+| "what docs mention \`X\`" | \`${t('grep')}({pattern: "X", include: "**/*.md"})\` — find all markdown references |
+
+## Documentation Workflows
+
+Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` symbols with parent-child hierarchy, and local links become cross-file references.
+
+### Researching or exploring documentation:
+1. \`${t('get_file_symbols')}({file: "README.md", repo: "<workspaceRoot>"})\` — see the full heading outline (TOC) of any doc
+2. \`${t('query')}({query: "<topic>"})\` — search section headings across all docs and code
+3. \`${t('grep')}({pattern: "<keyword>", include: "**/*.md"})\` — text search within docs only
+
+### Before updating documentation:
+1. \`${t('get_file_symbols')}({file: "<doc.md>"})\` — understand document structure first
+2. If documenting a code symbol: \`${t('context')}({name: "<symbolName>"})\` — get full symbol info (signature, callers, deps)
+3. \`${t('grep')}({pattern: "<symbolName>", include: "**/*.md"})\` — check if other docs already reference it
+
+### After renaming/deleting a code symbol:
+- \`${t('grep')}({pattern: "<oldName>", include: "**/*.md"})\` — find docs that need updating (milens indexes markdown links as cross-file references)
 
 ## Never Do
 

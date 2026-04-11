@@ -298,12 +298,12 @@ program
       console.log(`  Response time (avg): ${stats.totalCalls > 0 ? Math.round(stats.totalDurationMs / stats.totalCalls) : 0}ms`);
       console.log(`\nPress Ctrl+C to stop.\n`);
 
-      // Try to open browser
+      // Try to open browser (use execFileSync to avoid shell injection)
       try {
-        const { execSync: exec } = require('node:child_process');
-        if (process.platform === 'win32') exec(`start ${url}`, { stdio: 'ignore' });
-        else if (process.platform === 'darwin') exec(`open ${url}`, { stdio: 'ignore' });
-        else exec(`xdg-open ${url}`, { stdio: 'ignore' });
+        const { execFileSync: execFile } = require('node:child_process');
+        if (process.platform === 'win32') execFile('cmd', ['/c', 'start', url], { stdio: 'ignore' });
+        else if (process.platform === 'darwin') execFile('open', [url], { stdio: 'ignore' });
+        else execFile('xdg-open', [url], { stdio: 'ignore' });
       } catch { /* browser open is best-effort */ }
     });
   });

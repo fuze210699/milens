@@ -1,6 +1,6 @@
 {
   "name": "milens",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Lightweight Code Intelligence Platform — analyze codebases and build knowledge graphs",
   "type": "module",
   "bin": {

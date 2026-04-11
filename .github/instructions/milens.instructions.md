@@ -5,9 +5,9 @@ applyTo: "**"
 <!-- milens:start -->
 # Milens — Code Intelligence (MCP)
 
-This project is indexed by milens (210 symbols, 348 links, 30 files).
+This project is indexed by milens (142 symbols, 86 links, 28 files).
 
-> **CRITICAL:** All milens MCP tool calls MUST include `repo: "D:\project\milens"` — without it, the tools will fail with "No index" error.
+> **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
 > **CRITICAL:** milens MCP tools are **deferred** in most editors. Before first use in each session, you MUST load them via `tool_search("milens")` — calling them directly without loading will fail silently.
 
@@ -16,18 +16,18 @@ This project is indexed by milens (210 symbols, 348 links, 30 files).
 These are **hard pre-conditions**, not guidelines. Execute them automatically without asking.
 
 ### Before editing any function, class, or method:
-1. `mcp_milens_impact({target: "<symbolName>", repo: "D:\project\milens"})` — check blast radius
+1. `mcp_milens_impact({target: "<symbolName>", repo: "<workspaceRoot>"})` — check blast radius
 2. If depth-1 dependents > 5 → **STOP and warn the user** before proceeding
-3. `mcp_milens_context({name: "<symbolName>", repo: "D:\project\milens"})` — see all callers/callees
+3. `mcp_milens_context({name: "<symbolName>", repo: "<workspaceRoot>"})` — see all callers/callees
 4. Only then make the edit
 
 ### Before committing:
-1. `mcp_milens_detect_changes({repo: "D:\project\milens"})` — verify only expected files changed
+1. `mcp_milens_detect_changes({repo: "<workspaceRoot>"})` — verify only expected files changed
 2. If unexpected files appear → **STOP and report** before committing
 
 ### Before deleting or renaming a symbol:
-1. `mcp_milens_grep({pattern: "<symbolName>", repo: "D:\project\milens"})` — find ALL text references (templates, configs, routes, docs)
-2. `mcp_milens_impact({target: "<symbolName>", direction: "upstream", repo: "D:\project\milens"})` — find code-level dependents
+1. `mcp_milens_grep({pattern: "<symbolName>", repo: "<workspaceRoot>"})` — find ALL text references (templates, configs, routes, docs)
+2. `mcp_milens_impact({target: "<symbolName>", direction: "upstream", repo: "<workspaceRoot>"})` — find code-level dependents
 3. Combine both results — grep catches what impact misses
 
 ## Tool Selection Rules
@@ -54,15 +54,35 @@ When the user says... → do this FIRST:
 
 | User intent | First action |
 |---|---|
-| "edit/change/modify/fix `X`" | `mcp_milens_impact({target: "X", repo: "D:\project\milens"})` |
-| "delete/remove `X`" | `mcp_milens_grep({pattern: "X", repo: "D:\project\milens"})` then `mcp_milens_impact` |
-| "rename `X`" | `mcp_milens_grep({pattern: "X", repo: "D:\project\milens"})` then `mcp_milens_impact` |
+| "edit/change/modify/fix `X`" | `mcp_milens_impact({target: "X", repo: "<workspaceRoot>"})` |
+| "delete/remove `X`" | `mcp_milens_grep({pattern: "X", repo: "<workspaceRoot>"})` then `mcp_milens_impact` |
+| "rename `X`" | `mcp_milens_grep({pattern: "X", repo: "<workspaceRoot>"})` then `mcp_milens_impact` |
 | "find/search for `X`" | Choose `query` or `grep` per rules above |
-| "commit" / "push" | `mcp_milens_detect_changes({repo: "D:\project\milens"})` |
-| "what calls/uses `X`" | `mcp_milens_context({name: "X", repo: "D:\project\milens"})` |
-| "what happens if I change `X`" | `mcp_milens_impact({target: "X", repo: "D:\project\milens"})` |
-| "how are `A` and `B` connected" | `mcp_milens_explain_relationship({from: "A", to: "B", repo: "D:\project\milens"})` |
-| "explore/understand `X`" | `mcp_milens_context({name: "X", repo: "D:\project\milens"})` |
+| "commit" / "push" | `mcp_milens_detect_changes({repo: "<workspaceRoot>"})` |
+| "what calls/uses `X`" | `mcp_milens_context({name: "X", repo: "<workspaceRoot>"})` |
+| "what happens if I change `X`" | `mcp_milens_impact({target: "X", repo: "<workspaceRoot>"})` |
+| "how are `A` and `B` connected" | `mcp_milens_explain_relationship({from: "A", to: "B", repo: "<workspaceRoot>"})` |
+| "explore/understand `X`" | `mcp_milens_context({name: "X", repo: "<workspaceRoot>"})` |
+| "update/write docs for `X`" | `mcp_milens_grep({pattern: "X", include: "**/*.md"})` — find existing docs mentioning X, then `mcp_milens_context({name: "X"})` for full symbol info |
+| "research/explore docs" | `mcp_milens_get_file_symbols({file: "<doc.md>"})` — see document outline (headings as sections) |
+| "what docs mention `X`" | `mcp_milens_grep({pattern: "X", include: "**/*.md"})` — find all markdown references |
+
+## Documentation Workflows
+
+Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symbols with parent-child hierarchy, and local links become cross-file references.
+
+### Researching or exploring documentation:
+1. `mcp_milens_get_file_symbols({file: "README.md", repo: "<workspaceRoot>"})` — see the full heading outline (TOC) of any doc
+2. `mcp_milens_query({query: "<topic>"})` — search section headings across all docs and code
+3. `mcp_milens_grep({pattern: "<keyword>", include: "**/*.md"})` — text search within docs only
+
+### Before updating documentation:
+1. `mcp_milens_get_file_symbols({file: "<doc.md>"})` — understand document structure first
+2. If documenting a code symbol: `mcp_milens_context({name: "<symbolName>"})` — get full symbol info (signature, callers, deps)
+3. `mcp_milens_grep({pattern: "<symbolName>", include: "**/*.md"})` — check if other docs already reference it
+
+### After renaming/deleting a code symbol:
+- `mcp_milens_grep({pattern: "<oldName>", include: "**/*.md"})` — find docs that need updating (milens indexes markdown links as cross-file references)
 
 ## Never Do
 
@@ -100,11 +120,12 @@ After significant code changes: `npx milens analyze -p . --force`
 | Task | Read this skill file |
 |------|---------------------|
 | General milens tools reference | `.github/instructions/milens.instructions.md` |
-| Work in the Analyzer area | `.github/instructions/analyzer.instructions.md` |
 | Work in the Root area | `.github/instructions/root.instructions.md` |
+| Work in the Test area | `.github/instructions/test.instructions.md` |
+| Work in the Scripts area | `.github/instructions/scripts.instructions.md` |
+| Work in the Analyzer area | `.github/instructions/analyzer.instructions.md` |
 | Work in the Parser area | `.github/instructions/parser.instructions.md` |
 | Work in the Server area | `.github/instructions/server.instructions.md` |
 | Work in the Store area | `.github/instructions/store.instructions.md` |
-| Work in the Test area | `.github/instructions/test.instructions.md` |
 
 <!-- milens:end -->

@@ -6,6 +6,7 @@ import { getParser, loadLanguage } from '../parser/loader.js';
 import { extractFromTree, clearQueryCache } from '../parser/extract.js';
 import { extractVueScript, extractVueTemplateRefs } from '../parser/lang-vue.js';
 import { extractHtmlScripts, extractHtmlRefs } from '../parser/lang-html.js';
+import { extractMarkdown } from '../parser/lang-md.js';
 import { resolveLinks, resolveLinksWithStats } from './resolver.js';
 import { enrichMetadata } from './enrich.js';
 import { Database } from '../store/db.js';
@@ -43,6 +44,10 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     langGroups.set(spec.wasmName, group);
   }
 
+  // Phase 2.5: Separate document files (regex-based, no tree-sitter)
+  const docGroup = langGroups.get('');
+  if (docGroup) langGroups.delete('');
+
   // Phase 3: Parse & extract — process each language group together
   // This keeps the same parser/language/compiled queries hot in cache
   const symbolsByFile = new Map<string, CodeSymbol[]>();
@@ -54,6 +59,41 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const resolvedImportPaths = new Map<string, string>();
   const parsedFiles = new Set<string>();
   let filesParsed = 0;
+
+  // Process document files (no tree-sitter needed)
+  if (docGroup) {
+    for (const file of docGroup) {
+      const source = readFileSync(file.absolutePath, 'utf-8');
+
+      if (!opts.force && db.isFileUpToDate(file.relativePath, source)) {
+        if (opts.verbose) console.log(`[skip] ${file.relativePath} (unchanged)`);
+        continue;
+      }
+
+      try {
+        const result = parseDocFile(source, file.relativePath, file.spec);
+        if (!result) continue;
+
+        symbolsByFile.set(file.relativePath, result.symbols);
+        allSymbols.push(...result.symbols);
+        allImports.push(...result.imports);
+
+        for (const imp of result.imports) {
+          const resolved = file.spec.resolveImport(imp.modulePath, imp.filePath, rootPath, aliases);
+          if (resolved) {
+            resolvedImportPaths.set(`${imp.filePath}::${imp.modulePath}`, resolved);
+          }
+        }
+
+        db.upsertFileHash(file.relativePath, source);
+        parsedFiles.add(file.relativePath);
+        filesParsed++;
+        if (opts.verbose) console.log(`[parse] ${file.relativePath}: ${result.symbols.length} symbols`);
+      } catch (err) {
+        if (opts.verbose) console.error(`[error] ${file.relativePath}: ${err}`);
+      }
+    }
+  }
 
   for (const [wasmName, group] of langGroups) {
     // Pre-load parser + language once per group
@@ -334,6 +374,13 @@ async function parseFile(
   }
 
   return result;
+}
+
+function parseDocFile(source: string, filePath: string, spec: LangSpec): ExtractionResult | null {
+  if (spec.id === 'markdown') {
+    return extractMarkdown(source, filePath);
+  }
+  return null;
 }
 
 /** Check if a file path looks like a test/spec file */

@@ -10,8 +10,9 @@ import rubySpec from './lang-ruby.js';
 import vueSpec from './lang-vue.js';
 import htmlSpec from './lang-html.js';
 import cssSpec from './lang-css.js';
+import mdSpec from './lang-md.js';
 
-const ALL_LANGS: LangSpec[] = [tsSpec, jsSpec, pySpec, javaSpec, goSpec, rustSpec, phpSpec, rubySpec, vueSpec, htmlSpec, cssSpec];
+const ALL_LANGS: LangSpec[] = [tsSpec, jsSpec, pySpec, javaSpec, goSpec, rustSpec, phpSpec, rubySpec, vueSpec, htmlSpec, cssSpec, mdSpec];
 
 const byExtension = new Map<string, LangSpec>();
 for (const lang of ALL_LANGS) {

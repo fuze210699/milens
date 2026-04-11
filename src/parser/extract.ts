@@ -28,12 +28,24 @@ export interface LangSpec {
 }
 
 // ── Compiled query cache: compile once per (language, queryString) ──
-// Key = langPtr + "|" + queryString, Value = compiled Query (or null if invalid)
+// Key = langId + "|" + queryString, Value = compiled Query (or null if invalid)
 const queryCache = new Map<string, Parser.Query | null>();
 
+// Assign a unique numeric ID to each Language instance (ptr/toString are unreliable)
+const langIds = new WeakMap<Parser.Language, number>();
+let nextLangId = 0;
+
+function getLangId(lang: Parser.Language): number {
+  let id = langIds.get(lang);
+  if (id === undefined) {
+    id = nextLangId++;
+    langIds.set(lang, id);
+  }
+  return id;
+}
+
 function getOrCompileQuery(lang: Parser.Language, queryStr: string): Parser.Query | null {
-  // Use the language pointer address as part of cache key (each Language instance is unique per WASM)
-  const cacheKey = `${(lang as any).ptr ?? lang.toString()}|${queryStr}`;
+  const cacheKey = `${getLangId(lang)}|${queryStr}`;
   if (queryCache.has(cacheKey)) return queryCache.get(cacheKey)!;
 
   try {

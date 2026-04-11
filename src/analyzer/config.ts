@@ -31,12 +31,48 @@ export function loadAliases(rootPath: string): Record<string, string> {
   return aliases;
 }
 
+/**
+ * Strip // and /* comments from JSONC, respecting string literals.
+ * Replaces comment content with spaces to preserve positions/offsets.
+ */
+function stripJsonComments(text: string): string {
+  let result = '';
+  let i = 0;
+  while (i < text.length) {
+    // String literal — skip to closing quote
+    if (text[i] === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') {
+        if (text[j] === '\\') j++; // skip escaped char
+        j++;
+      }
+      result += text.slice(i, j + 1);
+      i = j + 1;
+    // Line comment
+    } else if (text[i] === '/' && text[i + 1] === '/') {
+      let j = i + 2;
+      while (j < text.length && text[j] !== '\n') j++;
+      result += ' '.repeat(j - i);
+      i = j;
+    // Block comment
+    } else if (text[i] === '/' && text[i + 1] === '*') {
+      let j = i + 2;
+      while (j < text.length - 1 && !(text[j] === '*' && text[j + 1] === '/')) j++;
+      j += 2; // skip */
+      result += ' '.repeat(j - i);
+      i = j;
+    } else {
+      result += text[i];
+      i++;
+    }
+  }
+  return result;
+}
+
 function readTsConfigPaths(configPath: string, aliases: Record<string, string>): void {
   if (!existsSync(configPath)) return;
   try {
-    const raw = readFileSync(configPath, 'utf-8')
-      .replace(/\/\/.*$/gm, '')       // strip line comments
-      .replace(/\/\*[\s\S]*?\*\//g, ''); // strip block comments
+    const raw = stripJsonComments(readFileSync(configPath, 'utf-8'));
     const cfg = JSON.parse(raw);
 
     // Handle "extends" — resolve base config paths
@@ -44,6 +80,24 @@ function readTsConfigPaths(configPath: string, aliases: Record<string, string>):
       const baseDir = resolve(configPath, '..');
       const basePath = resolveExtendsPath(baseDir, cfg.extends);
       if (basePath) readTsConfigPaths(basePath, aliases);
+    }
+
+    // Handle "references" — modern multi-config projects (e.g. Vue 3 create-vue)
+    // tsconfig.json may have no paths itself but reference tsconfig.app.json which does
+    if (Array.isArray(cfg.references)) {
+      const baseDir = resolve(configPath, '..');
+      for (const ref of cfg.references) {
+        const refPath = ref?.path;
+        if (typeof refPath !== 'string') continue;
+        const resolved = resolve(baseDir, refPath);
+        // Reference can point to a directory (containing tsconfig.json) or a file
+        for (const candidate of [resolved, join(resolved, 'tsconfig.json'), resolved + '.json']) {
+          if (existsSync(candidate)) {
+            readTsConfigPaths(candidate, aliases);
+            break;
+          }
+        }
+      }
     }
 
     const paths = cfg.compilerOptions?.paths ?? {};

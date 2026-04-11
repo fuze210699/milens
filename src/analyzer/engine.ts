@@ -123,6 +123,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
         // Resolve import paths eagerly
         for (const imp of result.imports) {
           const resolved = file.spec.resolveImport(imp.modulePath, imp.filePath, rootPath, aliases);
+          if (opts.verbose) console.log(`[resolve] ${imp.filePath}::${imp.modulePath} => ${resolved ?? 'NULL'}`);
           if (resolved) {
             resolvedImportPaths.set(`${imp.filePath}::${imp.modulePath}`, resolved);
           }

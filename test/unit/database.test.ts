@@ -81,6 +81,49 @@ describe('Database', () => {
     expect(upstream.some(u => u.symbol.name === 'AuthService')).toBe(true);
   });
 
+  it('finds upstream via import links when _top module symbol exists', () => {
+    // Simulate: VueFile.vue imports useClipboard from composable.js
+    const composable: CodeSymbol = {
+      id: 'src/composables/useClipboard.js#function:useClipboard:6',
+      name: 'useClipboard',
+      kind: 'function',
+      filePath: 'src/composables/useClipboard.js',
+      startLine: 6,
+      endLine: 12,
+      exported: true,
+    };
+    db.insertSymbol(composable);
+
+    // The _top module symbol for the Vue file (created by engine.ts)
+    const topModule: CodeSymbol = {
+      id: 'src/views/ClipboardView.vue#module:_top:0',
+      name: '_top',
+      kind: 'module',
+      filePath: 'src/views/ClipboardView.vue',
+      startLine: 0,
+      endLine: 0,
+      exported: false,
+    };
+    db.insertSymbol(topModule);
+
+    // Import link: Vue file _top → composable function
+    const importLink: SymbolLink = {
+      id: 'src/views/ClipboardView.vue#module:_top:0->imports->src/composables/useClipboard.js#function:useClipboard:6',
+      fromId: 'src/views/ClipboardView.vue#module:_top:0',
+      toId: 'src/composables/useClipboard.js#function:useClipboard:6',
+      type: 'imports',
+      confidence: 0.95,
+      line: 2,
+    };
+    db.insertLink(importLink);
+
+    // findUpstream should now find the Vue file as an upstream dependent
+    const upstream = db.findUpstream('src/composables/useClipboard.js#function:useClipboard:6', 3);
+    expect(upstream.length).toBeGreaterThan(0);
+    expect(upstream.some(u => u.symbol.name === '_top' && u.symbol.filePath === 'src/views/ClipboardView.vue')).toBe(true);
+    expect(upstream.some(u => u.via === 'imports')).toBe(true);
+  });
+
   it('reports stats correctly', () => {
     const stats = db.getStats();
     expect(stats.symbols).toBeGreaterThanOrEqual(2);

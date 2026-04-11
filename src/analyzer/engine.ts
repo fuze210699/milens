@@ -304,6 +304,17 @@ async function parseFile(
     const htmlRefs = extractHtmlRefs(source, filePath);
     result.imports.push(...htmlRefs);
 
+    // Ensure _top module symbol exists for import/call link tracking
+    result.symbols.push({
+      id: `${filePath}#module:_top:0`,
+      name: '_top',
+      kind: 'module',
+      filePath,
+      startLine: 0,
+      endLine: 0,
+      exported: false,
+    });
+
     return result;
   }
 
@@ -373,12 +384,34 @@ async function parseFile(
     }
   }
 
+  // Ensure _top module symbol exists for import/call link tracking
+  result.symbols.push({
+    id: `${filePath}#module:_top:0`,
+    name: '_top',
+    kind: 'module',
+    filePath,
+    startLine: 0,
+    endLine: 0,
+    exported: false,
+  });
+
   return result;
 }
 
 function parseDocFile(source: string, filePath: string, spec: LangSpec): ExtractionResult | null {
   if (spec.id === 'markdown') {
-    return extractMarkdown(source, filePath);
+    const result = extractMarkdown(source, filePath);
+    // Ensure _top module symbol exists for import link tracking
+    result.symbols.push({
+      id: `${filePath}#module:_top:0`,
+      name: '_top',
+      kind: 'module',
+      filePath,
+      startLine: 0,
+      endLine: 0,
+      exported: false,
+    });
+    return result;
   }
   return null;
 }

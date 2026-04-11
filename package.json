@@ -1,6 +1,6 @@
 {
   "name": "milens",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "Lightweight Code Intelligence Platform — analyze codebases and build knowledge graphs",
   "type": "module",
   "bin": {
@@ -19,6 +19,8 @@
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run build && npm test",
+    "build:standalone": "node scripts/build-standalone.mjs",
+    "build:standalone:all": "node scripts/build-standalone.mjs --target all",
     "self-analyze": "tsx src/cli.ts analyze -p . --force --verbose --skills",
     "self-serve": "tsx src/cli.ts serve -p . --http --port 3100"
   },
@@ -54,6 +56,8 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.0.0",
     "@types/node": "^20.0.0",
+    "@yao-pkg/pkg": "^6.14.2",
+    "esbuild": "^0.25.12",
     "tsx": "^4.0.0",
     "typescript": "^5.4.0",
     "vitest": "^4.0.0"

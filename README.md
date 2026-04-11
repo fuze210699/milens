@@ -7,7 +7,7 @@
   <a href="https://www.npmjs.com/package/milens"><img src="https://img.shields.io/npm/v/milens" alt="npm version"></a>
   <a href="https://github.com/fuze210699/milens/blob/develop/LICENSE"><img src="https://img.shields.io/badge/license-PolyForm--Noncommercial-blue" alt="License: PolyForm Noncommercial"></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node.js >= 20"></a>
-  <img src="https://img.shields.io/badge/languages-9-orange" alt="9 Languages">
+  <img src="https://img.shields.io/badge/languages-11-orange" alt="11 Languages">
   <img src="https://img.shields.io/badge/MCP_tools-19-purple" alt="19 MCP Tools">
 </p>
 
@@ -276,6 +276,8 @@ npx milens dashboard --port 8080            # custom port
 | PHP | `.php` | ✓ + include | ✓ + static, new | ✓ + traits | Laravel |
 | Ruby | `.rb` | ✓ | ✓ | ✓ | Rails |
 | Vue | `.vue` | ✓ | ✓ template refs | ✓ | Vue 3 SFC |
+| HTML | `.html` `.htm` | ✓ `<script src>` `<link>` | ✓ inline `<script>` | — | — |
+| CSS | `.css` | ✓ `@import` | — | — | Custom properties |
 
 ---
 
@@ -299,7 +301,7 @@ milens uses a **global registry** — one MCP server serves all indexed repos. N
 
 | Decision | Rationale |
 |---|---|
-| **Declarative LangSpec** | Each language = 1 config object with tree-sitter queries. One universal extractor for all 9 languages |
+| **Declarative LangSpec** | Each language = 1 config object with tree-sitter queries. One universal extractor for all 11 languages |
 | **SQLite + recursive CTE** | Impact analysis runs entirely in the database — no full graph in memory |
 | **Token-compact output** | `name [kind] file:line` format — saves 40-60% tokens for AI |
 | **Incremental by hash** | SHA-256 file hashing — only changed files get re-parsed |
@@ -404,7 +406,7 @@ Then register it in `src/parser/languages.ts`.
 ```bash
 npm install              # install dependencies
 npm run build            # tsc → dist/
-npm test                 # vitest (32 tests)
+npm test                 # vitest (43 tests)
 npm run lint             # tsc --noEmit
 npm run self-analyze     # index this repo
 npm run self-serve       # start MCP server on port 3100

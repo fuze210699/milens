@@ -7,6 +7,7 @@ const parserCache = new Map<string, Parser>();
 const langCache = new Map<string, Parser.Language>();
 
 function wasmDir(): string {
+  if (process.env.MILENS_WASM_DIR) return process.env.MILENS_WASM_DIR;
   const req = createRequire(import.meta.url);
   return join(dirname(req.resolve('tree-sitter-wasms/package.json')), 'out');
 }

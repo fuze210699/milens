@@ -1,5 +1,6 @@
 node_modules/
 dist/
+standalone/
 .milens/
 *.sqlite
 *.sqlite-journal

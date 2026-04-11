@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test Page</title>
+  <link rel="stylesheet" href="./css/main.css">
+  <script src="./js/utils.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    function initApp() {
+      const items = fetchData('/api/items');
+      renderList(items);
+    }
+
+    function renderList(data) {
+      const container = document.getElementById('app');
+      container.innerHTML = data.map(formatItem).join('');
+    }
+
+    initApp();
+  </script>
+  <script src="./js/analytics.js"></script>
+</body>
+</html>

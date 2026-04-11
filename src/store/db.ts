@@ -86,7 +86,9 @@ export class Database {
   private applySchema(): void {
     let sql: string;
     try {
-      sql = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
+      sql = process.env.MILENS_SCHEMA_PATH
+        ? readFileSync(process.env.MILENS_SCHEMA_PATH, 'utf-8')
+        : readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
     } catch {
       sql = readFileSync(join(__dirname, '..', '..', 'src', 'store', 'schema.sql'), 'utf-8');
     }

@@ -5,6 +5,7 @@ import { langForFile } from '../parser/languages.js';
 import { getParser, loadLanguage } from '../parser/loader.js';
 import { extractFromTree, clearQueryCache } from '../parser/extract.js';
 import { extractVueScript, extractVueTemplateRefs } from '../parser/lang-vue.js';
+import { extractHtmlScripts, extractHtmlRefs } from '../parser/lang-html.js';
 import { resolveLinks, resolveLinksWithStats } from './resolver.js';
 import { enrichMetadata } from './enrich.js';
 import { Database } from '../store/db.js';
@@ -69,7 +70,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
       }
 
       try {
-        const result = parseFile(source, file.relativePath, file.spec, parser, lang);
+        const result = await parseFile(source, file.relativePath, file.spec, parser, lang);
         if (!result) continue;
 
         symbolsByFile.set(file.relativePath, result.symbols);
@@ -217,15 +218,54 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   return stats;
 }
 
-function parseFile(
+async function parseFile(
   source: string,
   filePath: string,
   spec: LangSpec,
   parser: Parser,
   lang: Parser.Language,
-): ExtractionResult | null {
+): Promise<ExtractionResult | null> {
   let code = source;
   let lineOffset = 0;
+
+  // HTML: extract inline <script> blocks, parse as JS, merge refs
+  if (spec.id === 'html') {
+    const jsParser = await getParser('tree-sitter-javascript');
+    const jsLang = await loadLanguage('tree-sitter-javascript');
+    const jsSpec = (await import('../parser/lang-js.js')).default;
+
+    const result: ExtractionResult = {
+      symbols: [], imports: [], calls: [], heritage: [], exportedNames: new Set(), reExports: [],
+    };
+
+    // Extract inline <script> blocks and parse as JS
+    const scripts = extractHtmlScripts(source);
+    for (const script of scripts) {
+      const tree = jsParser.parse(script.content);
+      const extracted = extractFromTree(tree, jsLang, jsSpec, filePath);
+
+      // Adjust line numbers for script offset
+      for (const sym of extracted.symbols) {
+        sym.startLine += script.lineOffset;
+        sym.endLine += script.lineOffset;
+      }
+      for (const imp of extracted.imports) imp.line += script.lineOffset;
+      for (const call of extracted.calls) call.line += script.lineOffset;
+
+      result.symbols.push(...extracted.symbols);
+      result.imports.push(...extracted.imports);
+      result.calls.push(...extracted.calls);
+      result.heritage.push(...extracted.heritage);
+      result.reExports.push(...extracted.reExports);
+      for (const n of extracted.exportedNames) result.exportedNames.add(n);
+    }
+
+    // Extract <script src="..."> and <link href="..."> as imports
+    const htmlRefs = extractHtmlRefs(source, filePath);
+    result.imports.push(...htmlRefs);
+
+    return result;
+  }
 
   // Vue SFC: extract <script> block
   if (spec.id === 'vue') {

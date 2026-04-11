@@ -9,7 +9,7 @@ import { loadAliases } from './analyzer/config.js';
 const program = new Command();
 
 const __filename = fileURLToPath(import.meta.url);
-const PKG_VERSION: string = JSON.parse(readFileSync(join(dirname(__filename), '..', 'package.json'), 'utf-8')).version;
+const PKG_VERSION: string = process.env.MILENS_VERSION ?? JSON.parse(readFileSync(join(dirname(__filename), '..', 'package.json'), 'utf-8')).version;
 
 program
   .name('milens')

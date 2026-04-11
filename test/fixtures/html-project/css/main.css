@@ -1,0 +1,21 @@
+@import "./reset.css";
+
+:root {
+  --primary-color: #3498db;
+  --font-size-base: 16px;
+}
+
+body {
+  font-size: var(--font-size-base);
+  color: var(--primary-color);
+}
+
+#app {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.item-card {
+  padding: 1rem;
+  border: 1px solid #eee;
+}

@@ -266,9 +266,8 @@ function editorSkillPath(editor: EditorName, name: string): string {
   }
 }
 
-function renderMilensInstructions(rootDir: string, stats: { symbols: number; links: number; files: number }, areaNames: string[], editor: EditorName): string {
+function renderMilensInstructions(_rootDir: string, stats: { symbols: number; links: number; files: number }, areaNames: string[], editor: EditorName): string {
   const t = (name: string) => `mcp_milens_${name}`;
-  const repo = `repo: "${rootDir}"`;
 
   const skillsRows = areaNames.map(a =>
     `| Work in the ${capitalize(a)} area | \`${editorSkillPath(editor, a)}\` |`
@@ -279,7 +278,7 @@ function renderMilensInstructions(rootDir: string, stats: { symbols: number; lin
 
 This project is indexed by milens (${stats.symbols} symbols, ${stats.links} links, ${stats.files} files).
 
-> **CRITICAL:** All milens MCP tool calls MUST include \`${repo}\` — without it, the tools will fail with "No index" error.
+> **CRITICAL:** All milens MCP tool calls MUST include the \`repo\` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
 > **CRITICAL:** milens MCP tools are **deferred** in most editors. Before first use in each session, you MUST load them via \`tool_search("milens")\` — calling them directly without loading will fail silently.
 
@@ -288,18 +287,18 @@ This project is indexed by milens (${stats.symbols} symbols, ${stats.links} link
 These are **hard pre-conditions**, not guidelines. Execute them automatically without asking.
 
 ### Before editing any function, class, or method:
-1. \`${t('impact')}({target: "<symbolName>", ${repo}})\` — check blast radius
+1. \`${t('impact')}({target: "<symbolName>", repo: "<workspaceRoot>"})\` — check blast radius
 2. If depth-1 dependents > 5 → **STOP and warn the user** before proceeding
-3. \`${t('context')}({name: "<symbolName>", ${repo}})\` — see all callers/callees
+3. \`${t('context')}({name: "<symbolName>", repo: "<workspaceRoot>"})\` — see all callers/callees
 4. Only then make the edit
 
 ### Before committing:
-1. \`${t('detect_changes')}({${repo}})\` — verify only expected files changed
+1. \`${t('detect_changes')}({repo: "<workspaceRoot>"})\` — verify only expected files changed
 2. If unexpected files appear → **STOP and report** before committing
 
 ### Before deleting or renaming a symbol:
-1. \`${t('grep')}({pattern: "<symbolName>", ${repo}})\` — find ALL text references (templates, configs, routes, docs)
-2. \`${t('impact')}({target: "<symbolName>", direction: "upstream", ${repo}})\` — find code-level dependents
+1. \`${t('grep')}({pattern: "<symbolName>", repo: "<workspaceRoot>"})\` — find ALL text references (templates, configs, routes, docs)
+2. \`${t('impact')}({target: "<symbolName>", direction: "upstream", repo: "<workspaceRoot>"})\` — find code-level dependents
 3. Combine both results — grep catches what impact misses
 
 ## Tool Selection Rules
@@ -326,15 +325,15 @@ When the user says... → do this FIRST:
 
 | User intent | First action |
 |---|---|
-| "edit/change/modify/fix \`X\`" | \`${t('impact')}({target: "X", ${repo}})\` |
-| "delete/remove \`X\`" | \`${t('grep')}({pattern: "X", ${repo}})\` then \`${t('impact')}\` |
-| "rename \`X\`" | \`${t('grep')}({pattern: "X", ${repo}})\` then \`${t('impact')}\` |
+| "edit/change/modify/fix \`X\`" | \`${t('impact')}({target: "X", repo: "<workspaceRoot>"})\` |
+| "delete/remove \`X\`" | \`${t('grep')}({pattern: "X", repo: "<workspaceRoot>"})\` then \`${t('impact')}\` |
+| "rename \`X\`" | \`${t('grep')}({pattern: "X", repo: "<workspaceRoot>"})\` then \`${t('impact')}\` |
 | "find/search for \`X\`" | Choose \`query\` or \`grep\` per rules above |
-| "commit" / "push" | \`${t('detect_changes')}({${repo}})\` |
-| "what calls/uses \`X\`" | \`${t('context')}({name: "X", ${repo}})\` |
-| "what happens if I change \`X\`" | \`${t('impact')}({target: "X", ${repo}})\` |
-| "how are \`A\` and \`B\` connected" | \`${t('explain_relationship')}({from: "A", to: "B", ${repo}})\` |
-| "explore/understand \`X\`" | \`${t('context')}({name: "X", ${repo}})\` |
+| "commit" / "push" | \`${t('detect_changes')}({repo: "<workspaceRoot>"})\` |
+| "what calls/uses \`X\`" | \`${t('context')}({name: "X", repo: "<workspaceRoot>"})\` |
+| "what happens if I change \`X\`" | \`${t('impact')}({target: "X", repo: "<workspaceRoot>"})\` |
+| "how are \`A\` and \`B\` connected" | \`${t('explain_relationship')}({from: "A", to: "B", repo: "<workspaceRoot>"})\` |
+| "explore/understand \`X\`" | \`${t('context')}({name: "X", repo: "<workspaceRoot>"})\` |
 
 ## Never Do
 

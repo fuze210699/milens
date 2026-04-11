@@ -10,16 +10,17 @@ const spec: LangSpec = {
   queries: {}, // HTML extraction done via regex helpers in engine.ts
   resolveImport(raw, fromFile, root, aliases) {
     // Check aliases first
+    let aliased = false;
     for (const [alias, target] of Object.entries(aliases)) {
       if (raw.startsWith(alias + '/') || raw === alias) {
         raw = raw.replace(alias, target);
+        aliased = true;
         break;
       }
     }
 
-    if (!raw.startsWith('.') && !raw.startsWith('/')) return null;
-    const dir = dirname(join(root, fromFile));
-    const base = join(dir, raw);
+    if (!aliased && !raw.startsWith('.') && !raw.startsWith('/')) return null;
+    const base = aliased ? join(root, raw) : join(dirname(join(root, fromFile)), raw);
     if (existsSync(base)) return relative(root, base).replace(/\\/g, '/');
     return null;
   },

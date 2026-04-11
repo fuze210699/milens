@@ -91,18 +91,20 @@ const spec: LangSpec = {
   },
   resolveImport(raw, fromFile, root, aliases) {
     // Check aliases first (e.g. @ → src)
+    let aliased = false;
     for (const [alias, target] of Object.entries(aliases)) {
       if (raw.startsWith(alias + '/') || raw === alias) {
         raw = raw.replace(alias, target);
+        aliased = true;
         break;
       }
     }
 
-    // Skip bare module specifiers (node_modules)
-    if (!raw.startsWith('.') && !raw.startsWith('/')) return null;
+    // Skip bare module specifiers (node_modules) — but not alias-resolved paths
+    if (!aliased && !raw.startsWith('.') && !raw.startsWith('/')) return null;
 
-    const dir = dirname(join(root, fromFile));
-    const base = join(dir, raw);
+    // Alias-resolved paths are root-relative; relative paths resolve from file's dir
+    const base = aliased ? join(root, raw) : join(dirname(join(root, fromFile)), raw);
     const candidates = [
       base + '.ts', base + '.tsx',
       base + '.js', base + '.jsx',

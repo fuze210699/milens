@@ -73,16 +73,17 @@ const spec: LangSpec = {
   },
   resolveImport(raw, fromFile, root, aliases) {
     // Check aliases first (e.g. @ → src)
+    let aliased = false;
     for (const [alias, target] of Object.entries(aliases)) {
       if (raw.startsWith(alias + '/') || raw === alias) {
         raw = raw.replace(alias, target);
+        aliased = true;
         break;
       }
     }
 
-    if (!raw.startsWith('.') && !raw.startsWith('/')) return null;
-    const dir = dirname(join(root, fromFile));
-    const base = join(dir, raw);
+    if (!aliased && !raw.startsWith('.') && !raw.startsWith('/')) return null;
+    const base = aliased ? join(root, raw) : join(dirname(join(root, fromFile)), raw);
     const candidates = [
       base + '.js', base + '.jsx', base + '.mjs',
       join(base, 'index.js'), join(base, 'index.mjs'),

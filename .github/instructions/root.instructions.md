@@ -1,28 +1,49 @@
 # Root
 
 ## Overview
-Contains 79 symbols (76 exported) across 5 files.
+Contains 105 symbols (77 exported) across 7 files.
 
 ## Key Symbols
+- **`CodeSymbol`** [interface] (src/types.ts:8) — 9 refs
+- **`RawImport`** [interface] (src/types.ts:35) — 6 refs
+- **`SymbolLink`** [interface] (src/types.ts:26) — 5 refs
+- **`RawCall`** [interface] (src/types.ts:44) — 5 refs
+- **`RawHeritage`** [interface] (src/types.ts:52) — 4 refs
+- **`ExtractionResult`** [interface] (src/types.ts:60) — 3 refs
+- **`RawReExport`** [interface] (src/types.ts:69) — 3 refs
+- **`generateSkills`** [function] (src/skills.ts:19) — 2 refs
+- **`AnalysisStats`** [interface] (src/types.ts:76) — 1 refs
+- **`RepoEntry`** [interface] (src/types.ts:88) — 1 refs
+- **`SymbolKind`** [type] (src/types.ts:3) — 1 refs
+- **`SymbolRole`** [type] (src/types.ts:22) — 1 refs
+- **`LinkType`** [type] (src/types.ts:24) — 1 refs
 - **`Milens — Code Intelligence (MCP)`** [section] (AGENTS.md:2) — 0 refs
 - **`Mandatory Workflows`** [section] (AGENTS.md:10) — 0 refs
-- **`Before editing any function, class, or method:`** [section] (AGENTS.md:14) — 0 refs
-- **`Before committing:`** [section] (AGENTS.md:20) — 0 refs
-- **`Before deleting or renaming a symbol:`** [section] (AGENTS.md:24) — 0 refs
-- **`Tool Selection Rules`** [section] (AGENTS.md:29) — 0 refs
-- **`Use `mcp_milens_grep` when the search term:`** [section] (AGENTS.md:33) — 0 refs
-- **`Use `mcp_milens_query` when the search term:`** [section] (AGENTS.md:39) — 0 refs
-- **`When in doubt → use `mcp_milens_grep` first`** [section] (AGENTS.md:44) — 0 refs
-- **`Workflow Triggers`** [section] (AGENTS.md:47) — 0 refs
-- **`Never Do`** [section] (AGENTS.md:63) — 0 refs
-- **`Reference`** [section] (AGENTS.md:73) — 0 refs
-- **`Tools`** [section] (AGENTS.md:75) — 0 refs
-- **`Keeping the Index Fresh`** [section] (AGENTS.md:90) — 0 refs
-- **`Skills`** [section] (AGENTS.md:94) — 0 refs
+
+## Entry Points
+- **`has`** [function] — 20 incoming references
+- **`CodeSymbol`** [interface] — 9 incoming references
+- **`RawImport`** [interface] — 6 incoming references
+- **`SymbolLink`** [interface] — 5 incoming references
+- **`RawCall`** [interface] — 5 incoming references
+
+## Dependencies
+- **analyzer**: `loadAliases`, `analyze`, `resolve`
+- **store**: `RepoRegistry`, `Database`, `register`, `close`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks` (+11 more)
+- **server**: `createMcpServer`, `startStdio`, `startHttp`, `get`
+
+## Used By
+- **analyzer**: `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `AnalysisStats`, `SymbolLink` (+3 more)
+- **parser**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `ExtractionResult`, `SymbolKind`, `has`
+- **store**: `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has`
+- **test**: `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `has`
+- **server**: `has`
 
 ## Files
 - AGENTS.md
 - CLAUDE.md
 - README.md
+- src/cli.ts
 - src/skills.ts
 - src/types.ts
+- vitest.config.ts

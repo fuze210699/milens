@@ -17,6 +17,8 @@ export class Database {
     this.db.pragma('synchronous = NORMAL');
     this.db.pragma('foreign_keys = ON');
     this.db.pragma('cache_size = -8000'); // 8MB page cache
+    this.db.pragma('mmap_size = 268435456'); // 256MB memory-mapped I/O for faster reads
+    this.db.pragma('temp_store = MEMORY'); // temp tables in RAM
     this.applySchema();
     this.stmts = this.prepareStatements();
   }

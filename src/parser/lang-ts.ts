@@ -9,6 +9,7 @@ const spec: LangSpec = {
   queries: {
     functions: `[
       (function_declaration name: (identifier) @name) @def
+      (generator_function_declaration name: (identifier) @name) @def
       (lexical_declaration
         (variable_declarator
           name: (identifier) @name
@@ -24,6 +25,10 @@ const spec: LangSpec = {
     imports: `[
       (import_statement
         source: (string (string_fragment) @source)
+      ) @def
+      (call_expression
+        function: (import)
+        arguments: (arguments (string (string_fragment) @source))
       ) @def
       (lexical_declaration
         (variable_declarator
@@ -58,10 +63,18 @@ const spec: LangSpec = {
       (export_statement
         declaration: (type_alias_declaration name: (type_identifier) @name)
       )
+      (export_statement
+        declaration: (generator_function_declaration name: (identifier) @name)
+      )
+      (export_statement
+        value: (identifier) @name
+      )
     ]`,
     calls: `[
       (call_expression function: (identifier) @callee) @def
       (call_expression function: (member_expression object: (_) @receiver property: (property_identifier) @callee)) @def
+      (new_expression constructor: (identifier) @callee) @def
+      (new_expression constructor: (member_expression object: (identifier) @receiver property: (property_identifier) @callee)) @def
       (decorator (identifier) @callee) @def
       (jsx_self_closing_element name: (identifier) @callee) @def
       (jsx_opening_element name: (identifier) @callee) @def
@@ -88,6 +101,28 @@ const spec: LangSpec = {
         "*"
       ) @def
     ]`,
+    typeBindings: `[
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @var
+          value: (new_expression constructor: (identifier) @type)
+        )
+      )
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @var
+          type: (type_annotation (type_identifier) @type)
+        )
+      )
+      (required_parameter
+        pattern: (identifier) @var
+        type: (type_annotation (type_identifier) @type)
+      )
+      (public_field_definition
+        name: (property_identifier) @var
+        type: (type_annotation (type_identifier) @type)
+      )
+    ]`,
   },
   resolveImport(raw, fromFile, root, aliases) {
     // Check aliases first (e.g. @ → src)
@@ -104,7 +139,13 @@ const spec: LangSpec = {
     if (!aliased && !raw.startsWith('.') && !raw.startsWith('/')) return null;
 
     // Alias-resolved paths are root-relative; relative paths resolve from file's dir
-    const base = aliased ? join(root, raw) : join(dirname(join(root, fromFile)), raw);
+    const dir = aliased ? root : dirname(join(root, fromFile));
+    const rawBase = join(dir, raw);
+
+    // Strip .js/.jsx/.mjs/.cjs extension — TS convention: `import './foo.js'` → file is `foo.ts`
+    const JS_EXT = /\.(js|jsx|mjs|cjs)$/;
+    const base = JS_EXT.test(rawBase) ? rawBase.replace(JS_EXT, '') : rawBase;
+
     const candidates = [
       base + '.ts', base + '.tsx',
       base + '.js', base + '.jsx',

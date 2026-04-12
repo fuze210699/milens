@@ -446,7 +446,7 @@ milens is **offline by design** — zero network calls, zero telemetry.
 ```bash
 npm install              # install dependencies
 npm run build            # tsc → dist/
-npm test                 # vitest (55 tests)
+npm test                 # vitest (60 tests)
 npm run lint             # tsc --noEmit
 npm run self-analyze     # index this repo
 npm run self-serve       # start MCP server on port 3100

@@ -64,12 +64,20 @@ export interface ExtractionResult {
   heritage: RawHeritage[];
   exportedNames: Set<string>;
   reExports: RawReExport[];
+  typeBindings: RawTypeBinding[];
 }
 
 export interface RawReExport {
   filePath: string;
   modulePath: string;
   names: string[];    // specific names, empty = wildcard (export * from)
+  line: number;
+}
+
+export interface RawTypeBinding {
+  filePath: string;
+  variableName: string;  // e.g., "userService", "db", "repo"
+  typeName: string;       // e.g., "UserService", "Database", "UserRepository"
   line: number;
 }
 

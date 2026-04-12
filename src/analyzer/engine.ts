@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { scanFiles } from './scanner.js';
 import { langForFile } from '../parser/languages.js';
@@ -10,9 +11,69 @@ import { extractMarkdown } from '../parser/lang-md.js';
 import { resolveLinks, resolveLinksWithStats } from './resolver.js';
 import { enrichMetadata } from './enrich.js';
 import { Database } from '../store/db.js';
-import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, AnalysisStats } from '../types.js';
+import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, AnalysisStats } from '../types.js';
 import type Parser from 'web-tree-sitter';
 import type { LangSpec } from '../parser/extract.js';
+
+// ── Async batch file reader ──
+// Reads multiple files concurrently with concurrency limit to avoid fd exhaustion
+const READ_CONCURRENCY = 32;
+
+async function readFilesAsync(paths: string[]): Promise<Map<string, string>> {
+  const results = new Map<string, string>();
+  for (let i = 0; i < paths.length; i += READ_CONCURRENCY) {
+    const batch = paths.slice(i, i + READ_CONCURRENCY);
+    const settled = await Promise.allSettled(
+      batch.map(async (p) => {
+        const content = await readFile(p, 'utf-8');
+        return { path: p, content };
+      })
+    );
+    for (const result of settled) {
+      if (result.status === 'fulfilled') {
+        results.set(result.value.path, result.value.content);
+      }
+    }
+  }
+  return results;
+}
+
+// ── Import resolution cache ──
+// Caches resolveImport results to avoid repeated path resolution for the same module
+class ImportResolveCache {
+  private cache = new Map<string, string | null>();
+
+  resolve(
+    spec: LangSpec,
+    modulePath: string,
+    fromFile: string,
+    rootPath: string,
+    aliases: Record<string, string>,
+  ): string | null {
+    // fromDir-based key: same module from same directory resolves identically
+    const fromDir = fromFile.substring(0, fromFile.lastIndexOf('/') + 1);
+    const key = `${fromDir}::${modulePath}`;
+    if (this.cache.has(key)) return this.cache.get(key)!;
+    const resolved = spec.resolveImport(modulePath, fromFile, rootPath, aliases);
+    this.cache.set(key, resolved);
+    return resolved;
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+// ── Chunk-based processing ──
+// Group files into byte-budget chunks to bound peak memory
+const CHUNK_BYTE_BUDGET = 20 * 1024 * 1024; // 20MB source per chunk
+
+interface FileWithSpec {
+  relativePath: string;
+  absolutePath: string;
+  size: number;
+  spec: LangSpec;
+}
 
 interface EngineOptions {
   rootPath: string;
@@ -20,6 +81,23 @@ interface EngineOptions {
   verbose?: boolean;
   force?: boolean;
   aliases?: Record<string, string>;
+}
+
+function buildChunks(files: FileWithSpec[]): FileWithSpec[][] {
+  const chunks: FileWithSpec[][] = [];
+  let current: FileWithSpec[] = [];
+  let currentBytes = 0;
+  for (const file of files) {
+    if (current.length > 0 && currentBytes + file.size > CHUNK_BYTE_BUDGET) {
+      chunks.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(file);
+    currentBytes += file.size;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
 }
 
 export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
@@ -35,12 +113,12 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   if (opts.verbose) console.log(`[scan] Found ${files.length} source files`);
 
   // Phase 2: Group files by language for cache-friendly processing
-  const langGroups = new Map<string, Array<{ relativePath: string; absolutePath: string; spec: LangSpec }>>();
+  const langGroups = new Map<string, FileWithSpec[]>();
   for (const file of files) {
     const spec = langForFile(file.relativePath);
     if (!spec) continue;
     const group = langGroups.get(spec.wasmName) ?? [];
-    group.push({ ...file, spec });
+    group.push({ ...file, size: 0, spec });  // size populated during read
     langGroups.set(spec.wasmName, group);
   }
 
@@ -56,14 +134,19 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const allCalls: RawCall[] = [];
   const allHeritage: RawHeritage[] = [];
   const allReExports: RawReExport[] = [];
+  const allTypeBindings: RawTypeBinding[] = [];
   const resolvedImportPaths = new Map<string, string>();
   const parsedFiles = new Set<string>();
+  const importCache = new ImportResolveCache();
   let filesParsed = 0;
 
-  // Process document files (no tree-sitter needed)
+  // Process document files (no tree-sitter needed) — batch read
   if (docGroup) {
+    const docContents = await readFilesAsync(docGroup.map(f => f.absolutePath));
+
     for (const file of docGroup) {
-      const source = readFileSync(file.absolutePath, 'utf-8');
+      const source = docContents.get(file.absolutePath);
+      if (!source) continue;
 
       if (!opts.force && db.isFileUpToDate(file.relativePath, source)) {
         if (opts.verbose) console.log(`[skip] ${file.relativePath} (unchanged)`);
@@ -79,7 +162,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
         allImports.push(...result.imports);
 
         for (const imp of result.imports) {
-          const resolved = file.spec.resolveImport(imp.modulePath, imp.filePath, rootPath, aliases);
+          const resolved = importCache.resolve(file.spec, imp.modulePath, imp.filePath, rootPath, aliases);
           if (resolved) {
             resolvedImportPaths.set(`${imp.filePath}::${imp.modulePath}`, resolved);
           }
@@ -100,50 +183,68 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     const parser = await getParser(wasmName);
     const lang = await loadLanguage(wasmName);
 
+    // Chunk-based processing: read content in byte-budget chunks
+    // to bound peak memory for large repos
     for (const file of group) {
-      const source = readFileSync(file.absolutePath, 'utf-8');
-
-      // Skip unchanged files (incremental)
-      if (!opts.force && db.isFileUpToDate(file.relativePath, source)) {
-        if (opts.verbose) console.log(`[skip] ${file.relativePath} (unchanged)`);
-        continue;
-      }
-
       try {
-        const result = await parseFile(source, file.relativePath, file.spec, parser, lang);
-        if (!result) continue;
+        const stat = readFileSync(file.absolutePath).length;
+        file.size = stat;
+      } catch { file.size = 0; }
+    }
+    const chunks = buildChunks(group);
 
-        symbolsByFile.set(file.relativePath, result.symbols);
-        allSymbols.push(...result.symbols);
-        allImports.push(...result.imports);
-        allCalls.push(...result.calls);
-        allHeritage.push(...result.heritage);
-        allReExports.push(...result.reExports);
+    for (const chunk of chunks) {
+      // Batch-read all files in this chunk asynchronously
+      const chunkContents = await readFilesAsync(chunk.map(f => f.absolutePath));
 
-        // Resolve import paths eagerly
-        for (const imp of result.imports) {
-          const resolved = file.spec.resolveImport(imp.modulePath, imp.filePath, rootPath, aliases);
-          if (opts.verbose) console.log(`[resolve] ${imp.filePath}::${imp.modulePath} => ${resolved ?? 'NULL'}`);
-          if (resolved) {
-            resolvedImportPaths.set(`${imp.filePath}::${imp.modulePath}`, resolved);
-          }
+      for (const file of chunk) {
+        const source = chunkContents.get(file.absolutePath);
+        if (!source) continue;
+
+        // Skip unchanged files (incremental)
+        if (!opts.force && db.isFileUpToDate(file.relativePath, source)) {
+          if (opts.verbose) console.log(`[skip] ${file.relativePath} (unchanged)`);
+          continue;
         }
 
-        // Resolve re-export paths
-        for (const re of result.reExports) {
-          const resolved = file.spec.resolveImport(re.modulePath, re.filePath, rootPath, aliases);
-          if (resolved) {
-            resolvedImportPaths.set(`${re.filePath}::${re.modulePath}`, resolved);
-          }
-        }
+        try {
+          const result = await parseFile(source, file.relativePath, file.spec, parser, lang);
+          if (!result) continue;
 
-        db.upsertFileHash(file.relativePath, source);
-        parsedFiles.add(file.relativePath);
-        filesParsed++;
-        if (opts.verbose) console.log(`[parse] ${file.relativePath}: ${result.symbols.length} symbols`);
-      } catch (err) {
-        if (opts.verbose) console.error(`[error] ${file.relativePath}: ${err}`);
+          symbolsByFile.set(file.relativePath, result.symbols);
+          allSymbols.push(...result.symbols);
+          allImports.push(...result.imports);
+          allCalls.push(...result.calls);
+          allHeritage.push(...result.heritage);
+          allReExports.push(...result.reExports);
+          allTypeBindings.push(...result.typeBindings);
+
+          // Resolve import paths eagerly (cached)
+          for (const imp of result.imports) {
+            const resolved = importCache.resolve(file.spec, imp.modulePath, imp.filePath, rootPath, aliases);
+            if (opts.verbose) console.log(`[resolve] ${imp.filePath}::${imp.modulePath} => ${resolved ?? 'NULL'}`);
+            if (resolved) {
+              resolvedImportPaths.set(`${imp.filePath}::${imp.modulePath}`, resolved);
+            }
+          }
+
+          // Resolve re-export paths (cached)
+          for (const re of result.reExports) {
+            const resolved = importCache.resolve(file.spec, re.modulePath, re.filePath, rootPath, aliases);
+            if (resolved) {
+              resolvedImportPaths.set(`${re.filePath}::${re.modulePath}`, resolved);
+            }
+          }
+
+          db.upsertFileHash(file.relativePath, source);
+          parsedFiles.add(file.relativePath);
+          filesParsed++;
+          if (opts.verbose) console.log(`[parse] ${file.relativePath}: ${result.symbols.length} symbols`);
+        } catch (err) {
+          if (opts.verbose) console.error(`[error] ${file.relativePath}: ${err}`);
+        }
       }
+      // chunkContents goes out of scope → GC can reclaim source strings
     }
   }
 
@@ -170,6 +271,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     calls: allCalls,
     heritage: allHeritage,
     reExports: allReExports,
+    typeBindings: allTypeBindings,
     resolvedImportPaths,
   });
   const links = resolution.links;
@@ -182,6 +284,15 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
       console.log(`[link] ✓ ${resolution.externalImports} external imports, ${resolution.externalCalls} external calls (expected)`);
     }
   }
+
+  // Release raw extraction data — no longer needed after resolution
+  allImports.length = 0;
+  allCalls.length = 0;
+  allHeritage.length = 0;
+  allReExports.length = 0;
+  allTypeBindings.length = 0;
+  resolvedImportPaths.clear();
+  importCache.clear();
 
   // Phase 6: Enrich — compute roles, heat, zones from resolved graph
   const enriched = enrichMetadata({ symbols: allSymbols, links });
@@ -276,7 +387,7 @@ async function parseFile(
     const jsSpec = (await import('../parser/lang-js.js')).default;
 
     const result: ExtractionResult = {
-      symbols: [], imports: [], calls: [], heritage: [], exportedNames: new Set(), reExports: [],
+      symbols: [], imports: [], calls: [], heritage: [], exportedNames: new Set(), reExports: [], typeBindings: [],
     };
 
     // Extract inline <script> blocks and parse as JS
@@ -298,6 +409,7 @@ async function parseFile(
       result.calls.push(...extracted.calls);
       result.heritage.push(...extracted.heritage);
       result.reExports.push(...extracted.reExports);
+      result.typeBindings.push(...extracted.typeBindings);
       for (const n of extracted.exportedNames) result.exportedNames.add(n);
     }
 

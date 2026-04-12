@@ -22,13 +22,49 @@ class LazyDb {
   private instance: Database | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private static IDLE_TIMEOUT = 5 * 60_000;
+  // Stats cache: avoid re-querying getStats/getDomainStats on every tool call
+  private statsCache: { data: ReturnType<Database['getStats']>; ts: number } | null = null;
+  private domainCache: { data: ReturnType<Database['getDomainStats']>; ts: number } | null = null;
+  private static CACHE_TTL = 30_000; // 30s TTL
 
   constructor(private dbPath: string) {}
 
   get(): Database {
     this.resetTimer();
-    if (!this.instance) this.instance = new Database(this.dbPath);
+    if (!this.instance) {
+      this.instance = new Database(this.dbPath);
+      this.statsCache = null;
+      this.domainCache = null;
+    }
     return this.instance;
+  }
+
+  /** Cached getStats — avoids 3 COUNT(*) queries per tool call */
+  getCachedStats(): ReturnType<Database['getStats']> {
+    const now = Date.now();
+    if (this.statsCache && now - this.statsCache.ts < LazyDb.CACHE_TTL) {
+      return this.statsCache.data;
+    }
+    const data = this.get().getStats();
+    this.statsCache = { data, ts: now };
+    return data;
+  }
+
+  /** Cached getDomainStats — avoids expensive GROUP BY query per tool call */
+  getCachedDomainStats(): ReturnType<Database['getDomainStats']> {
+    const now = Date.now();
+    if (this.domainCache && now - this.domainCache.ts < LazyDb.CACHE_TTL) {
+      return this.domainCache.data;
+    }
+    const data = this.get().getDomainStats();
+    this.domainCache = { data, ts: now };
+    return data;
+  }
+
+  /** Invalidate caches (e.g. after analyze) */
+  invalidateCache(): void {
+    this.statsCache = null;
+    this.domainCache = null;
   }
 
   private resetTimer(): void {
@@ -40,6 +76,8 @@ class LazyDb {
     this.instance?.close();
     this.instance = null;
     this.timer = null;
+    this.statsCache = null;
+    this.domainCache = null;
   }
 
   shutdown(): void {
@@ -352,13 +390,14 @@ export function createMcpServer(rootPath?: string): McpServer {
     throw new Error(`Multiple repos indexed (${all.length}). Specify \`repo\` parameter.`);
   }
 
-  function getDb(repoPath?: string): { db: Database; root: string } {
+  function getDb(repoPath?: string): { db: Database; root: string; lazy: LazyDb } {
     const root = resolveRoot(repoPath);
     const dbPath = registry.findDbPath(root);
     if (!dbPath) throw new Error(`No index for ${root}. Run \`milens analyze\` first.`);
 
     if (!pools.has(root)) pools.set(root, new LazyDb(dbPath));
-    return { db: pools.get(root)!.get(), root };
+    const lazy = pools.get(root)!;
+    return { db: lazy.get(), root, lazy };
   }
 
   const server = new McpServer(
@@ -552,8 +591,8 @@ export function createMcpServer(rootPath?: string): McpServer {
       repo: z.string().optional(),
     },
     async ({ repo }) => {
-      const { db, root } = getDb(repo);
-      const stats = db.getStats();
+      const { db, root, lazy } = getDb(repo);
+      const stats = lazy.getCachedStats();
       const unresolved = db.getUnresolvedStats();
       const coverage = db.getTestCoverage();
       let text = `repo: ${root}\nsymbols: ${stats.symbols}\nlinks: ${stats.links}\nfiles: ${stats.files}`;
@@ -569,7 +608,7 @@ export function createMcpServer(rootPath?: string): McpServer {
           : 0;
         text += `\ntest coverage: ${coverage.testedSymbols}/${coverage.exportedProductionSymbols} exported symbols (${pct}%) from ${coverage.testFiles} test files`;
       }
-      const domains = db.getDomainStats();
+      const domains = lazy.getCachedDomainStats();
       if (domains.length > 0) {
         text += `\ndomains: ${domains.map(d => `${d.domain}(${d.files}f/${d.symbols}s)`).join(', ')}`;
       }
@@ -589,8 +628,8 @@ export function createMcpServer(rootPath?: string): McpServer {
       repo: z.string().optional(),
     },
     async ({ repo }) => {
-      const { db } = getDb(repo);
-      const domains = db.getDomainStats();
+      const { db, lazy } = getDb(repo);
+      const domains = lazy.getCachedDomainStats();
       if (domains.length === 0) {
         return { content: [{ type: 'text' as const, text: 'No domains detected. Run `milens analyze` first.' }] };
       }
@@ -1441,11 +1480,11 @@ export function createMcpServer(rootPath?: string): McpServer {
     'milens://overview',
     { description: 'Index overview: stats, domains, unresolved, test coverage, staleness' },
     async (uri) => {
-      const { db, root } = getDb();
-      const stats = db.getStats();
+      const { db, root, lazy } = getDb();
+      const stats = lazy.getCachedStats();
       const unresolved = db.getUnresolvedStats();
       const coverage = db.getTestCoverage();
-      const domains = db.getDomainStats();
+      const domains = lazy.getCachedDomainStats();
       const staleFiles = db.getStaleFiles(24);
 
       const lines: string[] = [

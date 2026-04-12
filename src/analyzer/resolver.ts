@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import type { CodeSymbol, SymbolLink, RawImport, RawCall, RawHeritage, RawReExport, LinkType } from '../types.js';
+import type { CodeSymbol, SymbolLink, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, LinkType } from '../types.js';
 
 interface ResolutionInput {
   symbolsByFile: Map<string, CodeSymbol[]>;
@@ -8,6 +8,7 @@ interface ResolutionInput {
   calls: RawCall[];
   heritage: RawHeritage[];
   reExports?: RawReExport[];
+  typeBindings?: RawTypeBinding[];
   resolvedImportPaths: Map<string, string>; // raw module path → resolved file path
 }
 
@@ -62,6 +63,19 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     let s = directImportsPerFile.get(imp.filePath);
     if (!s) { s = new Set(); directImportsPerFile.set(imp.filePath, s); }
     s.add(targetFile);
+  }
+
+  // Build per-file type binding map: file → (varName → typeName)
+  const typeBindingsPerFile = new Map<string, Map<string, string>>();
+  if (input.typeBindings) {
+    for (const tb of input.typeBindings) {
+      let fileBindings = typeBindingsPerFile.get(tb.filePath);
+      if (!fileBindings) {
+        fileBindings = new Map();
+        typeBindingsPerFile.set(tb.filePath, fileBindings);
+      }
+      fileBindings.set(tb.variableName, tb.typeName);
+    }
   }
 
   // ── Resolve imports ──
@@ -152,7 +166,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
 
     // ── Receiver-aware narrowing (highest priority for member calls) ──
     if (call.receiver) {
-      const narrowed = narrowByReceiver(call, candidates, symbolById, symbolByName, importedNamesPerFile, input.symbolsByFile);
+      const narrowed = narrowByReceiver(call, candidates, symbolById, symbolByName, importedNamesPerFile, input.symbolsByFile, typeBindingsPerFile);
       if (narrowed) {
         links.push(makeLink(call.enclosingSymbolId, narrowed.symbol.id, 'calls', narrowed.confidence, call.line));
         continue;
@@ -220,6 +234,7 @@ function narrowByReceiver(
   symbolByName: Map<string, CodeSymbol[]>,
   importedNamesPerFile: Map<string, Map<string, string>>,
   symbolsByFile: Map<string, CodeSymbol[]>,
+  typeBindingsPerFile: Map<string, Map<string, string>>,
 ): { symbol: CodeSymbol; confidence: number } | null {
   const receiver = call.receiver!;
 
@@ -231,6 +246,13 @@ function narrowByReceiver(
       const method = candidates.find(c => c.parentId === parentId);
       if (method) return { symbol: method, confidence: 0.95 };
     }
+  }
+
+  // Strategy 1b: this.field.method() → look up field's type from type bindings
+  if (receiver.startsWith('this.') || receiver.startsWith('self.')) {
+    const fieldName = receiver.slice(receiver.indexOf('.') + 1);
+    const match = narrowByTypeBinding(fieldName, call.filePath, candidates, symbolById, typeBindingsPerFile);
+    if (match) return match;
   }
 
   // Strategy 2: receiver is an imported type name (static call or PascalCase)
@@ -245,6 +267,12 @@ function narrowByReceiver(
     // Fallback: any candidate from the imported file
     const fromFile = candidates.find(c => c.filePath === importedFile);
     if (fromFile) return { symbol: fromFile, confidence: 0.85 };
+  }
+
+  // Strategy 2b: receiver is a variable with a known type binding (e.g. const db = new Database())
+  {
+    const match = narrowByTypeBinding(receiver, call.filePath, candidates, symbolById, typeBindingsPerFile);
+    if (match) return match;
   }
 
   // Strategy 3: receiver → PascalCase naming convention (userService → UserService)
@@ -267,6 +295,31 @@ function narrowByReceiver(
       if (method) return { symbol: method, confidence: 0.90 };
     }
   }
+
+  return null;
+}
+
+// ── Type binding lookup: variable → type → method candidate ──
+
+function narrowByTypeBinding(
+  varName: string,
+  filePath: string,
+  candidates: CodeSymbol[],
+  symbolById: Map<string, CodeSymbol>,
+  typeBindingsPerFile: Map<string, Map<string, string>>,
+): { symbol: CodeSymbol; confidence: number } | null {
+  const fileBindings = typeBindingsPerFile.get(filePath);
+  if (!fileBindings) return null;
+
+  const typeName = fileBindings.get(varName);
+  if (!typeName) return null;
+
+  // Find candidate whose parent class name matches the resolved type
+  const method = candidates.find(c => {
+    const parent = c.parentId ? symbolById.get(c.parentId) : null;
+    return parent?.name === typeName;
+  });
+  if (method) return { symbol: method, confidence: 0.93 };
 
   return null;
 }

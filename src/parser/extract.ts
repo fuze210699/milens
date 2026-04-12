@@ -1,5 +1,5 @@
 import type Parser from 'web-tree-sitter';
-import type { CodeSymbol, RawImport, RawCall, RawHeritage, RawReExport, ExtractionResult, SymbolKind } from '../types.js';
+import type { CodeSymbol, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, ExtractionResult, SymbolKind } from '../types.js';
 
 // ── Declarative language specification ──
 
@@ -23,6 +23,7 @@ export interface LangSpec {
     exports?: string;
     reExports?: string;
     heritage?: string;
+    typeBindings?: string;
   };
   resolveImport(raw: string, fromFile: string, root: string, aliases: Record<string, string>): string | null;
 }
@@ -191,6 +192,7 @@ export function extractFromTree(
   const calls: RawCall[] = [];
   const heritage: RawHeritage[] = [];
   const reExports: RawReExport[] = [];
+  const typeBindings: RawTypeBinding[] = [];
   const exportedNames = new Set<string>();
 
   const root = tree.rootNode;
@@ -353,5 +355,26 @@ export function extractFromTree(
     }
   }
 
-  return { symbols, imports, calls, heritage, exportedNames, reExports };
+  // ── Extract type bindings (variable → type mappings) ──
+
+  if (spec.queries.typeBindings) {
+    const seen = new Map<string, number>(); // varName → line (dedup: last wins)
+    for (const match of runQuery(spec.queries.typeBindings)) {
+      const varName = captureText(match, 'var');
+      const typeName = captureText(match, 'type');
+      if (!varName || !typeName) continue;
+
+      const defNode = captureNode(match, 'var');
+      const line = defNode ? defNode.startPosition.row + 1 : 0;
+
+      // Deduplicate: prefer type annotation over new expression (later match wins)
+      const existingLine = seen.get(varName);
+      if (existingLine !== undefined && existingLine === line) continue;
+      seen.set(varName, line);
+
+      typeBindings.push({ filePath, variableName: varName, typeName, line });
+    }
+  }
+
+  return { symbols, imports, calls, heritage, exportedNames, reExports, typeBindings };
 }

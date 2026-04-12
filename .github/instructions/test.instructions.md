@@ -5,9 +5,11 @@ applyTo: "test/**"
 # Test
 
 ## Overview
-Contains 47 symbols (23 exported) across 14 files.
+Contains 85 symbols (29 exported) across 25 files.
 
 ## Key Symbols
+- **`useClipboard`** [function] (test/fixtures/vue-project/src/composables/useClipboard.js:1) — 2 refs
+- **`createUser`** [function] (test/fixtures/ts-project/src/models.ts:9) — 2 refs
 - **`Project Guide`** [section] (test/fixtures/md-project/docs/guide.md:1) — 1 refs
 - **`Getting Started`** [section] (test/fixtures/md-project/docs/guide.md:5) — 1 refs
 - **`Architecture`** [section] (test/fixtures/md-project/docs/guide.md:15) — 1 refs
@@ -17,19 +19,23 @@ Contains 47 symbols (23 exported) across 14 files.
 - **`Endpoints`** [section] (test/fixtures/md-project/docs/guide.md:37) — 1 refs
 - **`Error Codes`** [section] (test/fixtures/md-project/docs/guide.md:42) — 1 refs
 - **`Contributing`** [section] (test/fixtures/md-project/docs/guide.md:46) — 1 refs
+- **`User`** [interface] (test/fixtures/ts-project/src/models.ts:1) — 1 refs
+- **`UserRole`** [type] (test/fixtures/ts-project/src/models.ts:7) — 1 refs
 - **`NewUser`** [function] (test/fixtures/go-project/models/user.go:14) — 1 refs
 - **`My Project`** [section] (test/fixtures/md-project/README.md:1) — 0 refs
-- **`Installation`** [section] (test/fixtures/md-project/README.md:5) — 0 refs
-- **`Usage`** [section] (test/fixtures/md-project/README.md:11) — 0 refs
-- **`License`** [section] (test/fixtures/md-project/README.md:15) — 0 refs
-- **`AuthService`** [class] (test/fixtures/ts-project/src/auth.ts:4) — 0 refs
 
 ## Entry Points
+- **`useClipboard`** [function] — 2 incoming references
+- **`copy`** [function] — 2 incoming references
+- **`createUser`** [function] — 2 incoming references
 - **`Project Guide`** [section] — 1 incoming references
 - **`Getting Started`** [section] — 1 incoming references
-- **`Architecture`** [section] — 1 incoming references
-- **`Models`** [section] — 1 incoming references
-- **`Authentication`** [section] — 1 incoming references
+
+## Dependencies
+- **store**: `Database`, `close`, `insertSymbol`, `findSymbolByName`, `insertLink`, `getIncomingLinks`, `getOutgoingLinks`, `rebuildSearch` (+14 more)
+- **root**: `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `has`
+- **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `extractHtmlScripts`, `extractHtmlRefs`, `extractMarkdown` (+1 more)
+- **analyzer**: `resolveLinks`, `resolveLinksWithStats`, `scanFiles`, `analyze`, `loadAliases`, `find`
 
 ## Files
 - test/fixtures/go-project/models/user.go
@@ -46,3 +52,14 @@ Contains 47 symbols (23 exported) across 14 files.
 - test/fixtures/ts-project/src/UserProfile.vue
 - test/fixtures/ts-project/src/auth.ts
 - test/fixtures/ts-project/src/models.ts
+- test/fixtures/vue-project-refs/src/composables/useClipboard.js
+- test/fixtures/vue-project-refs/src/views/TestView.vue
+- test/fixtures/vue-project/src/composables/useClipboard.js
+- test/fixtures/vue-project/src/views/TestView.vue
+- test/unit/database.test.ts
+- test/unit/extractor.test.ts
+- test/unit/html-css.test.ts
+- test/unit/markdown.test.ts
+- test/unit/resolver.test.ts
+- test/unit/scanner.test.ts
+- test/unit/vue-import.test.ts

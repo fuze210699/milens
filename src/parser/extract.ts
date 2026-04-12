@@ -1,5 +1,5 @@
 import type Parser from 'web-tree-sitter';
-import type { CodeSymbol, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, ExtractionResult, SymbolKind } from '../types.js';
+import type { CodeSymbol, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, ExtractionResult, SymbolKind } from '../types.js';
 
 // ── Declarative language specification ──
 
@@ -24,6 +24,9 @@ export interface LangSpec {
     reExports?: string;
     heritage?: string;
     typeBindings?: string;
+    assignmentChains?: string;
+    returnTypes?: string;
+    callResultBindings?: string;
   };
   resolveImport(raw: string, fromFile: string, root: string, aliases: Record<string, string>): string | null;
 }
@@ -193,6 +196,9 @@ export function extractFromTree(
   const heritage: RawHeritage[] = [];
   const reExports: RawReExport[] = [];
   const typeBindings: RawTypeBinding[] = [];
+  const assignmentBindings: RawAssignmentBinding[] = [];
+  const returnTypes: RawReturnType[] = [];
+  const callResultBindings: RawCallResultBinding[] = [];
   const exportedNames = new Set<string>();
 
   const root = tree.rootNode;
@@ -355,10 +361,11 @@ export function extractFromTree(
     }
   }
 
-  // ── Extract type bindings (variable → type mappings) ──
+  // ── Extract type bindings (variable → type mappings, scope-aware) ──
 
   if (spec.queries.typeBindings) {
-    const seen = new Map<string, number>(); // varName → line (dedup: last wins)
+    const bindingSpans = buildSpanIndex(symbols);
+    const seen = new Map<string, number>(); // "scope::varName" → line (dedup: last wins)
     for (const match of runQuery(spec.queries.typeBindings)) {
       const varName = captureText(match, 'var');
       const typeName = captureText(match, 'type');
@@ -367,14 +374,71 @@ export function extractFromTree(
       const defNode = captureNode(match, 'var');
       const line = defNode ? defNode.startPosition.row + 1 : 0;
 
-      // Deduplicate: prefer type annotation over new expression (later match wins)
-      const existingLine = seen.get(varName);
-      if (existingLine !== undefined && existingLine === line) continue;
-      seen.set(varName, line);
+      // Scope: find enclosing function/method/class for this binding
+      const scope = findEnclosing(bindingSpans, line);
 
-      typeBindings.push({ filePath, variableName: varName, typeName, line });
+      // Deduplicate per scope: prefer type annotation over new expression (later match wins)
+      const dedupKey = `${scope ?? ''}::${varName}`;
+      const existingLine = seen.get(dedupKey);
+      if (existingLine !== undefined && existingLine === line) continue;
+      seen.set(dedupKey, line);
+
+      typeBindings.push({ filePath, variableName: varName, typeName, line, scope });
     }
   }
 
-  return { symbols, imports, calls, heritage, exportedNames, reExports, typeBindings };
+  // ── Extract assignment chains (variable = identifier, for type propagation) ──
+
+  if (spec.queries.assignmentChains) {
+    const chainSpans = buildSpanIndex(symbols);
+    for (const match of runQuery(spec.queries.assignmentChains)) {
+      const target = captureText(match, 'target');
+      const source = captureText(match, 'source');
+      if (!target || !source) continue;
+
+      const defNode = captureNode(match, 'target');
+      const line = defNode ? defNode.startPosition.row + 1 : 0;
+      const scope = findEnclosing(chainSpans, line);
+
+      assignmentBindings.push({ filePath, target, source, line, scope });
+    }
+  }
+
+  // ── Extract return types (function → return type annotation) ──
+
+  if (spec.queries.returnTypes) {
+    for (const match of runQuery(spec.queries.returnTypes)) {
+      const name = captureText(match, 'name');
+      const returnType = captureText(match, 'returnType');
+      if (!name || !returnType) continue;
+
+      const defNode = captureNode(match, 'name');
+      const line = defNode ? defNode.startPosition.row + 1 : 0;
+
+      // For methods, find parent class name
+      const parentName = captureText(match, 'className');
+
+      returnTypes.push({ filePath, functionName: name, returnType, line, parentName });
+    }
+  }
+
+  // ── Extract call result bindings (const x = func()) ──
+
+  if (spec.queries.callResultBindings) {
+    const crSpans = buildSpanIndex(symbols);
+    for (const match of runQuery(spec.queries.callResultBindings)) {
+      const target = captureText(match, 'var');
+      const calleeName = captureText(match, 'callee');
+      if (!target || !calleeName) continue;
+
+      const defNode = captureNode(match, 'var');
+      const line = defNode ? defNode.startPosition.row + 1 : 0;
+      const scope = findEnclosing(crSpans, line);
+      const receiver = captureText(match, 'receiver');
+
+      callResultBindings.push({ filePath, target, calleeName, receiver, line, scope });
+    }
+  }
+
+  return { symbols, imports, calls, heritage, exportedNames, reExports, typeBindings, assignmentBindings, returnTypes, callResultBindings };
 }

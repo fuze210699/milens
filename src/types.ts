@@ -65,6 +65,9 @@ export interface ExtractionResult {
   exportedNames: Set<string>;
   reExports: RawReExport[];
   typeBindings: RawTypeBinding[];
+  assignmentBindings: RawAssignmentBinding[];
+  returnTypes: RawReturnType[];
+  callResultBindings: RawCallResultBinding[];
 }
 
 export interface RawReExport {
@@ -79,6 +82,32 @@ export interface RawTypeBinding {
   variableName: string;  // e.g., "userService", "db", "repo"
   typeName: string;       // e.g., "UserService", "Database", "UserRepository"
   line: number;
+  scope?: string;         // enclosing symbol ID for scope-aware lookup (null = module-level)
+}
+
+export interface RawAssignmentBinding {
+  filePath: string;
+  target: string;    // variable being assigned to (e.g., "b")
+  source: string;    // identifier being assigned from (e.g., "a")
+  line: number;
+  scope?: string;    // enclosing symbol ID
+}
+
+export interface RawReturnType {
+  filePath: string;
+  functionName: string;  // function or method name
+  returnType: string;    // explicit return type annotation (e.g., "User")
+  line: number;
+  parentName?: string;   // enclosing class name for methods
+}
+
+export interface RawCallResultBinding {
+  filePath: string;
+  target: string;      // variable receiving the call result (e.g., "user")
+  calleeName: string;  // function being called (e.g., "getUser")
+  receiver?: string;   // receiver for member calls (e.g., "service")
+  line: number;
+  scope?: string;      // enclosing symbol ID
 }
 
 export interface AnalysisStats {

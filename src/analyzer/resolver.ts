@@ -1,5 +1,9 @@
 import { dirname } from 'node:path';
-import type { CodeSymbol, SymbolLink, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, LinkType } from '../types.js';
+import type { CodeSymbol, SymbolLink, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, LinkType } from '../types.js';
+
+// Minimum confidence to create a link — below this, classify as unresolved
+// "No link is better than a wrong link"
+const MIN_LINK_CONFIDENCE = 0.5;
 
 interface ResolutionInput {
   symbolsByFile: Map<string, CodeSymbol[]>;
@@ -9,6 +13,9 @@ interface ResolutionInput {
   heritage: RawHeritage[];
   reExports?: RawReExport[];
   typeBindings?: RawTypeBinding[];
+  assignmentBindings?: RawAssignmentBinding[];
+  returnTypes?: RawReturnType[];
+  callResultBindings?: RawCallResultBinding[];
   resolvedImportPaths: Map<string, string>; // raw module path → resolved file path
 }
 
@@ -65,8 +72,9 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     s.add(targetFile);
   }
 
-  // Build per-file type binding map: file → (varName → typeName)
-  const typeBindingsPerFile = new Map<string, Map<string, string>>();
+  // Build per-file type binding map: file → (varName → [{typeName, scope, line}])
+  // Multiple entries per varName when same name used in different scopes
+  const typeBindingsPerFile = new Map<string, Map<string, Array<{ typeName: string; scope?: string; line: number }>>>();
   if (input.typeBindings) {
     for (const tb of input.typeBindings) {
       let fileBindings = typeBindingsPerFile.get(tb.filePath);
@@ -74,7 +82,90 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
         fileBindings = new Map();
         typeBindingsPerFile.set(tb.filePath, fileBindings);
       }
-      fileBindings.set(tb.variableName, tb.typeName);
+      let entries = fileBindings.get(tb.variableName);
+      if (!entries) {
+        entries = [];
+        fileBindings.set(tb.variableName, entries);
+      }
+      entries.push({ typeName: tb.typeName, scope: tb.scope, line: tb.line });
+    }
+  }
+
+  // Propagate assignment chains (1-level): const b = a → b gets type of a
+  if (input.assignmentBindings) {
+    for (const ab of input.assignmentBindings) {
+      const fileBindings = typeBindingsPerFile.get(ab.filePath);
+      if (!fileBindings) continue;
+
+      const sourceEntries = fileBindings.get(ab.source);
+      if (!sourceEntries || sourceEntries.length === 0) continue;
+
+      // Find source entry matching the same scope (or module-level)
+      const scopeMatch = ab.scope
+        ? sourceEntries.find(e => e.scope === ab.scope)
+        : sourceEntries.find(e => !e.scope);
+      const sourceEntry = scopeMatch ?? sourceEntries[0];
+
+      // Add propagated binding for target
+      let targetEntries = fileBindings.get(ab.target);
+      if (!targetEntries) {
+        targetEntries = [];
+        fileBindings.set(ab.target, targetEntries);
+      }
+      // Don't overwrite if target already has a direct type binding
+      if (targetEntries.length === 0) {
+        targetEntries.push({ typeName: sourceEntry.typeName, scope: ab.scope, line: ab.line });
+      }
+    }
+  }
+
+  // Propagate call-result bindings: const x = getUser() → x gets return type of getUser
+  if (input.callResultBindings && input.returnTypes) {
+    // Build return type map: functionName → returnType (scoped by parentName for methods)
+    const returnTypeMap = new Map<string, string>(); // "functionName" or "ClassName.methodName" → returnType
+    for (const rt of input.returnTypes) {
+      if (rt.parentName) {
+        returnTypeMap.set(`${rt.parentName}.${rt.functionName}`, rt.returnType);
+      }
+      returnTypeMap.set(rt.functionName, rt.returnType);
+    }
+
+    for (const crb of input.callResultBindings) {
+      // Skip if target already has a type binding
+      const fileBindings = typeBindingsPerFile.get(crb.filePath);
+
+      let returnType: string | undefined;
+
+      // Try receiver.method lookup first (e.g., service.getUser → UserService.getUser)
+      if (crb.receiver && fileBindings) {
+        const receiverEntries = fileBindings.get(crb.receiver);
+        if (receiverEntries && receiverEntries.length > 0) {
+          const receiverType = receiverEntries[0].typeName;
+          returnType = returnTypeMap.get(`${receiverType}.${crb.calleeName}`);
+        }
+      }
+
+      // Fall back to bare function name lookup
+      if (!returnType) {
+        returnType = returnTypeMap.get(crb.calleeName);
+      }
+
+      if (!returnType) continue;
+
+      // Add type binding for the call result variable
+      let fb = fileBindings;
+      if (!fb) {
+        fb = new Map();
+        typeBindingsPerFile.set(crb.filePath, fb);
+      }
+      let entries = fb.get(crb.target);
+      if (!entries) {
+        entries = [];
+        fb.set(crb.target, entries);
+      }
+      if (entries.length === 0) {
+        entries.push({ typeName: returnType, scope: crb.scope, line: crb.line });
+      }
     }
   }
 
@@ -168,7 +259,11 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     if (call.receiver) {
       const narrowed = narrowByReceiver(call, candidates, symbolById, symbolByName, importedNamesPerFile, input.symbolsByFile, typeBindingsPerFile);
       if (narrowed) {
-        links.push(makeLink(call.enclosingSymbolId, narrowed.symbol.id, 'calls', narrowed.confidence, call.line));
+        if (narrowed.confidence >= MIN_LINK_CONFIDENCE) {
+          links.push(makeLink(call.enclosingSymbolId, narrowed.symbol.id, 'calls', narrowed.confidence, call.line));
+        } else {
+          unresolvedCalls++;
+        }
         continue;
       }
     }
@@ -193,7 +288,12 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
 
     // ── Proximity scoring fallback (replaces blind candidates[0]) ──
     const best = scoreCandidates(call, candidates, directImportsPerFile);
-    links.push(makeLink(call.enclosingSymbolId, best.symbol.id, 'calls', best.confidence, call.line));
+    if (best.confidence >= MIN_LINK_CONFIDENCE) {
+      links.push(makeLink(call.enclosingSymbolId, best.symbol.id, 'calls', best.confidence, call.line));
+    } else {
+      // Below threshold — "no link is better than a wrong link"
+      unresolvedCalls++;
+    }
   }
 
   // ── Resolve heritage (import-aware cross-file) ──
@@ -234,7 +334,7 @@ function narrowByReceiver(
   symbolByName: Map<string, CodeSymbol[]>,
   importedNamesPerFile: Map<string, Map<string, string>>,
   symbolsByFile: Map<string, CodeSymbol[]>,
-  typeBindingsPerFile: Map<string, Map<string, string>>,
+  typeBindingsPerFile: Map<string, Map<string, Array<{ typeName: string; scope?: string; line: number }>>>,
 ): { symbol: CodeSymbol; confidence: number } | null {
   const receiver = call.receiver!;
 
@@ -251,7 +351,7 @@ function narrowByReceiver(
   // Strategy 1b: this.field.method() → look up field's type from type bindings
   if (receiver.startsWith('this.') || receiver.startsWith('self.')) {
     const fieldName = receiver.slice(receiver.indexOf('.') + 1);
-    const match = narrowByTypeBinding(fieldName, call.filePath, candidates, symbolById, typeBindingsPerFile);
+    const match = narrowByTypeBinding(fieldName, call.filePath, candidates, symbolById, typeBindingsPerFile, call.enclosingSymbolId);
     if (match) return match;
   }
 
@@ -271,17 +371,18 @@ function narrowByReceiver(
 
   // Strategy 2b: receiver is a variable with a known type binding (e.g. const db = new Database())
   {
-    const match = narrowByTypeBinding(receiver, call.filePath, candidates, symbolById, typeBindingsPerFile);
+    const match = narrowByTypeBinding(receiver, call.filePath, candidates, symbolById, typeBindingsPerFile, call.enclosingSymbolId);
     if (match) return match;
   }
 
   // Strategy 3: receiver → PascalCase naming convention (userService → UserService)
+  // Low confidence: heuristic frequently wrong (repo→Repo but actual class is UserRepository)
   const pascal = receiver.charAt(0).toUpperCase() + receiver.slice(1);
   const byConvention = candidates.find(c => {
     const parent = c.parentId ? symbolById.get(c.parentId) : null;
     return parent?.name === pascal;
   });
-  if (byConvention) return { symbol: byConvention, confidence: 0.82 };
+  if (byConvention) return { symbol: byConvention, confidence: 0.55 };
 
   // Strategy 4: receiver matches a class in the same file
   const localSymbols = symbolsByFile.get(call.filePath);
@@ -299,20 +400,45 @@ function narrowByReceiver(
   return null;
 }
 
-// ── Type binding lookup: variable → type → method candidate ──
+// ── Type binding lookup: variable → type → method candidate (scope-aware) ──
 
 function narrowByTypeBinding(
   varName: string,
   filePath: string,
   candidates: CodeSymbol[],
   symbolById: Map<string, CodeSymbol>,
-  typeBindingsPerFile: Map<string, Map<string, string>>,
+  typeBindingsPerFile: Map<string, Map<string, Array<{ typeName: string; scope?: string; line: number }>>>,
+  callEnclosingId?: string,
 ): { symbol: CodeSymbol; confidence: number } | null {
   const fileBindings = typeBindingsPerFile.get(filePath);
   if (!fileBindings) return null;
 
-  const typeName = fileBindings.get(varName);
-  if (!typeName) return null;
+  const entries = fileBindings.get(varName);
+  if (!entries || entries.length === 0) return null;
+
+  // Scope-aware: prefer binding from same enclosing scope as the call
+  let typeName: string | undefined;
+  if (callEnclosingId && entries.length > 1) {
+    // First try exact scope match
+    const scopedEntry = entries.find(e => e.scope === callEnclosingId);
+    if (scopedEntry) {
+      typeName = scopedEntry.typeName;
+    } else {
+      // Try parent scope (e.g., call is in method, binding in class)
+      const enclosing = symbolById.get(callEnclosingId);
+      if (enclosing?.parentId) {
+        const parentEntry = entries.find(e => e.scope === enclosing.parentId);
+        if (parentEntry) typeName = parentEntry.typeName;
+      }
+    }
+  }
+
+  // Fallback: if only one entry or no scope match, use first (module-level or single)
+  if (!typeName) {
+    // Prefer module-level binding (scope undefined) when no scope match
+    const moduleLevelEntry = entries.find(e => !e.scope);
+    typeName = moduleLevelEntry?.typeName ?? entries[0].typeName;
+  }
 
   // Find candidate whose parent class name matches the resolved type
   const method = candidates.find(c => {

@@ -11,6 +11,8 @@ import { homedir } from 'node:os';
 import ignore from 'ignore';
 import { Database } from '../store/db.js';
 import { RepoRegistry } from '../store/registry.js';
+import { getParser, loadLanguage } from '../parser/loader.js';
+import { ALL_LANGS } from '../parser/languages.js';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -615,6 +617,17 @@ export function createMcpServer(rootPath?: string): McpServer {
       const staleFiles = db.getStaleFiles(24);
       if (staleFiles.length > 0) {
         text += `\n⏳ ${staleFiles.length} files not analyzed in 24h`;
+      }
+      // Accuracy report — confidence distribution of resolved links
+      const conf = db.getConfidenceDistribution();
+      if (conf.total > 0) {
+        const highPct = Math.round(conf.high / conf.total * 100);
+        const medPct = Math.round(conf.medium / conf.total * 100);
+        const lowPct = Math.round(conf.low / conf.total * 100);
+        text += `\naccuracy: ${conf.total} links — ≥0.9: ${conf.high} (${highPct}%) | 0.7-0.9: ${conf.medium} (${medPct}%) | <0.7: ${conf.low} (${lowPct}%)`;
+        if (lowPct > 15) {
+          text += `\n⚠ ${lowPct}% low-confidence links — consider re-analyzing with \`--force\` or reviewing unresolved calls`;
+        }
       }
       return { content: [{ type: 'text' as const, text }] };
     },
@@ -1382,6 +1395,109 @@ export function createMcpServer(rootPath?: string): McpServer {
       }
 
       return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
+    },
+  );
+
+  // Language ID → WASM name mapping for ast_explore/test_query
+  const langWasmMap = new Map<string, string>();
+  for (const lang of ALL_LANGS) {
+    if (lang.wasmName) langWasmMap.set(lang.id, lang.wasmName);
+  }
+
+  // ── Tool: ast_explore ──
+  server.tool(
+    'ast_explore',
+    'Parse a code snippet and return its S-expression AST tree. Useful for writing tree-sitter queries, debugging parse results, and understanding AST structure. Supports all milens-indexed languages.',
+    {
+      code: z.string().describe('Code snippet to parse'),
+      language: z.string().describe('Language ID (typescript, javascript, python, java, go, rust, php, ruby, html, css, vue)'),
+      maxDepth: z.number().optional().default(0).describe('Max depth to display (0 = unlimited)'),
+    },
+    async ({ code, language, maxDepth }) => {
+      const wasmName = langWasmMap.get(language);
+      if (!wasmName) {
+        const supported = [...langWasmMap.keys()].join(', ');
+        return { content: [{ type: 'text' as const, text: `Unknown language "${language}". Supported: ${supported}` }] };
+      }
+
+      try {
+        const parser = await getParser(wasmName);
+        const tree = parser.parse(code);
+
+        function formatNode(node: { type: string; text: string; namedChildCount: number; namedChildren: any[]; startPosition: { row: number; column: number }; endPosition: { row: number; column: number } }, depth: number): string {
+          const indent = '  '.repeat(depth);
+          const pos = `[${node.startPosition.row}:${node.startPosition.column}-${node.endPosition.row}:${node.endPosition.column}]`;
+
+          if (maxDepth > 0 && depth >= maxDepth) {
+            return `${indent}(${node.type} ${pos} ...)`;
+          }
+
+          if (node.namedChildCount === 0) {
+            // Leaf node — show text
+            const text = node.text.length > 60 ? node.text.slice(0, 57) + '...' : node.text;
+            return `${indent}(${node.type} ${pos} "${text}")`;
+          }
+
+          const children = node.namedChildren.map((c: any) => formatNode(c, depth + 1));
+          return `${indent}(${node.type} ${pos}\n${children.join('\n')})`;
+        }
+
+        const ast = formatNode(tree.rootNode as any, 0);
+
+        // Truncate if too large
+        const maxLen = 15_000;
+        const output = ast.length > maxLen
+          ? ast.slice(0, maxLen) + `\n... (truncated, ${ast.length} total chars)`
+          : ast;
+
+        return { content: [{ type: 'text' as const, text: output }] };
+      } catch (err: any) {
+        return { content: [{ type: 'text' as const, text: `Parse error: ${err.message}` }] };
+      }
+    },
+  );
+
+  // ── Tool: test_query ──
+  server.tool(
+    'test_query',
+    'Run a tree-sitter query against a code snippet and return all matches with captured node text. Useful for testing/debugging tree-sitter queries before adding them to a LangSpec.',
+    {
+      query: z.string().describe('Tree-sitter query pattern (S-expression)'),
+      code: z.string().describe('Code snippet to query against'),
+      language: z.string().describe('Language ID (typescript, javascript, python, java, go, rust, php, ruby, html, css, vue)'),
+    },
+    async ({ query: queryStr, code, language }) => {
+      const wasmName = langWasmMap.get(language);
+      if (!wasmName) {
+        const supported = [...langWasmMap.keys()].join(', ');
+        return { content: [{ type: 'text' as const, text: `Unknown language "${language}". Supported: ${supported}` }] };
+      }
+
+      try {
+        const parser = await getParser(wasmName);
+        const lang = await loadLanguage(wasmName);
+        const tree = parser.parse(code);
+        const compiledQuery = lang.query(queryStr);
+        const matches = compiledQuery.matches(tree.rootNode);
+
+        if (matches.length === 0) {
+          return { content: [{ type: 'text' as const, text: 'No matches found.' }] };
+        }
+
+        const lines: string[] = [`${matches.length} match(es):\n`];
+        for (let i = 0; i < matches.length; i++) {
+          const m = matches[i];
+          lines.push(`Match ${i + 1} (pattern ${m.pattern}):`);
+          for (const c of m.captures) {
+            const text = c.node.text.length > 100 ? c.node.text.slice(0, 97) + '...' : c.node.text;
+            lines.push(`  @${c.name}: "${text}" [${c.node.startPosition.row}:${c.node.startPosition.column}]`);
+          }
+        }
+
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      } catch (err: any) {
+        return { content: [{ type: 'text' as const, text: `Query error: ${err.message}` }] };
+      }
     },
   );
 

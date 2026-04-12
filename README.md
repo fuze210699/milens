@@ -8,7 +8,7 @@
   <a href="https://github.com/fuze210699/milens/blob/develop/LICENSE"><img src="https://img.shields.io/badge/license-PolyForm--Noncommercial-blue" alt="License: PolyForm Noncommercial"></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node.js >= 20"></a>
   <img src="https://img.shields.io/badge/languages-12-orange" alt="12 Languages">
-  <img src="https://img.shields.io/badge/MCP_tools-19-purple" alt="19 MCP Tools">
+  <img src="https://img.shields.io/badge/MCP_tools-21-purple" alt="21 MCP Tools">
 </p>
 
 <p align="center">
@@ -251,7 +251,7 @@ milens dashboard --port 8080                # custom port
 
 ## MCP Tools
 
-When the MCP server is running, your AI agent gets these 19 tools:
+When the MCP server is running, your AI agent gets these 21 tools:
 
 ### Search & Navigate
 
@@ -288,7 +288,14 @@ When the MCP server is running, your AI agent gets these 19 tools:
 |---|---|---|
 | `domains` | Domain clusters — groups of files forming logical modules | `domains({})` |
 | `repos` | List all indexed repositories | `repos({})` |
-| `status` | Index stats, domains, test coverage, staleness | `status({})` |
+| `status` | Index stats, domains, test coverage, accuracy report | `status({})` |
+
+### Developer Tools
+
+| Tool | What It Does | Example |
+|---|---|---|
+| `ast_explore` | Parse code snippet → S-expression AST tree | `ast_explore({code: "const x = 1", language: "typescript"})` |
+| `test_query` | Test tree-sitter query against code snippet | `test_query({query: "(identifier) @name", code: "const x = 1", language: "typescript"})` |
 
 ### Resources & Prompts
 
@@ -446,7 +453,7 @@ milens is **offline by design** — zero network calls, zero telemetry.
 ```bash
 npm install              # install dependencies
 npm run build            # tsc → dist/
-npm test                 # vitest (60 tests)
+npm test                 # vitest (65 tests)
 npm run lint             # tsc --noEmit
 npm run self-analyze     # index this repo
 npm run self-serve       # start MCP server on port 3100

@@ -11,7 +11,7 @@ import { extractMarkdown } from '../parser/lang-md.js';
 import { resolveLinks, resolveLinksWithStats } from './resolver.js';
 import { enrichMetadata } from './enrich.js';
 import { Database } from '../store/db.js';
-import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, AnalysisStats } from '../types.js';
+import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, AnalysisStats } from '../types.js';
 import type Parser from 'web-tree-sitter';
 import type { LangSpec } from '../parser/extract.js';
 
@@ -135,6 +135,9 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const allHeritage: RawHeritage[] = [];
   const allReExports: RawReExport[] = [];
   const allTypeBindings: RawTypeBinding[] = [];
+  const allAssignmentBindings: RawAssignmentBinding[] = [];
+  const allReturnTypes: RawReturnType[] = [];
+  const allCallResultBindings: RawCallResultBinding[] = [];
   const resolvedImportPaths = new Map<string, string>();
   const parsedFiles = new Set<string>();
   const importCache = new ImportResolveCache();
@@ -218,6 +221,9 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
           allHeritage.push(...result.heritage);
           allReExports.push(...result.reExports);
           allTypeBindings.push(...result.typeBindings);
+          allAssignmentBindings.push(...result.assignmentBindings);
+          allReturnTypes.push(...result.returnTypes);
+          allCallResultBindings.push(...result.callResultBindings);
 
           // Resolve import paths eagerly (cached)
           for (const imp of result.imports) {
@@ -272,6 +278,9 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     heritage: allHeritage,
     reExports: allReExports,
     typeBindings: allTypeBindings,
+    assignmentBindings: allAssignmentBindings,
+    returnTypes: allReturnTypes,
+    callResultBindings: allCallResultBindings,
     resolvedImportPaths,
   });
   const links = resolution.links;
@@ -291,6 +300,9 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   allHeritage.length = 0;
   allReExports.length = 0;
   allTypeBindings.length = 0;
+  allAssignmentBindings.length = 0;
+  allReturnTypes.length = 0;
+  allCallResultBindings.length = 0;
   resolvedImportPaths.clear();
   importCache.clear();
 
@@ -387,7 +399,7 @@ async function parseFile(
     const jsSpec = (await import('../parser/lang-js.js')).default;
 
     const result: ExtractionResult = {
-      symbols: [], imports: [], calls: [], heritage: [], exportedNames: new Set(), reExports: [], typeBindings: [],
+      symbols: [], imports: [], calls: [], heritage: [], exportedNames: new Set(), reExports: [], typeBindings: [], assignmentBindings: [], returnTypes: [], callResultBindings: [],
     };
 
     // Extract inline <script> blocks and parse as JS
@@ -410,6 +422,9 @@ async function parseFile(
       result.heritage.push(...extracted.heritage);
       result.reExports.push(...extracted.reExports);
       result.typeBindings.push(...extracted.typeBindings);
+      result.assignmentBindings.push(...extracted.assignmentBindings);
+      result.returnTypes.push(...extracted.returnTypes);
+      result.callResultBindings.push(...extracted.callResultBindings);
       for (const n of extracted.exportedNames) result.exportedNames.add(n);
     }
 

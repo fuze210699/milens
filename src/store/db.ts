@@ -345,6 +345,24 @@ export class Database {
     };
   }
 
+  getConfidenceDistribution(): { high: number; medium: number; low: number; total: number } {
+    const rows = this.db.prepare(`
+      SELECT
+        SUM(CASE WHEN confidence >= 0.9 THEN 1 ELSE 0 END) as high,
+        SUM(CASE WHEN confidence >= 0.7 AND confidence < 0.9 THEN 1 ELSE 0 END) as medium,
+        SUM(CASE WHEN confidence < 0.7 THEN 1 ELSE 0 END) as low,
+        COUNT(*) as total
+      FROM links
+      WHERE type != 'contains'
+    `).get() as any;
+    return {
+      high: rows?.high ?? 0,
+      medium: rows?.medium ?? 0,
+      low: rows?.low ?? 0,
+      total: rows?.total ?? 0,
+    };
+  }
+
   // ── Flow tracing — call chains from entrypoints to target ──
 
   traceToEntrypoints(symbolId: string, maxDepth = 8): Array<{ path: Array<{ symbol: CodeSymbol; via: string }>}> {

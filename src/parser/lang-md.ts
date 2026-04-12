@@ -137,6 +137,9 @@ export function extractMarkdown(source: string, filePath: string): ExtractionRes
     exportedNames: new Set(symbols.map(s => s.name)),
     reExports: [],
     typeBindings: [],
+    assignmentBindings: [],
+    returnTypes: [],
+    callResultBindings: [],
   };
 }
 

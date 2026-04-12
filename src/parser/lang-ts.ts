@@ -123,6 +123,51 @@ const spec: LangSpec = {
         type: (type_annotation (type_identifier) @type)
       )
     ]`,
+    assignmentChains: `[
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @target
+          value: (identifier) @source
+        )
+      )
+    ]`,
+    returnTypes: `[
+      (function_declaration
+        name: (identifier) @name
+        return_type: (type_annotation (type_identifier) @returnType)
+      )
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @name
+          value: (arrow_function
+            return_type: (type_annotation (type_identifier) @returnType)
+          )
+        )
+      )
+      (class_declaration
+        name: (type_identifier) @className
+        body: (class_body
+          (method_definition
+            name: (property_identifier) @name
+            return_type: (type_annotation (type_identifier) @returnType)
+          )
+        )
+      )
+    ]`,
+    callResultBindings: `[
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @var
+          value: (call_expression function: (identifier) @callee)
+        )
+      )
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @var
+          value: (call_expression function: (member_expression object: (_) @receiver property: (property_identifier) @callee))
+        )
+      )
+    ]`,
   },
   resolveImport(raw, fromFile, root, aliases) {
     // Check aliases first (e.g. @ → src)

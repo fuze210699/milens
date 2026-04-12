@@ -91,6 +91,28 @@ const spec: LangSpec = {
         )
       )
     ]`,
+    assignmentChains: `[
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @target
+          value: (identifier) @source
+        )
+      )
+    ]`,
+    callResultBindings: `[
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @var
+          value: (call_expression function: (identifier) @callee)
+        )
+      )
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @var
+          value: (call_expression function: (member_expression object: (_) @receiver property: (property_identifier) @callee))
+        )
+      )
+    ]`,
   },
   resolveImport(raw, fromFile, root, aliases) {
     // Check aliases first (e.g. @ → src)

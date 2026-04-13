@@ -221,14 +221,16 @@ export class Database {
   }
 
   findDeadCode(kind?: string, limit = 50): CodeSymbol[] {
+    // Exclude: section symbols (markdown headings), test fixtures (not real production code)
+    const excludeClause = `AND s.kind != 'section' AND s.file_path NOT LIKE 'test/fixtures/%'`;
     const sql = kind
       ? `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
-         WHERE s.exported = 1 AND s.kind = ? AND l.id IS NULL
+         WHERE s.exported = 1 AND s.kind = ? ${excludeClause} AND l.id IS NULL
          LIMIT ?`
       : `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
-         WHERE s.exported = 1 AND l.id IS NULL
+         WHERE s.exported = 1 ${excludeClause} AND l.id IS NULL
          LIMIT ?`;
     const rows = kind
       ? this.db.prepare(sql).all(kind, limit) as any[]

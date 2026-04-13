@@ -6,6 +6,7 @@ const spec: LangSpec = {
   id: 'python',
   extensions: ['.py'],
   wasmName: 'tree-sitter-python',
+  allTopLevelExported: true,
   queries: {
     functions: `[
       (module (function_definition name: (identifier) @name) @def)

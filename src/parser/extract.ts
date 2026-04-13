@@ -7,6 +7,7 @@ export interface LangSpec {
   id: string;
   extensions: string[];
   wasmName: string;
+  allTopLevelExported?: boolean; // Python: all top-level symbols exported when __all__ absent
   queries: {
     functions?: string;
     classes?: string;
@@ -87,7 +88,68 @@ function captureNode(match: Parser.QueryMatch, captureName: string): Parser.Synt
 function collectImportNames(defNode: Parser.SyntaxNode): Array<{ name: string; alias?: string }> {
   const names: Array<{ name: string; alias?: string }> = [];
   walkImportNames(defNode, names);
+
+  // Dynamic imports: const { join: joinPath } = await import('node:path')
+  // The defNode is the call_expression(import(...)) — walk up to find destructuring
+  if (names.length === 0 && defNode.type === 'call_expression') {
+    let cur: Parser.SyntaxNode | null = defNode.parent;
+    while (cur && cur.type !== 'variable_declarator' && cur.type !== 'lexical_declaration') {
+      cur = cur.parent;
+    }
+    if (cur?.type === 'variable_declarator') {
+      const pattern = cur.childForFieldName('name');
+      if (pattern?.type === 'object_pattern') {
+        collectObjectPatternNames(pattern, names);
+      }
+    }
+  }
+
+  // Destructured require: const { execFileSync: execFile } = require('node:child_process')
+  // The defNode is the lexical_declaration — find variable_declarator with object_pattern
+  if (names.length === 0 && defNode.type === 'lexical_declaration') {
+    for (let i = 0; i < defNode.namedChildCount; i++) {
+      const varDecl = defNode.namedChild(i)!;
+      if (varDecl.type === 'variable_declarator') {
+        const pattern = varDecl.childForFieldName('name');
+        if (pattern?.type === 'object_pattern') {
+          collectObjectPatternNames(pattern, names);
+        }
+      }
+    }
+  }
+
   return names;
+}
+
+/** Extract destructured names from an object_pattern: { join: joinPath, existsSync } */
+function collectObjectPatternNames(pattern: Parser.SyntaxNode, out: Array<{ name: string; alias?: string }>): void {
+  for (let i = 0; i < pattern.namedChildCount; i++) {
+    const child = pattern.namedChild(i)!;
+    if (child.type === 'pair_pattern') {
+      // { original: alias } → use alias as the imported name (that's what's called in code)
+      const key = child.childForFieldName('key');
+      const value = child.childForFieldName('value');
+      if (value?.type === 'identifier') {
+        out.push({ name: value.text, alias: key?.text });
+      }
+    } else if (child.type === 'shorthand_property_identifier_pattern') {
+      // { existsSync } → name == alias
+      out.push({ name: child.text });
+    }
+  }
+}
+
+/** Detect default import: `import Foo from '...'` has an identifier directly under import_clause */
+function isDefaultImportNode(defNode: Parser.SyntaxNode): boolean {
+  const clauses = defNode.type === 'import_clause'
+    ? [defNode]
+    : defNode.descendantsOfType('import_clause');
+  for (const clause of clauses) {
+    for (let i = 0; i < clause.childCount; i++) {
+      if (clause.child(i)!.type === 'identifier') return true;
+    }
+  }
+  return false;
 }
 
 function walkImportNames(node: Parser.SyntaxNode, out: Array<{ name: string; alias?: string }>): void {
@@ -214,6 +276,7 @@ export function extractFromTree(
 
   // ── Extract symbol definitions ──
 
+  const seenSymbolKeys = new Set<string>();
   for (const { key, kind } of SYMBOL_QUERY_TYPES) {
     const queryStr = spec.queries[key];
     if (!queryStr) continue;
@@ -222,6 +285,11 @@ export function extractFromTree(
       const name = captureText(match, 'name');
       const defNode = captureNode(match, 'def');
       if (!name || !defNode) continue;
+
+      // Skip duplicate: same name+line already captured with a higher-priority kind
+      const symKey = `${name}:${defNode.startPosition.row + 1}`;
+      if (seenSymbolKeys.has(symKey)) continue;
+      seenSymbolKeys.add(symKey);
 
       const sym: CodeSymbol = {
         id: makeSymbolId(kind, name, defNode.startPosition.row + 1),
@@ -264,6 +332,13 @@ export function extractFromTree(
     if (exportedNames.has(sym.name)) sym.exported = true;
   }
 
+  // Languages like Python: all top-level symbols are exported when no explicit __all__
+  if (spec.allTopLevelExported && exportedNames.size === 0) {
+    for (const sym of symbols) {
+      if (!sym.name.startsWith('_') && sym.kind !== 'module') sym.exported = true;
+    }
+  }
+
   // ── Extract imports ──
 
   if (spec.queries.imports) {
@@ -278,13 +353,14 @@ export function extractFromTree(
 
       const cleanSource = source.replace(/^['"]|['"]$/g, '');
       const names = collectImportNames(defNode);
+      const isDef = isDefaultImportNode(defNode);
 
       imports.push({
         filePath,
         modulePath: cleanSource,
         names,
-        isDefault: false,
-        isWildcard: names.length === 0,
+        isDefault: isDef,
+        isWildcard: !isDef && names.length === 0,
         line: defNode.startPosition.row + 1,
       });
     }

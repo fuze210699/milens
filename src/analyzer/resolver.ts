@@ -195,7 +195,21 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
 
     const fromId = `${imp.filePath}#module:_top:0`;
 
-    if (imp.names.length > 0) {
+    if (imp.isDefault) {
+      // Default import — find default-exported symbol or single primary export
+      const defaultTarget = findDefaultExport(targetSymbols);
+      if (defaultTarget) {
+        links.push(makeLink(fromId, defaultTarget.id, 'imports', 0.85, imp.line));
+      } else {
+        // Fallback: link to the module-level symbol (file still imports from target)
+        const moduleTop = targetSymbols.find(s => s.kind === 'module');
+        if (moduleTop) {
+          links.push(makeLink(fromId, moduleTop.id, 'imports', 0.6, imp.line));
+        } else {
+          unresolvedImports++;
+        }
+      }
+    } else if (imp.names.length > 0) {
       for (const { name } of imp.names) {
         // Direct match in target file
         let target = targetSymbols.find(s => s.name === name && s.exported);
@@ -210,14 +224,6 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
         } else {
           unresolvedImports++;
         }
-      }
-    } else if (imp.isDefault) {
-      // Default import — find default-exported symbol or single primary export
-      const defaultTarget = findDefaultExport(targetSymbols);
-      if (defaultTarget) {
-        links.push(makeLink(fromId, defaultTarget.id, 'imports', 0.85, imp.line));
-      } else {
-        unresolvedImports++;
       }
     } else {
       // Wildcard import — link to ALL exported symbols
@@ -236,12 +242,13 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
   for (const call of input.calls) {
     const candidates = symbolByName.get(call.calleeName);
     if (!candidates || candidates.length === 0) {
-      // Classify: external (built-in/imported from external pkg) vs truly unresolved
+      // No project symbol matches this callee name.
+      // - Method calls (has receiver): must be external — the method doesn't exist in the project
+      // - Bare calls: check built-in globals and external import names
       const extNames = externalNamesPerFile.get(call.filePath);
-      if (BUILTIN_GLOBALS.has(call.calleeName) ||
-          BUILTIN_GLOBALS.has(call.receiver ?? '') ||
-          extNames?.has(call.calleeName) ||
-          (call.receiver && extNames?.has(call.receiver))) {
+      if (call.receiver ||
+          BUILTIN_GLOBALS.has(call.calleeName) ||
+          extNames?.has(call.calleeName)) {
         externalCalls++;
       } else {
         unresolvedCalls++;
@@ -617,6 +624,14 @@ const BUILTIN_GLOBALS = new Set([
   'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'setImmediate', 'clearImmediate',
   'queueMicrotask', 'structuredClone', 'atob', 'btoa', 'fetch',
   'Buffer', 'process', 'global', 'globalThis', 'require', '__dirname', '__filename',
+  // Vue 3 composition API
+  'ref', 'reactive', 'computed', 'watch', 'watchEffect', 'onMounted', 'onUnmounted',
+  'onBeforeMount', 'onBeforeUnmount', 'onUpdated', 'onBeforeUpdate',
+  'defineProps', 'defineEmits', 'defineExpose', 'defineComponent', 'defineSlots',
+  'toRef', 'toRefs', 'unref', 'shallowRef', 'triggerRef',
+  'provide', 'inject', 'nextTick', 'h', 'createApp',
+  // React
+  'useState', 'useEffect', 'useContext', 'useRef', 'useMemo', 'useCallback', 'useReducer',
   // Python
   'print', 'len', 'range', 'str', 'int', 'float', 'list', 'dict', 'tuple', 'set', 'type',
   'isinstance', 'issubclass', 'hasattr', 'getattr', 'setattr', 'delattr',

@@ -69,8 +69,12 @@ const spec: LangSpec = {
       (decorator (call_expression arguments: (arguments (identifier) @callee))) @def
       (decorator (call_expression arguments: (arguments (object (pair value: (identifier) @callee))))) @def
       (decorator (call_expression arguments: (arguments (object (pair value: (array (identifier) @callee)))))) @def
+      (decorator (call_expression arguments: (arguments (object (pair value: (array (object (pair value: (identifier) @callee)))))))) @def
       (decorator (call_expression arguments: (arguments (arrow_function body: (identifier) @callee)))) @def
       (decorator (call_expression arguments: (arguments (object (pair value: (arrow_function body: (identifier) @callee)))))) @def
+      (call_expression arguments: (arguments (identifier) @callee)) @def
+      (call_expression arguments: (arguments (object (pair value: (identifier) @callee)))) @def
+      (call_expression arguments: (arguments (object (pair value: (array (identifier) @callee))))) @def
       (jsx_self_closing_element name: (identifier) @callee) @def
       (jsx_opening_element name: (identifier) @callee) @def
       (jsx_self_closing_element name: (member_expression object: (identifier) @receiver property: (property_identifier) @callee)) @def
@@ -124,9 +128,11 @@ const spec: LangSpec = {
   resolveImport(raw, fromFile, root, aliases) {
     // Check aliases first (e.g. @ → src)
     let aliased = false;
+    let aliasTargets: string[] | null = null;
     for (const [alias, target] of Object.entries(aliases)) {
       if (raw.startsWith(alias + '/') || raw === alias) {
-        raw = raw.replace(alias, target);
+        aliasTargets = target.includes('|') ? target.split('|') : [target];
+        raw = raw.replace(alias, aliasTargets[0]);
         aliased = true;
         break;
       }
@@ -146,6 +152,22 @@ const spec: LangSpec = {
     ];
     for (const p of candidates) {
       if (existsSync(p)) return relative(root, p).replace(/\\/g, '/');
+    }
+
+    // Fallback: try alternative alias targets (monorepo subdirectories)
+    if (aliasTargets && aliasTargets.length > 1) {
+      const originalRaw = raw.replace(aliasTargets[0], '');
+      for (let i = 1; i < aliasTargets.length; i++) {
+        const altBase = join(root, aliasTargets[i] + originalRaw);
+        const altStripped = JS_EXT.test(altBase) ? altBase.replace(JS_EXT, '') : altBase;
+        const altCandidates = [
+          altStripped + '.js', altStripped + '.jsx', altStripped + '.mjs',
+          join(altStripped, 'index.js'), join(altStripped, 'index.mjs'),
+        ];
+        for (const p of altCandidates) {
+          if (existsSync(p)) return relative(root, p).replace(/\\/g, '/');
+        }
+      }
     }
     return null;
   },

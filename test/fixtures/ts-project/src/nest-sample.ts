@@ -6,7 +6,10 @@ import type { User } from './models.js';
 @Module({
   imports: [AuthModule],
   controllers: [UserController],
-  providers: [UserService],
+  providers: [
+    UserService,
+    { provide: APP_GUARD, useClass: RolesGuard },  // object-in-array, depth 4
+  ],
 })
 export class AppModule {}
 
@@ -15,8 +18,8 @@ export class AppModule {}
 export class UserController {
   @Post()
   @ApiBody({ type: UserDto })
-  create(@Body() dto: UserDto): User {
-    return dto as unknown as User;
+  create(@Body() dto: UserDto): Promise<User> {
+    return dto as unknown as Promise<User>;
   }
 }
 
@@ -26,9 +29,17 @@ export class UserService {}
 @Type(() => UserDto)
 export class NestedExample {}
 
-// These are referenced only via decorators / type annotations above
+// Middleware applied via method call (not decorator)
+export class BodyNormalizeMiddleware {}
+function configureMiddleware(consumer: any) {
+  consumer.apply(BodyNormalizeMiddleware).forRoutes('*');
+}
+
+// These are referenced only via decorators / type annotations / call args above
 export class AuthModule {}
 export class AuthGuard {}
+export class RolesGuard {}
+const APP_GUARD = 'APP_GUARD';
 
 function Module(_opts: any) { return (_target: any) => {}; }
 function Controller(_path: string) { return (_target: any) => {}; }

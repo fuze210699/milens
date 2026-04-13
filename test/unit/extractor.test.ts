@@ -80,6 +80,15 @@ describe('TypeScript extractor', () => {
     // Arrow function body in decorator: @Type(() => UserDto)
     expect(calleeNames.filter(n => n === 'UserDto').length).toBeGreaterThanOrEqual(2);
 
+    // Depth-4: object inside array in decorator object: { useClass: RolesGuard }
+    expect(calleeNames).toContain('RolesGuard');
+
+    // Identifier passed as argument to method call: consumer.apply(BodyNormalizeMiddleware)
+    expect(calleeNames).toContain('BodyNormalizeMiddleware');
+
+    // Generic return type: Promise<User> → User
+    expect(result.returnTypes.some(rt => rt.returnType === 'User')).toBe(true);
+
     // Type annotation bindings: (dto: UserDto) and return type: User
     expect(result.typeBindings.some(tb => tb.typeName === 'UserDto')).toBe(true);
   });

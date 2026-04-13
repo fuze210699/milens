@@ -1,5 +1,5 @@
 import { join, resolve } from 'node:path';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 
 /**
  * Auto-detect project aliases from config files.
@@ -27,6 +27,9 @@ export function loadAliases(rootPath: string): Record<string, string> {
 
   // ── Rust: Cargo.toml workspace members ──
   readCargoAliases(join(rootPath, 'Cargo.toml'), aliases);
+
+  // ── Monorepo: scan immediate subdirectories for tsconfig/jsconfig ──
+  scanSubdirectoryConfigs(rootPath, aliases);
 
   return aliases;
 }
@@ -118,6 +121,32 @@ function resolveExtendsPath(baseDir: string, extendsValue: string): string | nul
     }
   }
   return null;
+}
+
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.nuxt', 'coverage']);
+
+function scanSubdirectoryConfigs(rootPath: string, aliases: Record<string, string>): void {
+  let entries: import('node:fs').Dirent[];
+  try { entries = readdirSync(rootPath, { withFileTypes: true }); } catch { return; }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue;
+    const subDir = entry.name;
+    const subAliases: Record<string, string> = {};
+    readTsConfigPaths(join(rootPath, subDir, 'tsconfig.json'), subAliases);
+    readTsConfigPaths(join(rootPath, subDir, 'jsconfig.json'), subAliases);
+    for (const [alias, target] of Object.entries(subAliases)) {
+      const prefixed = join(subDir, target);
+      if (alias in aliases) {
+        // Append as alternative target (tried in order during resolution)
+        if (!aliases[alias].split('|').includes(prefixed)) {
+          aliases[alias] += '|' + prefixed;
+        }
+      } else {
+        aliases[alias] = prefixed;
+      }
+    }
+  }
 }
 
 function readComposerPsr4(composerPath: string, aliases: Record<string, string>): void {

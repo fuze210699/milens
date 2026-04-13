@@ -66,6 +66,11 @@ const spec: LangSpec = {
       (new_expression constructor: (identifier) @callee) @def
       (new_expression constructor: (member_expression object: (identifier) @receiver property: (property_identifier) @callee)) @def
       (decorator (identifier) @callee) @def
+      (decorator (call_expression arguments: (arguments (identifier) @callee))) @def
+      (decorator (call_expression arguments: (arguments (object (pair value: (identifier) @callee))))) @def
+      (decorator (call_expression arguments: (arguments (object (pair value: (array (identifier) @callee)))))) @def
+      (decorator (call_expression arguments: (arguments (arrow_function body: (identifier) @callee)))) @def
+      (decorator (call_expression arguments: (arguments (object (pair value: (arrow_function body: (identifier) @callee)))))) @def
       (jsx_self_closing_element name: (identifier) @callee) @def
       (jsx_opening_element name: (identifier) @callee) @def
       (jsx_self_closing_element name: (member_expression object: (identifier) @receiver property: (property_identifier) @callee)) @def

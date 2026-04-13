@@ -264,10 +264,12 @@ describe('Resolver', () => {
     });
 
     const callLinks = result.links.filter(l => l.type === 'calls');
-    expect(callLinks.length).toBe(1);
+    // 1 scope-resolved call + 2 type annotation refs (AuthDatabase, RedisCache)
+    expect(callLinks.length).toBe(3);
     // Should resolve to AuthDatabase.run (NOT RedisCache.run)
-    expect(callLinks[0].toId).toBe('db.ts#method:run:3');
-    expect(callLinks[0].confidence).toBe(0.93);
+    const runLink = callLinks.find(l => l.toId === 'db.ts#method:run:3');
+    expect(runLink).toBeDefined();
+    expect(runLink!.confidence).toBe(0.93);
   });
 
   // ── Bug 3: Proximity threshold ──
@@ -394,9 +396,11 @@ describe('Resolver', () => {
     });
 
     const callLinks = result.links.filter(l => l.type === 'calls');
-    expect(callLinks.length).toBe(1);
-    expect(callLinks[0].toId).toBe('db.ts#method:query:3');
-    expect(callLinks[0].confidence).toBe(0.93);
+    // 1 chain-resolved call + 1 type annotation ref (Database)
+    expect(callLinks.length).toBe(2);
+    const queryLink = callLinks.find(l => l.toId === 'db.ts#method:query:3');
+    expect(queryLink).toBeDefined();
+    expect(queryLink!.confidence).toBe(0.93);
   });
 
   // ── Call-result type binding ──
@@ -451,8 +455,106 @@ describe('Resolver', () => {
     });
 
     const callLinks = result.links.filter(l => l.type === 'calls');
-    expect(callLinks.length).toBe(1);
-    expect(callLinks[0].toId).toBe('service.ts#method:save:3');
-    expect(callLinks[0].confidence).toBe(0.93);
+    // 1 return-type-resolved call + 1 return type annotation ref (UserService)
+    expect(callLinks.length).toBe(2);
+    const saveLink = callLinks.find(l => l.toId === 'service.ts#method:save:3');
+    expect(saveLink).toBeDefined();
+    expect(saveLink!.confidence).toBe(0.93);
+  });
+
+  // ── Type annotation reference links (prevents false dead-code) ──
+
+  it('creates reference links from type annotations to type symbols', () => {
+    const dtoSymbols: CodeSymbol[] = [
+      { id: 'dto.ts#class:LoginDto:1', name: 'LoginDto', kind: 'class', filePath: 'dto.ts', startLine: 1, endLine: 5, exported: true },
+    ];
+    const controllerSymbols: CodeSymbol[] = [
+      { id: 'ctrl.ts#class:AuthController:1', name: 'AuthController', kind: 'class', filePath: 'ctrl.ts', startLine: 1, endLine: 20, exported: true },
+      { id: 'ctrl.ts#method:login:5', name: 'login', kind: 'method', filePath: 'ctrl.ts', startLine: 5, endLine: 10, exported: false, parentId: 'ctrl.ts#class:AuthController:1' },
+    ];
+    const allSyms = [...dtoSymbols, ...controllerSymbols];
+
+    // Type binding: parameter dto: LoginDto inside login method
+    const typeBindings: RawTypeBinding[] = [
+      { filePath: 'ctrl.ts', variableName: 'dto', typeName: 'LoginDto', line: 6, scope: 'ctrl.ts#method:login:5' },
+    ];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['dto.ts', dtoSymbols], ['ctrl.ts', controllerSymbols]]),
+      allSymbols: allSyms,
+      imports: [],
+      calls: [],
+      heritage: [],
+      typeBindings,
+      resolvedImportPaths: new Map(),
+    });
+
+    // Should create a reference link from login method → LoginDto
+    const refLinks = result.links.filter(l => l.toId === 'dto.ts#class:LoginDto:1' && l.type === 'calls');
+    expect(refLinks.length).toBe(1);
+    expect(refLinks[0].confidence).toBe(0.7);
+  });
+
+  it('creates reference links from return type annotations to type symbols', () => {
+    const modelSyms: CodeSymbol[] = [
+      { id: 'model.ts#interface:User:1', name: 'User', kind: 'interface', filePath: 'model.ts', startLine: 1, endLine: 5, exported: true },
+    ];
+    const serviceSyms: CodeSymbol[] = [
+      { id: 'svc.ts#class:UserService:1', name: 'UserService', kind: 'class', filePath: 'svc.ts', startLine: 1, endLine: 20, exported: true },
+      { id: 'svc.ts#method:getUser:5', name: 'getUser', kind: 'method', filePath: 'svc.ts', startLine: 5, endLine: 10, exported: false, parentId: 'svc.ts#class:UserService:1' },
+    ];
+    const allSyms = [...modelSyms, ...serviceSyms];
+
+    // Return type: getUser(): User
+    const returnTypes: RawReturnType[] = [
+      { filePath: 'svc.ts', functionName: 'getUser', returnType: 'User', line: 5, parentName: 'UserService' },
+    ];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['model.ts', modelSyms], ['svc.ts', serviceSyms]]),
+      allSymbols: allSyms,
+      imports: [],
+      calls: [],
+      heritage: [],
+      returnTypes,
+      resolvedImportPaths: new Map(),
+    });
+
+    // Should create a reference link from getUser → User
+    const refLinks = result.links.filter(l => l.toId === 'model.ts#interface:User:1' && l.type === 'calls');
+    expect(refLinks.length).toBe(1);
+    expect(refLinks[0].fromId).toBe('svc.ts#method:getUser:5');
+    expect(refLinks[0].confidence).toBe(0.7);
+  });
+
+  it('does not create type ref links for external module types', () => {
+    const controllerSymbols: CodeSymbol[] = [
+      { id: 'ctrl.ts#class:MyCtrl:1', name: 'MyCtrl', kind: 'class', filePath: 'ctrl.ts', startLine: 1, endLine: 20, exported: true },
+      { id: 'ctrl.ts#method:handle:5', name: 'handle', kind: 'method', filePath: 'ctrl.ts', startLine: 5, endLine: 10, exported: false, parentId: 'ctrl.ts#class:MyCtrl:1' },
+    ];
+
+    // Import Response from external module (express)
+    const imports: RawImport[] = [
+      { filePath: 'ctrl.ts', modulePath: 'express', names: [{ name: 'Response' }], isDefault: false, isWildcard: false, line: 1 },
+    ];
+
+    // Type binding: res: Response (from express, external)
+    const typeBindings: RawTypeBinding[] = [
+      { filePath: 'ctrl.ts', variableName: 'res', typeName: 'Response', line: 6, scope: 'ctrl.ts#method:handle:5' },
+    ];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['ctrl.ts', controllerSymbols]]),
+      allSymbols: controllerSymbols,
+      imports,
+      calls: [],
+      heritage: [],
+      typeBindings,
+      resolvedImportPaths: new Map(),
+    });
+
+    // Should NOT create a link for Response (external type)
+    const refLinks = result.links.filter(l => l.type === 'calls');
+    expect(refLinks.length).toBe(0);
   });
 });

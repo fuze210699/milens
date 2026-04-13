@@ -6,37 +6,61 @@ paths:
 # Test
 
 ## Overview
-Contains 25 symbols (12 exported) across 7 files.
+Contains 85 symbols (29 exported) across 25 files.
 
 ## Key Symbols
-- **`createUser`** [function] (test/fixtures/ts-project/src/models.ts:9) — 1 refs
+- **`createUser`** [function] (test/fixtures/ts-project/src/models.ts:9) — 2 refs
+- **`Project Guide`** [section] (test/fixtures/md-project/docs/guide.md:1) — 1 refs
+- **`Getting Started`** [section] (test/fixtures/md-project/docs/guide.md:5) — 1 refs
+- **`Architecture`** [section] (test/fixtures/md-project/docs/guide.md:15) — 1 refs
+- **`Models`** [section] (test/fixtures/md-project/docs/guide.md:19) — 1 refs
+- **`Authentication`** [section] (test/fixtures/md-project/docs/guide.md:25) — 1 refs
+- **`API Reference`** [section] (test/fixtures/md-project/docs/guide.md:35) — 1 refs
+- **`Endpoints`** [section] (test/fixtures/md-project/docs/guide.md:37) — 1 refs
+- **`Error Codes`** [section] (test/fixtures/md-project/docs/guide.md:42) — 1 refs
+- **`Contributing`** [section] (test/fixtures/md-project/docs/guide.md:46) — 1 refs
+- **`User`** [interface] (test/fixtures/ts-project/src/models.ts:1) — 1 refs
+- **`UserRole`** [type] (test/fixtures/ts-project/src/models.ts:7) — 1 refs
 - **`NewUser`** [function] (test/fixtures/go-project/models/user.go:14) — 1 refs
-- **`hashPassword`** [function] (test/fixtures/ts-project/src/auth.ts:22) — 0 refs
-- **`AuthService`** [class] (test/fixtures/ts-project/src/auth.ts:4) — 0 refs
-- **`User`** [interface] (test/fixtures/ts-project/src/models.ts:1) — 0 refs
-- **`UserRole`** [type] (test/fixtures/ts-project/src/models.ts:7) — 0 refs
-- **`UserProfile`** [class] (test/fixtures/ts-project/src/UserProfile.vue:1) — 0 refs
-- **`UserRepository`** [interface] (test/fixtures/go-project/models/user.go:9) — 0 refs
-- **`User`** [struct] (test/fixtures/go-project/models/user.go:3) — 0 refs
-- **`NewUserService`** [function] (test/fixtures/go-project/service/handler.go:9) — 0 refs
-- **`Register`** [method] (test/fixtures/go-project/service/handler.go:13) — 0 refs
-- **`UserService`** [struct] (test/fixtures/go-project/service/handler.go:5) — 0 refs
+- **`My Project`** [section] (test/fixtures/md-project/README.md:1) — 0 refs
+- **`Installation`** [section] (test/fixtures/md-project/README.md:5) — 0 refs
 
 ## Entry Points
-- **`createUser`** [function] — 1 incoming references
-- **`handleClick`** [function] — 1 incoming references
-- **`onSubmit`** [function] — 1 incoming references
-- **`NewUser`** [function] — 1 incoming references
-- **`create_user`** [function] — 1 incoming references
+- **`createUser`** [function] — 2 incoming references
+- **`Project Guide`** [section] — 1 incoming references
+- **`Getting Started`** [section] — 1 incoming references
+- **`Architecture`** [section] — 1 incoming references
+- **`Models`** [section] — 1 incoming references
 
 ## Dependencies
-- **analyzer**: `find`
+- **store**: `Database`, `close`, `insertSymbol`, `findSymbolByName`, `insertLink`, `getIncomingLinks`, `getOutgoingLinks`, `rebuildSearch` (+14 more)
+- **root**: `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+2 more)
+- **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `extractHtmlScripts`, `extractHtmlRefs`, `extractMarkdown` (+1 more)
+- **analyzer**: `resolveLinks`, `resolveLinksWithStats`, `scanFiles`, `analyze`, `loadAliases`, `find`
 
 ## Files
 - test/fixtures/go-project/models/user.go
 - test/fixtures/go-project/service/handler.go
+- test/fixtures/html-project/css/main.css
+- test/fixtures/html-project/css/reset.css
+- test/fixtures/html-project/index.html
+- test/fixtures/html-project/js/analytics.js
+- test/fixtures/html-project/js/utils.js
+- test/fixtures/md-project/README.md
+- test/fixtures/md-project/docs/guide.md
 - test/fixtures/py-project/models.py
 - test/fixtures/py-project/service.py
 - test/fixtures/ts-project/src/UserProfile.vue
 - test/fixtures/ts-project/src/auth.ts
 - test/fixtures/ts-project/src/models.ts
+- test/fixtures/vue-project-refs/src/composables/useClipboard.js
+- test/fixtures/vue-project-refs/src/views/TestView.vue
+- test/fixtures/vue-project/src/composables/useClipboard.js
+- test/fixtures/vue-project/src/views/TestView.vue
+- test/unit/database.test.ts
+- test/unit/extractor.test.ts
+- test/unit/html-css.test.ts
+- test/unit/markdown.test.ts
+- test/unit/resolver.test.ts
+- test/unit/scanner.test.ts
+- test/unit/vue-import.test.ts

@@ -8,7 +8,6 @@ applyTo: "test/**"
 Contains 85 symbols (29 exported) across 25 files.
 
 ## Key Symbols
-- **`useClipboard`** [function] (test/fixtures/vue-project/src/composables/useClipboard.js:1) — 2 refs
 - **`createUser`** [function] (test/fixtures/ts-project/src/models.ts:9) — 2 refs
 - **`Project Guide`** [section] (test/fixtures/md-project/docs/guide.md:1) — 1 refs
 - **`Getting Started`** [section] (test/fixtures/md-project/docs/guide.md:5) — 1 refs
@@ -23,17 +22,18 @@ Contains 85 symbols (29 exported) across 25 files.
 - **`UserRole`** [type] (test/fixtures/ts-project/src/models.ts:7) — 1 refs
 - **`NewUser`** [function] (test/fixtures/go-project/models/user.go:14) — 1 refs
 - **`My Project`** [section] (test/fixtures/md-project/README.md:1) — 0 refs
+- **`Installation`** [section] (test/fixtures/md-project/README.md:5) — 0 refs
 
 ## Entry Points
-- **`useClipboard`** [function] — 2 incoming references
-- **`copy`** [function] — 2 incoming references
 - **`createUser`** [function] — 2 incoming references
 - **`Project Guide`** [section] — 1 incoming references
 - **`Getting Started`** [section] — 1 incoming references
+- **`Architecture`** [section] — 1 incoming references
+- **`Models`** [section] — 1 incoming references
 
 ## Dependencies
 - **store**: `Database`, `close`, `insertSymbol`, `findSymbolByName`, `insertLink`, `getIncomingLinks`, `getOutgoingLinks`, `rebuildSearch` (+14 more)
-- **root**: `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `has`
+- **root**: `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+2 more)
 - **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `extractHtmlScripts`, `extractHtmlRefs`, `extractMarkdown` (+1 more)
 - **analyzer**: `resolveLinks`, `resolveLinksWithStats`, `scanFiles`, `analyze`, `loadAliases`, `find`
 

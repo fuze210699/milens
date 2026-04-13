@@ -81,8 +81,12 @@ const spec: LangSpec = {
       (decorator (call_expression arguments: (arguments (identifier) @callee))) @def
       (decorator (call_expression arguments: (arguments (object (pair value: (identifier) @callee))))) @def
       (decorator (call_expression arguments: (arguments (object (pair value: (array (identifier) @callee)))))) @def
+      (decorator (call_expression arguments: (arguments (object (pair value: (array (object (pair value: (identifier) @callee)))))))) @def
       (decorator (call_expression arguments: (arguments (arrow_function body: (identifier) @callee)))) @def
       (decorator (call_expression arguments: (arguments (object (pair value: (arrow_function body: (identifier) @callee)))))) @def
+      (call_expression arguments: (arguments (identifier) @callee)) @def
+      (call_expression arguments: (arguments (object (pair value: (identifier) @callee)))) @def
+      (call_expression arguments: (arguments (object (pair value: (array (identifier) @callee))))) @def
       (jsx_self_closing_element name: (identifier) @callee) @def
       (jsx_opening_element name: (identifier) @callee) @def
       (jsx_self_closing_element name: (member_expression object: (identifier) @receiver property: (property_identifier) @callee)) @def
@@ -129,6 +133,20 @@ const spec: LangSpec = {
         name: (property_identifier) @var
         type: (type_annotation (type_identifier) @type)
       )
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @var
+          type: (type_annotation (generic_type type_arguments: (type_arguments (type_identifier) @type)))
+        )
+      )
+      (required_parameter
+        pattern: (identifier) @var
+        type: (type_annotation (generic_type type_arguments: (type_arguments (type_identifier) @type)))
+      )
+      (public_field_definition
+        name: (property_identifier) @var
+        type: (type_annotation (generic_type type_arguments: (type_arguments (type_identifier) @type)))
+      )
     ]`,
     assignmentChains: `[
       (lexical_declaration
@@ -160,6 +178,27 @@ const spec: LangSpec = {
           )
         )
       )
+      (function_declaration
+        name: (identifier) @name
+        return_type: (type_annotation (generic_type type_arguments: (type_arguments (type_identifier) @returnType)))
+      )
+      (lexical_declaration
+        (variable_declarator
+          name: (identifier) @name
+          value: (arrow_function
+            return_type: (type_annotation (generic_type type_arguments: (type_arguments (type_identifier) @returnType)))
+          )
+        )
+      )
+      (class_declaration
+        name: (type_identifier) @className
+        body: (class_body
+          (method_definition
+            name: (property_identifier) @name
+            return_type: (type_annotation (generic_type type_arguments: (type_arguments (type_identifier) @returnType)))
+          )
+        )
+      )
     ]`,
     callResultBindings: `[
       (lexical_declaration
@@ -179,9 +218,12 @@ const spec: LangSpec = {
   resolveImport(raw, fromFile, root, aliases) {
     // Check aliases first (e.g. @ → src)
     let aliased = false;
+    let aliasTargets: string[] | null = null;
     for (const [alias, target] of Object.entries(aliases)) {
       if (raw.startsWith(alias + '/') || raw === alias) {
-        raw = raw.replace(alias, target);
+        // Multiple targets separated by | (monorepo subdirectory aliases)
+        aliasTargets = target.includes('|') ? target.split('|') : [target];
+        raw = raw.replace(alias, aliasTargets[0]);
         aliased = true;
         break;
       }
@@ -208,6 +250,25 @@ const spec: LangSpec = {
 
     for (const p of candidates) {
       if (existsSync(p)) return relative(root, p).replace(/\\/g, '/');
+    }
+
+    // Fallback: try alternative alias targets (monorepo subdirectories)
+    if (aliasTargets && aliasTargets.length > 1) {
+      const originalRaw = raw.replace(aliasTargets[0], '');
+      for (let i = 1; i < aliasTargets.length; i++) {
+        const altBase = join(root, aliasTargets[i] + originalRaw);
+        const altStripped = JS_EXT.test(altBase) ? altBase.replace(JS_EXT, '') : altBase;
+        const altCandidates = [
+          altStripped + '.ts', altStripped + '.tsx',
+          altStripped + '.js', altStripped + '.jsx',
+          altStripped + '.vue',
+          join(altStripped, 'index.ts'), join(altStripped, 'index.tsx'),
+          join(altStripped, 'index.js'),
+        ];
+        for (const p of altCandidates) {
+          if (existsSync(p)) return relative(root, p).replace(/\\/g, '/');
+        }
+      }
     }
     return null;
   },

@@ -221,8 +221,27 @@ export class Database {
   }
 
   findDeadCode(kind?: string, limit = 50): CodeSymbol[] {
-    // Exclude: section symbols (markdown headings), test fixtures (not real production code)
-    const excludeClause = `AND s.kind != 'section' AND s.file_path NOT LIKE 'test/fixtures/%'`;
+    // Exclude: section symbols (markdown headings), test fixtures (not real production code),
+    // framework entry-point files (consumed by runtime, not imported by project code),
+    // and config files (consumed by CLI tooling)
+    const excludeClause = `AND s.kind != 'section'
+      AND s.file_path NOT LIKE 'test/fixtures/%'
+      AND s.file_path NOT LIKE '%/page.ts' AND s.file_path NOT LIKE '%/page.tsx'
+      AND s.file_path NOT LIKE '%/page.js' AND s.file_path NOT LIKE '%/page.jsx'
+      AND s.file_path NOT LIKE '%/layout.ts' AND s.file_path NOT LIKE '%/layout.tsx'
+      AND s.file_path NOT LIKE '%/layout.js' AND s.file_path NOT LIKE '%/layout.jsx'
+      AND s.file_path NOT LIKE '%/loading.ts' AND s.file_path NOT LIKE '%/loading.tsx'
+      AND s.file_path NOT LIKE '%/error.ts' AND s.file_path NOT LIKE '%/error.tsx'
+      AND s.file_path NOT LIKE '%/not-found.ts' AND s.file_path NOT LIKE '%/not-found.tsx'
+      AND s.file_path NOT LIKE '%/template.ts' AND s.file_path NOT LIKE '%/template.tsx'
+      AND s.file_path NOT LIKE '%/route.ts' AND s.file_path NOT LIKE '%/route.tsx'
+      AND s.file_path NOT LIKE '%/route.js' AND s.file_path NOT LIKE '%/route.jsx'
+      AND s.file_path NOT LIKE '%.config.ts' AND s.file_path NOT LIKE '%.config.js'
+      AND s.file_path NOT LIKE '%.config.mjs' AND s.file_path NOT LIKE '%.config.cjs'
+      AND s.file_path NOT LIKE '%/+page.svelte' AND s.file_path NOT LIKE '%/+page.ts'
+      AND s.file_path NOT LIKE '%/+page.server.ts' AND s.file_path NOT LIKE '%/+layout.svelte'
+      AND s.file_path NOT LIKE '%/+layout.ts' AND s.file_path NOT LIKE '%/+layout.server.ts'
+      AND s.file_path NOT LIKE '%/+server.ts'`;
     const sql = kind
       ? `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'

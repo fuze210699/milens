@@ -231,4 +231,39 @@ describe('Database', () => {
     expect(summary.domains).toContain('app');
     expect(typeof summary.staleCount).toBe('number');
   });
+
+  it('findDeadCode excludes framework entry point files', () => {
+    // Insert exported symbols in framework entry point files
+    const entrySymbols: CodeSymbol[] = [
+      { id: 'app/dashboard/page.tsx#function:DashboardPage:1', name: 'DashboardPage', kind: 'function', filePath: 'app/dashboard/page.tsx', startLine: 1, endLine: 10, exported: true },
+      { id: 'app/layout.tsx#function:RootLayout:1', name: 'RootLayout', kind: 'function', filePath: 'app/layout.tsx', startLine: 1, endLine: 10, exported: true },
+      { id: 'app/api/users/route.ts#function:GET:1', name: 'GET', kind: 'function', filePath: 'app/api/users/route.ts', startLine: 1, endLine: 10, exported: true },
+      { id: 'jest.config.ts#variable:config:1', name: 'config', kind: 'variable', filePath: 'jest.config.ts', startLine: 1, endLine: 5, exported: true },
+      { id: 'src/routes/+page.svelte#function:load:1', name: 'load', kind: 'function', filePath: 'src/routes/+page.svelte', startLine: 1, endLine: 5, exported: true },
+    ];
+    for (const sym of entrySymbols) {
+      db.upsertFileHash(sym.filePath, 'hash');
+      db.insertSymbol(sym);
+    }
+
+    // Insert a normal unused exported symbol
+    db.upsertFileHash('src/unused.ts', 'hash');
+    db.insertSymbol({
+      id: 'src/unused.ts#function:unusedHelper:1', name: 'unusedHelper', kind: 'function',
+      filePath: 'src/unused.ts', startLine: 1, endLine: 5, exported: true,
+    });
+
+    const dead = db.findDeadCode(undefined, 100);
+    const deadNames = dead.map(s => s.name);
+
+    // Framework entry points should NOT appear
+    expect(deadNames).not.toContain('DashboardPage');
+    expect(deadNames).not.toContain('RootLayout');
+    expect(deadNames).not.toContain('GET');
+    expect(deadNames).not.toContain('config');
+    expect(deadNames).not.toContain('load');
+
+    // Normal unused symbol SHOULD appear
+    expect(deadNames).toContain('unusedHelper');
+  });
 });

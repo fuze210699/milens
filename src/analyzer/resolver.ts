@@ -376,6 +376,37 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     }
   }
 
+  // ── Re-export links (barrel → source symbol) ──
+  // A named re-export `export { X } from './source'` is a real reference to X.
+  // Without this, X appears dead when all consumers import through the barrel.
+  if (input.reExports) {
+    for (const re of input.reExports) {
+      const sourceFile = input.resolvedImportPaths.get(`${re.filePath}::${re.modulePath}`);
+      if (!sourceFile) continue;
+      const sourceSymbols = input.symbolsByFile.get(sourceFile);
+      if (!sourceSymbols) continue;
+
+      const fromId = `${re.filePath}#module:_top:0`;
+
+      if (re.names.length > 0) {
+        for (const name of re.names) {
+          let target = sourceSymbols.find(s => s.name === name && s.exported);
+          if (!target) {
+            target = followReExportChain(name, sourceFile, reExportMap, input.symbolsByFile);
+          }
+          if (target) {
+            links.push(makeLink(fromId, target.id, 'imports', 0.85, re.line));
+          }
+        }
+      } else {
+        // Wildcard: export * from './source' — link to all exported symbols
+        for (const sym of sourceSymbols.filter(s => s.exported)) {
+          links.push(makeLink(fromId, sym.id, 'imports', 0.6, re.line));
+        }
+      }
+    }
+  }
+
   return { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls, externalImports, externalCalls };
 }
 

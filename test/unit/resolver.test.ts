@@ -557,4 +557,58 @@ describe('Resolver', () => {
     const refLinks = result.links.filter(l => l.type === 'calls');
     expect(refLinks.length).toBe(0);
   });
+
+  // ── Re-export barrel links ──
+
+  it('creates import links from barrel re-exports to source symbols', () => {
+    const sourceSymbols: CodeSymbol[] = [
+      { id: 'impl.ts#class:UserService:1', name: 'UserService', kind: 'class', filePath: 'impl.ts', startLine: 1, endLine: 10, exported: true },
+      { id: 'impl.ts#function:createUser:12', name: 'createUser', kind: 'function', filePath: 'impl.ts', startLine: 12, endLine: 15, exported: true },
+    ];
+    const barrelSymbols: CodeSymbol[] = [];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['impl.ts', sourceSymbols], ['index.ts', barrelSymbols]]),
+      allSymbols: [...sourceSymbols, ...barrelSymbols],
+      imports: [],
+      calls: [],
+      heritage: [],
+      reExports: [
+        { filePath: 'index.ts', modulePath: './impl', names: ['UserService', 'createUser'], line: 1 },
+      ],
+      resolvedImportPaths: new Map([['index.ts::./impl', 'impl.ts']]),
+    });
+
+    // Barrel should create import links to both source symbols
+    const importLinks = result.links.filter(l => l.type === 'imports');
+    expect(importLinks.length).toBe(2);
+    expect(importLinks.some(l => l.toId === 'impl.ts#class:UserService:1')).toBe(true);
+    expect(importLinks.some(l => l.toId === 'impl.ts#function:createUser:12')).toBe(true);
+  });
+
+  it('creates import links from wildcard barrel re-exports to all exported symbols', () => {
+    const sourceSymbols: CodeSymbol[] = [
+      { id: 'models.ts#interface:User:1', name: 'User', kind: 'interface', filePath: 'models.ts', startLine: 1, endLine: 5, exported: true },
+      { id: 'models.ts#type:UserRole:7', name: 'UserRole', kind: 'type', filePath: 'models.ts', startLine: 7, endLine: 7, exported: true },
+      { id: 'models.ts#function:internal:10', name: 'internal', kind: 'function', filePath: 'models.ts', startLine: 10, endLine: 12, exported: false },
+    ];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['models.ts', sourceSymbols], ['index.ts', []]]),
+      allSymbols: sourceSymbols,
+      imports: [],
+      calls: [],
+      heritage: [],
+      reExports: [
+        { filePath: 'index.ts', modulePath: './models', names: [], line: 1 },
+      ],
+      resolvedImportPaths: new Map([['index.ts::./models', 'models.ts']]),
+    });
+
+    // Should link to 2 exported symbols, not the internal one
+    const importLinks = result.links.filter(l => l.type === 'imports');
+    expect(importLinks.length).toBe(2);
+    expect(importLinks.some(l => l.toId === 'models.ts#interface:User:1')).toBe(true);
+    expect(importLinks.some(l => l.toId === 'models.ts#type:UserRole:7')).toBe(true);
+  });
 });

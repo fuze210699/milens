@@ -96,6 +96,15 @@ milens analyze -p . --skills-windsurf       # Windsurf only
 
 > Root config files use `<!-- milens:start/end -->` markers for **idempotent injection** — re-running replaces the milens section without overwriting your custom content.
 
+**Team Collaboration Notes:**
+
+- ✅ **Instruction files are safe to commit** - They use `<workspaceRoot>` placeholder instead of absolute paths
+- ✅ **No merge conflicts** - No machine-specific information (username, absolute paths, etc.)
+- ✅ **Consistent AI assistance** - All team members get the same codebase intelligence
+- ⚠️ **Database is gitignored** - `.milens/*.db` files are local; each developer runs `npx milens analyze` after clone
+
+See [`.milens/README.md`](.milens/README.md) for more details on the index directory.
+
 ---
 
 ### `milens search` — Find symbols by name

@@ -19,6 +19,8 @@ const spec: LangSpec = {
     ]`,
     classes: `(class_declaration name: (identifier) @name) @def`,
     methods: `(method_definition name: (property_identifier) @name) @def`,
+    variables: `(program (lexical_declaration
+      (variable_declarator name: (identifier) @name)) @def)`,
     imports: `[
       (import_statement
         source: (string (string_fragment) @source)

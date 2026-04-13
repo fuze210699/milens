@@ -6,29 +6,30 @@ description: Code intelligence for the server area — symbols, dependencies, an
 # Server
 
 ## Overview
-Contains 28 symbols (3 exported) across 1 files.
+Contains 34 symbols (3 exported) across 1 files.
 
 ## Key Symbols
-- **`createMcpServer`** [function] (src/server/mcp.ts:322) — 2 refs
-- **`startStdio`** [function] (src/server/mcp.ts:1544) — 1 refs
-- **`startHttp`** [function] (src/server/mcp.ts:1552) — 1 refs
+- **`createMcpServer`** [function] (src/server/mcp.ts:362) — 3 refs
+- **`startStdio`** [function] (src/server/mcp.ts:1707) — 2 refs
+- **`startHttp`** [function] (src/server/mcp.ts:1715) — 2 refs
 
 ## Entry Points
-- **`get`** [method] — 28 incoming references
+- **`get`** [method] — 35 incoming references
+- **`createMcpServer`** [function] — 3 incoming references
 - **`fmtSymbol`** [function] — 2 incoming references
 - **`walk`** [function] — 2 incoming references
-- **`createMcpServer`** [function] — 2 incoming references
 - **`resolveRoot`** [function] — 2 incoming references
 
 ## Dependencies
-- **store**: `close`, `logToolUsage`, `findByRoot`, `listAll`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks` (+16 more)
+- **store**: `Database`, `RepoRegistry`, `getStats`, `getDomainStats`, `close`, `logToolUsage`, `findByRoot`, `listAll` (+19 more)
+- **parser**: `getParser`, `loadLanguage`
 - **root**: `has`
-- **analyzer**: `find`
+- **analyzer**: `resolve`, `find`
 
 ## Used By
+- **root**: `createMcpServer`, `startStdio`, `startHttp`, `get`
 - **analyzer**: `get`
 - **parser**: `get`
-- **root**: `get`
 - **store**: `get`
 
 ## Files

@@ -506,7 +506,7 @@ function injectMdcWithMarkers(filePath: string, content: string): void {
     existing = readFileSync(filePath, 'utf-8');
   } catch { /* file doesn't exist */ }
 
-  const wrapped = `${startMarker}\n${content.replace(/<!-- milens:start -->/, '').replace(/<!-- milens:end -->/, '')}\n${endMarker}`;
+  const wrapped = `${startMarker}\n${content.replace(new RegExp(startMarker, 'g'), '').replace(new RegExp(endMarker, 'g'), '')}\n${endMarker}`;
 
   if (existing.includes(startMarker) && existing.includes(endMarker)) {
     const before = existing.slice(0, existing.indexOf(startMarker));

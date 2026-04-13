@@ -303,6 +303,53 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     }
   }
 
+  // ── Create reference links from type annotations → project type symbols ──
+  // Prevents false dead-code reports for types/interfaces used only in annotations
+  if (input.typeBindings) {
+    for (const tb of input.typeBindings) {
+      const candidates = symbolByName.get(tb.typeName);
+      if (!candidates || candidates.length === 0) continue;
+      // Skip types imported from external modules
+      const extNames = externalNamesPerFile.get(tb.filePath);
+      if (extNames?.has(tb.typeName)) continue;
+      // Prefer imported file > same file > unique global match
+      const importedFile = importedNamesPerFile.get(tb.filePath)?.get(tb.typeName);
+      const target = importedFile
+        ? candidates.find(s => s.filePath === importedFile)
+        : candidates.find(s => s.filePath === tb.filePath)
+          ?? (candidates.length === 1 ? candidates[0] : null);
+      if (target) {
+        const fromId = tb.scope ?? `${tb.filePath}#module:_top:0`;
+        links.push(makeLink(fromId, target.id, 'calls', 0.7, tb.line));
+      }
+    }
+  }
+
+  // ── Create reference links from return type annotations → project type symbols ──
+  if (input.returnTypes) {
+    for (const rt of input.returnTypes) {
+      const candidates = symbolByName.get(rt.returnType);
+      if (!candidates || candidates.length === 0) continue;
+      const extNames = externalNamesPerFile.get(rt.filePath);
+      if (extNames?.has(rt.returnType)) continue;
+      const importedFile = importedNamesPerFile.get(rt.filePath)?.get(rt.returnType);
+      const target = importedFile
+        ? candidates.find(s => s.filePath === importedFile)
+        : candidates.find(s => s.filePath === rt.filePath)
+          ?? (candidates.length === 1 ? candidates[0] : null);
+      if (target) {
+        const fileSyms = input.symbolsByFile.get(rt.filePath);
+        const fromSym = fileSyms?.find(s =>
+          s.name === rt.functionName &&
+          (s.kind === 'function' || s.kind === 'method') &&
+          s.startLine <= rt.line && s.endLine >= rt.line
+        );
+        const fromId = fromSym?.id ?? `${rt.filePath}#module:_top:0`;
+        links.push(makeLink(fromId, target.id, 'calls', 0.7, rt.line));
+      }
+    }
+  }
+
   // ── Resolve heritage (import-aware cross-file) ──
   for (const h of input.heritage) {
     const children = symbolByName.get(h.childName);

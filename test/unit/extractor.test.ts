@@ -56,6 +56,33 @@ describe('TypeScript extractor', () => {
     const types = result.symbols.filter(s => s.kind === 'type');
     expect(types.some(t => t.name === 'UserRole')).toBe(true);
   });
+
+  it('extracts decorator argument references (NestJS-style)', async () => {
+    const source = readFileSync(join(FIXTURES, 'ts-project', 'src', 'nest-sample.ts'), 'utf-8');
+    const parser = await getParser(tsSpec.wasmName);
+    const lang = await loadLanguage(tsSpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, tsSpec, 'src/nest-sample.ts');
+
+    const calleeNames = result.calls.map(c => c.calleeName);
+
+    // Direct argument: @UseGuards(AuthGuard)
+    expect(calleeNames).toContain('AuthGuard');
+
+    // Array items in decorator object: @Module({ imports: [AuthModule], controllers: [...] })
+    expect(calleeNames).toContain('AuthModule');
+    expect(calleeNames).toContain('UserController');
+    expect(calleeNames).toContain('UserService');
+
+    // Property value in decorator object: @ApiBody({ type: UserDto })
+    expect(calleeNames).toContain('UserDto');
+
+    // Arrow function body in decorator: @Type(() => UserDto)
+    expect(calleeNames.filter(n => n === 'UserDto').length).toBeGreaterThanOrEqual(2);
+
+    // Type annotation bindings: (dto: UserDto) and return type: User
+    expect(result.typeBindings.some(tb => tb.typeName === 'UserDto')).toBe(true);
+  });
 });
 
 describe('Python extractor', () => {

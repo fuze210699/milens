@@ -300,7 +300,9 @@ function escapeRegExp(s: string): string {
 function matchesScope(lineText: string, scope: 'imports' | 'definitions'): boolean {
   const trimmed = lineText.trimStart();
   if (scope === 'imports') {
-    return /^(import\s|from\s|require\(|use\s|include\s|require_relative|require\s)/.test(trimmed);
+    return /^(import\s|from\s|require\(|use\s|include\s|require_relative|require\s)/.test(trimmed)
+      || /^"[^"]*"\s*$/.test(trimmed)  // Go import block line: "fmt"
+      || /^\w+\s+"[^"]*"\s*$/.test(trimmed);  // Go aliased import: alias "pkg"
   }
   // definitions: function, class, interface, struct, trait, enum, type, def, fn, pub fn, etc.
   return /^(export\s+)?(async\s+)?(function|class|interface|type|enum|struct|trait|const|let|var|def|fn|pub\s+fn|pub\s+struct|pub\s+enum|module)\s/.test(trimmed);
@@ -1504,9 +1506,10 @@ export function createMcpServer(rootPath?: string): McpServer {
         }
 
         // 3. Export chain — is this re-exported from barrel files?
-        const grepMatches = await grepFiles(root, name, { maxResults: 10, includePattern: '**/index.{ts,js,mjs}' });
+        const grepMatches = await grepFiles(root, name, { maxResults: 10, includePattern: '{**/index.{ts,js,mjs},**/__init__.py}' });
         const reExportMatches = grepMatches.filter(m =>
-          /export\s*\{[^}]*/.test(m.text) && m.text.includes('from')
+          (/export\s*\{[^}]*/.test(m.text) && m.text.includes('from')) ||
+          /from\s+\./.test(m.text)  // Python re-export: from .module import X
         );
         if (reExportMatches.length > 0) {
           sections.push(`re-exported via:`);
@@ -1617,10 +1620,10 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: routes ──
   server.tool(
     'routes',
-    'Detect framework routes/endpoints and map them to handler symbols. Scans for Express, FastAPI, NestJS, Flask, Go HTTP, PHP, Rails patterns.',
+    'Detect framework routes/endpoints and map them to handler symbols. Scans for Express, FastAPI, NestJS, Flask, Django, Go HTTP, Gin, PHP, Rails, Sinatra, Spring patterns.',
     {
       repo: z.string().optional(),
-      framework: z.string().optional().describe('Filter by framework (express, fastapi, nestjs, flask, go, php, rails). Default: auto-detect all.'),
+      framework: z.string().optional().describe('Filter by framework (express, fastapi, nestjs, flask, django, go, gin, php, rails, sinatra, spring). Default: auto-detect all.'),
       limit: z.number().optional().default(50),
     },
     async ({ repo, framework, limit }) => {
@@ -1632,10 +1635,14 @@ export function createMcpServer(rootPath?: string): McpServer {
         { name: 'express', pattern: /\b(?:app|router)\.(get|post|put|patch|delete|use|all)\s*\(\s*['"`]([^'"`]+)['"`]/, fileGlob: '**/*.{ts,js,mjs,cjs}' },
         { name: 'fastapi', pattern: /@(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
         { name: 'flask', pattern: /@(?:app|bp|blueprint)\.(route|get|post|put|delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
+        { name: 'django', pattern: /\b(path|re_path|url)\s*\(\s*r?['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
         { name: 'nestjs', pattern: /@(Get|Post|Put|Patch|Delete)\s*\(\s*['"]?([^'")]*?)['"]?\s*\)/, fileGlob: '**/*.ts' },
         { name: 'go', pattern: /\b(?:mux|router|http)\.(HandleFunc|Handle|Get|Post|Put|Delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.go' },
+        { name: 'gin', pattern: /\b\w+\.(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|Any|Handle)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.go' },
         { name: 'php', pattern: /Route::(get|post|put|patch|delete|any)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.php' },
         { name: 'rails', pattern: /\b(get|post|put|patch|delete|resources?|root)\s+['"]([^'"]+)['"]/, fileGlob: '**/*.rb' },
+        { name: 'sinatra', pattern: /\b(get|post|put|patch|delete)\s+['"]([^'"]+)['"]\s+do/, fileGlob: '**/*.rb' },
+        { name: 'spring', pattern: /@(RequestMapping|GetMapping|PostMapping|PutMapping|PatchMapping|DeleteMapping)\s*\(\s*(?:value\s*=\s*|path\s*=\s*)?['"]([^'"]+)['"]/, fileGlob: '**/*.java' },
       ];
 
       const activePatterns = framework
@@ -1643,7 +1650,7 @@ export function createMcpServer(rootPath?: string): McpServer {
         : routePatterns;
 
       if (activePatterns.length === 0) {
-        return { content: [{ type: 'text' as const, text: `Unknown framework "${framework}". Available: express, fastapi, nestjs, flask, go, php, rails` }] };
+        return { content: [{ type: 'text' as const, text: `Unknown framework "${framework}". Available: express, fastapi, nestjs, flask, django, go, gin, php, rails, sinatra, spring` }] };
       }
 
       interface RouteMatch { framework: string; method: string; path: string; file: string; line: number; handler?: string }
@@ -1789,8 +1796,8 @@ export function createMcpServer(rootPath?: string): McpServer {
           }
 
           // Re-export detection
-          const reExportMatches = (await grepFiles(root, name, { maxResults: 5, includePattern: '**/index.{ts,js,mjs}' }))
-            .filter(m => /export\s*\{/.test(m.text) && m.text.includes('from'));
+          const reExportMatches = (await grepFiles(root, name, { maxResults: 5, includePattern: '{**/index.{ts,js,mjs},**/__init__.py}' }))
+            .filter(m => (/export\s*\{/.test(m.text) && m.text.includes('from')) || /from\s+\./.test(m.text));
           if (reExportMatches.length > 0) {
             sections.push(`re-exported via: ${reExportMatches.map(m => `${m.file}:${m.line}`).join(', ')}`);
           }

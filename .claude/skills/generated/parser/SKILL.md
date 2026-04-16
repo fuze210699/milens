@@ -7,7 +7,7 @@ Contains 76 symbols (26 exported) across 15 files.
 - **`LangSpec`** [interface] (src/parser/extract.ts:6) — 30 refs
 - **`loadLanguage`** [function] (src/parser/loader.ts:21) — 10 refs
 - **`getParser`** [function] (src/parser/loader.ts:32) — 9 refs
-- **`extractFromTree`** [function] (src/parser/extract.ts:249) — 6 refs
+- **`extractFromTree`** [function] (src/parser/extract.ts:250) — 6 refs
 - **`extractHtmlScripts`** [function] (src/parser/lang-html.ts:33) — 5 refs
 - **`extractMarkdown`** [function] (src/parser/lang-md.ts:34) — 5 refs
 - **`extractVueScript`** [function] (src/parser/lang-vue.ts:18) — 5 refs
@@ -15,7 +15,7 @@ Contains 76 symbols (26 exported) across 15 files.
 - **`extractVueTemplateRefs`** [function] (src/parser/lang-vue.ts:37) — 4 refs
 - **`spec`** [variable] (src/parser/lang-js.ts:5) — 3 refs
 - **`spec`** [variable] (src/parser/lang-ts.ts:5) — 3 refs
-- **`clearQueryCache`** [function] (src/parser/extract.ts:66) — 2 refs
+- **`clearQueryCache`** [function] (src/parser/extract.ts:67) — 2 refs
 - **`spec`** [variable] (src/parser/lang-css.ts:5) — 2 refs
 - **`spec`** [variable] (src/parser/lang-go.ts:5) — 2 refs
 - **`spec`** [variable] (src/parser/lang-py.ts:5) — 2 refs

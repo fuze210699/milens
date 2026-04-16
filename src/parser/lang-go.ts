@@ -1,11 +1,12 @@
 import { join, dirname, relative } from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import type { LangSpec } from './extract.js';
 
 const spec: LangSpec = {
   id: 'go',
   extensions: ['.go'],
   wasmName: 'tree-sitter-go',
+  uppercaseExported: true,
   queries: {
     functions: `(function_declaration name: (identifier) @name) @def`,
     variables: `[
@@ -49,12 +50,48 @@ const spec: LangSpec = {
       (call_expression function: (identifier) @callee) @def
       (call_expression function: (selector_expression operand: (_) @receiver field: (field_identifier) @callee)) @def
     ]`,
+    heritage: `[
+      (type_declaration (type_spec
+        name: (type_identifier) @child
+        type: (struct_type (field_declaration_list
+          (field_declaration type: (type_identifier) @parent)
+        ))
+      )) @def
+      (type_declaration (type_spec
+        name: (type_identifier) @child
+        type: (interface_type
+          (type_identifier) @parent
+        )
+      )) @def
+    ]`,
   },
-  resolveImport(raw, fromFile, root, _aliases) {
-    // Go imports are package paths — only resolve local packages
+  resolveImport(raw, _fromFile, root, _aliases) {
+    // Go imports are package paths — resolve local packages
     const cleanPath = raw.replace(/^"|"$/g, '');
-    if (cleanPath.includes('.')) return null; // external module
-    // Local package: look for directory under root
+
+    // Read module name from go.mod to identify local packages
+    let moduleName = '';
+    try {
+      const goMod = join(root, 'go.mod');
+      if (existsSync(goMod)) {
+        const content = readFileSync(goMod, 'utf-8');
+        const match = content.match(/^module\s+(\S+)/m);
+        if (match) moduleName = match[1];
+      }
+    } catch { /* ignore */ }
+
+    // If import starts with module name, it's a local package
+    if (moduleName && cleanPath.startsWith(moduleName + '/')) {
+      const localPath = cleanPath.slice(moduleName.length + 1);
+      const pkgDir = join(root, localPath);
+      if (existsSync(pkgDir)) return relative(root, pkgDir).replace(/\\/g, '/');
+      return null;
+    }
+
+    // External module (contains domain-like dots with slashes)
+    if (cleanPath.includes('.')) return null;
+
+    // Simple local package name
     const pkgDir = join(root, cleanPath);
     if (existsSync(pkgDir)) return relative(root, pkgDir).replace(/\\/g, '/');
     return null;

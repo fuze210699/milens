@@ -28,7 +28,7 @@ Contains 124 symbols (91 exported) across 8 files.
 
 ## Entry Points
 - **`CodeSymbol`** [interface] — 29 incoming references
-- **`has`** [function] — 22 incoming references
+- **`has`** [function] — 23 incoming references
 - **`SymbolLink`** [interface] — 13 incoming references
 - **`isTestFile`** [function] — 11 incoming references
 - **`RawCall`** [interface] — 7 incoming references

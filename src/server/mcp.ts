@@ -33,6 +33,8 @@ class LazyDb {
   private statsCache: { data: ReturnType<Database['getStats']>; ts: number } | null = null;
   private domainCache: { data: ReturnType<Database['getDomainStats']>; ts: number } | null = null;
   private static CACHE_TTL = 30_000; // 30s TTL
+  // Cached TF-IDF provider (trained once per DB session, reused across semantic_search/find_similar calls)
+  private tfidfCache: { provider: TfIdfProvider; store: EmbeddingStore } | null = null;
 
   constructor(private dbPath: string) {}
 
@@ -72,6 +74,19 @@ class LazyDb {
   invalidateCache(): void {
     this.statsCache = null;
     this.domainCache = null;
+    this.tfidfCache = null;
+  }
+
+  /** Get or build a TF-IDF provider + embedding store, trained on the corpus. */
+  getTfidf(): { provider: TfIdfProvider; store: EmbeddingStore } {
+    if (this.tfidfCache) return this.tfidfCache;
+    const db = this.get();
+    const provider = new TfIdfProvider();
+    const allSyms = db.getAllSymbols();
+    provider.trainIdf(allSyms.map(s => buildEmbeddingText({ name: s.name, kind: s.kind, filePath: s.filePath, signature: s.signature })));
+    const store = new EmbeddingStore(db.getRawDb(), provider.dimensions);
+    this.tfidfCache = { provider, store };
+    return this.tfidfCache;
   }
 
   private resetTimer(): void {
@@ -85,6 +100,7 @@ class LazyDb {
     this.timer = null;
     this.statsCache = null;
     this.domainCache = null;
+    this.tfidfCache = null;
   }
 
   shutdown(): void {
@@ -293,8 +309,11 @@ function matchesScope(lineText: string, scope: 'imports' | 'definitions'): boole
 /** Validate user-supplied regex is safe from catastrophic backtracking (ReDoS). */
 function safeRegex(pattern: string, flags: string): RegExp {
   if (pattern.length > 200) throw new Error('Pattern too long');
-  // Reject nested quantifiers like (a+)+, (a*)*,  (a{1,})+
-  if (/([+*}])\)?[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
+  // Reject nested quantifiers: quantifier applied to a group that contains a quantifier
+  // e.g. (a+)+, (a*)+, (a{2,})+, (?:a+)*, (.+)+
+  if (/([+*}])\s*\)\s*[+*?{]/.test(pattern)) throw new Error('Unsafe regex pattern');
+  // Reject quantifier directly after quantifier: a++, a*+, a+{2}
+  if (/[+*?}]\s*[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
   // Reject overlapping alternation inside quantified groups: (a|a)*, (ab|a)+
   if (/\((?:[^)]*\|[^)]*)\)[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
   // Reject backreferences inside quantified groups (exponential matching)
@@ -310,7 +329,13 @@ function safeRegex(pattern: string, flags: string): RegExp {
 }
 
 function globToRegex(glob: string): RegExp {
-  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  // Expand brace patterns {a,b,c} → (a|b|c) BEFORE escaping
+  let expanded = glob.replace(/\{([^}]+)\}/g, (_, inner: string) => {
+    const alts = inner.split(',').map(s => s.trim());
+    return `(${alts.join('|')})`;
+  });
+  const escaped = expanded
+    .replace(/[.+^$|[\]\\]/g, '\\$&')
     .replace(/\*\*/g, '§STARSTAR§')
     .replace(/\*/g, '[^/]*')
     .replace(/§STARSTAR§/g, '.*')
@@ -793,18 +818,22 @@ export function createMcpServer(rootPath?: string): McpServer {
         try {
           const dbPath = registry.findDbPath(entry.rootPath);
           if (dbPath) {
-            const tempDb = pools.has(entry.rootPath)
+            const fromPool = pools.has(entry.rootPath);
+            const tempDb = fromPool
               ? pools.get(entry.rootPath)!.get()
               : new Database(dbPath);
-            const summary = tempDb.getRepoSummary();
-            lines.push(`  ${summary.symbols} symbols, ${summary.links} links, ${summary.files} files`);
-            if (summary.domains.length > 0) {
-              lines.push(`  domains: ${summary.domains.join(', ')}`);
+            try {
+              const summary = tempDb.getRepoSummary();
+              lines.push(`  ${summary.symbols} symbols, ${summary.links} links, ${summary.files} files`);
+              if (summary.domains.length > 0) {
+                lines.push(`  domains: ${summary.domains.join(', ')}`);
+              }
+              if (summary.staleCount > 0) {
+                lines.push(`  ⏳ ${summary.staleCount} stale files`);
+              }
+            } finally {
+              if (!fromPool) tempDb.close();
             }
-            if (summary.staleCount > 0) {
-              lines.push(`  ⏳ ${summary.staleCount} stale files`);
-            }
-            if (!pools.has(entry.rootPath)) tempDb.close();
           }
         } catch {
           lines.push(`  (unable to read index)`);
@@ -831,8 +860,9 @@ export function createMcpServer(rootPath?: string): McpServer {
       }
       let changedFiles: string[];
       try {
+        // Show both staged and unstaged changes against the ref
         const output = execFileSync('git', ['diff', '--name-only', ref], { cwd: root, encoding: 'utf-8' });
-        const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: root, encoding: 'utf-8' });
+        const staged = execFileSync('git', ['diff', '--cached', '--name-only', ref], { cwd: root, encoding: 'utf-8' });
         changedFiles = [...new Set([...output.trim().split('\n'), ...staged.trim().split('\n')])].filter(Boolean);
       } catch {
         return { content: [{ type: 'text' as const, text: 'Not a git repository or git not available.' }] };
@@ -1262,10 +1292,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       }
 
       // Top symbols by heat
-      const allSyms = db.getAllSymbols()
-        .filter(s => s.heat != null && s.heat > 0 && s.kind !== 'section')
-        .sort((a, b) => (b.heat ?? 0) - (a.heat ?? 0))
-        .slice(0, 10);
+      const allSyms = db.getTopSymbolsByHeat(10);
       if (allSyms.length > 0) {
         lines.push(`### Key Symbols (top 10 by heat)`);
         for (const s of allSyms) {
@@ -1365,10 +1392,14 @@ export function createMcpServer(rootPath?: string): McpServer {
         ? [...symbols].sort((a, b) => ((b as any).heat ?? 0) - ((a as any).heat ?? 0))
         : symbols;
 
+      // Batch-fetch link counts to avoid N+1 queries
+      const linkCounts = detail === 'L0'
+        ? new Map<string, { incoming: number; outgoing: number }>()
+        : db.getLinkCountsForSymbols(sorted.map(s => s.id));
+
       const lines: string[] = [`${file}: ${symbols.length} symbols\n`];
       for (const sym of sorted) {
-        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-        const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+        const counts = linkCounts.get(sym.id) ?? { incoming: 0, outgoing: 0 };
         const exp = sym.exported ? ' (exported)' : '';
         if (detail === 'L0') {
           lines.push(`${sym.name} [${sym.kind}]${exp}`);
@@ -1377,9 +1408,9 @@ export function createMcpServer(rootPath?: string): McpServer {
           if (sym.role) meta.push(sym.role);
           if (sym.heat != null && sym.heat > 0) meta.push(`heat:${sym.heat}`);
           const metaStr = meta.length > 0 ? ` {${meta.join(',')}}` : '';
-          lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp}${metaStr} ← ${incoming.length} refs, → ${outgoing.length} deps`);
+          lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp}${metaStr} ← ${counts.incoming} refs, → ${counts.outgoing} deps`);
         } else {
-          lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp} ← ${incoming.length} refs, → ${outgoing.length} deps`);
+          lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp} ← ${counts.incoming} refs, → ${counts.outgoing} deps`);
         }
       }
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
@@ -1492,19 +1523,18 @@ export function createMcpServer(rootPath?: string): McpServer {
         sections.push(`⚠ index has ${unresolved.imports} unresolved internal imports, ${unresolved.calls} unresolved internal calls — callers list may be incomplete`);
       }
 
-      // 6. Test coverage for this symbol
+      // 6. Test coverage for this symbol (reuse callers data from step 2)
       for (const sym of symbols) {
         const incoming = db.getIncomingLinks(sym.id);
-        const testRefs = incoming.filter(l => {
+        const testFiles = new Set<string>();
+        for (const l of incoming) {
           const from = db.findSymbolById(l.fromId);
-          return from && isTestFile(from.filePath);
-        });
-        if (testRefs.length > 0) {
-          const testFiles = [...new Set(testRefs.map(l => {
-            const from = db.findSymbolById(l.fromId);
-            return from?.filePath;
-          }).filter(Boolean))];
-          sections.push(`✓ tested from: ${testFiles.join(', ')}`);
+          if (from && isTestFile(from.filePath)) {
+            testFiles.add(from.filePath);
+          }
+        }
+        if (testFiles.size > 0) {
+          sections.push(`✓ tested from: ${[...testFiles].join(', ')}`);
         } else if (sym.exported) {
           sections.push(`⚠ no test coverage for this exported symbol`);
         }
@@ -1971,7 +2001,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     async ({ query, limit, repo }) => {
       const startMs = Date.now();
       const maxResults = limit ?? 15;
-      const { db } = getDb(repo);
+      const { db, lazy } = getDb(repo);
 
       // FTS5 results
       const ftsResults = db.searchSymbols(query, maxResults * 2);
@@ -1993,11 +2023,8 @@ export function createMcpServer(rootPath?: string): McpServer {
         return { content: [{ type: 'text' as const, text }] };
       }
 
-      // Vector results — train IDF on corpus so query vector matches stored embeddings
-      const provider = new TfIdfProvider();
-      const allSyms = db.getAllSymbols();
-      provider.trainIdf(allSyms.map(s => buildEmbeddingText({ name: s.name, kind: s.kind, filePath: s.filePath, signature: s.signature })));
-      const store = new EmbeddingStore(db.getRawDb(), provider.dimensions);
+      // Vector results — use cached TF-IDF provider (trained once per DB session)
+      const { provider, store } = lazy.getTfidf();
       const queryVec = await provider.embed(query);
       const vectorResults = store.searchSimilar(queryVec, maxResults * 2);
 
@@ -2050,7 +2077,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     async ({ name, limit, repo }) => {
       const startMs = Date.now();
       const maxResults = limit ?? 10;
-      const { db } = getDb(repo);
+      const { db, lazy } = getDb(repo);
 
       const syms = db.findSymbolByName(name);
       if (syms.length === 0) {
@@ -2074,10 +2101,8 @@ export function createMcpServer(rootPath?: string): McpServer {
         return { content: [{ type: 'text' as const, text }] };
       }
 
-      const provider = new TfIdfProvider();
-      const allSyms = db.getAllSymbols();
-      provider.trainIdf(allSyms.map(s => buildEmbeddingText({ name: s.name, kind: s.kind, filePath: s.filePath, signature: s.signature })));
-      const store = new EmbeddingStore(db.getRawDb(), provider.dimensions);
+      // Use cached TF-IDF provider (trained once per DB session)
+      const { provider, store } = lazy.getTfidf();
 
       // Get or compute target embedding
       let targetVec = store.get(targetSym.id);

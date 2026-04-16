@@ -193,6 +193,23 @@ export class Database {
     return rows.map(rowToLink);
   }
 
+  /** Batch link counts for multiple symbol IDs (avoids N+1 queries) */
+  getLinkCountsForSymbols(symbolIds: string[]): Map<string, { incoming: number; outgoing: number }> {
+    if (symbolIds.length === 0) return new Map();
+    const placeholders = symbolIds.map(() => '?').join(',');
+    const inRows = this.db.prepare(
+      `SELECT to_id as id, COUNT(*) as c FROM links WHERE to_id IN (${placeholders}) AND type != 'contains' GROUP BY to_id`,
+    ).all(...symbolIds) as any[];
+    const outRows = this.db.prepare(
+      `SELECT from_id as id, COUNT(*) as c FROM links WHERE from_id IN (${placeholders}) AND type != 'contains' GROUP BY from_id`,
+    ).all(...symbolIds) as any[];
+    const result = new Map<string, { incoming: number; outgoing: number }>();
+    for (const id of symbolIds) result.set(id, { incoming: 0, outgoing: 0 });
+    for (const r of inRows) result.get(r.id)!.incoming = r.c;
+    for (const r of outRows) result.get(r.id)!.outgoing = r.c;
+    return result;
+  }
+
   findUpstream(symbolId: string, maxDepth = 3): Array<{ symbol: CodeSymbol; depth: number; via: string }> {
     const rows = this.stmts.upstream.all(symbolId, maxDepth) as any[];
     return rows.map(r => ({ symbol: rowToSymbol(r), depth: r.depth, via: r.via }));
@@ -212,6 +229,13 @@ export class Database {
 
   getAllSymbols(): CodeSymbol[] {
     const rows = this.db.prepare('SELECT * FROM symbols').all() as any[];
+    return rows.map(rowToSymbol);
+  }
+
+  getTopSymbolsByHeat(limit = 10): CodeSymbol[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM symbols WHERE heat > 0 AND kind != 'section' ORDER BY heat DESC LIMIT ?`
+    ).all(limit) as any[];
     return rows.map(rowToSymbol);
   }
 
@@ -323,8 +347,10 @@ export class Database {
 
     // Walk backwards from target to source to reconstruct the actual path
     const chain: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
+    const visited = new Set<string>();
     let cur = targetRow;
-    while (cur && cur.id !== fromId) {
+    while (cur && cur.id !== fromId && !visited.has(cur.id)) {
+      visited.add(cur.id);
       chain.push({ symbol: rowToSymbol(cur), depth: cur.depth, via: cur.via });
       const parent = byId.get(cur.parent_id);
       cur = parent ? parent.row : null;
@@ -406,6 +432,14 @@ export class Database {
     // Walk upstream following only 'calls' links to find paths from entrypoints
     const paths: Array<{ path: Array<{ symbol: CodeSymbol; via: string }> }> = [];
     const visited = new Set<string>();
+    const symCache = new Map<string, CodeSymbol | null>();
+
+    const cachedFindSymbol = (id: string): CodeSymbol | null => {
+      if (symCache.has(id)) return symCache.get(id)!;
+      const sym = this.findSymbolById(id);
+      symCache.set(id, sym);
+      return sym;
+    };
 
     const dfs = (currentId: string, currentPath: Array<{ symbol: CodeSymbol; via: string }>, depth: number) => {
       if (depth > maxDepth) return;
@@ -413,7 +447,7 @@ export class Database {
       visited.add(currentId);
 
       const incoming = this.getIncomingLinks(currentId).filter(l => l.type === 'calls' || l.type === 'imports');
-      const sym = this.findSymbolById(currentId);
+      const sym = cachedFindSymbol(currentId);
 
       if (incoming.length === 0 && sym?.exported) {
         // Reached an entrypoint — save this path
@@ -423,15 +457,9 @@ export class Database {
       }
 
       for (const link of incoming) {
-        const fromSym = this.findSymbolById(link.fromId);
+        const fromSym = cachedFindSymbol(link.fromId);
         if (!fromSym) continue;
-        // Skip module-level _top imports — go to their real callers
-        if (fromSym.name === '_top' && fromSym.kind === 'module') {
-          // Recurse from the _top module's incoming callers
-          dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
-        } else {
-          dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
-        }
+        dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
       }
 
       visited.delete(currentId);

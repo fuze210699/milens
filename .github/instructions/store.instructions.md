@@ -5,12 +5,12 @@ applyTo: "src/store/**"
 # Store
 
 ## Overview
-Contains 94 symbols (8 exported) across 3 files.
+Contains 97 symbols (8 exported) across 3 files.
 
 ## Key Symbols
 - **`Database`** [class] (src/store/db.ts:10) — 29 refs
+- **`buildEmbeddingText`** [function] (src/store/vectors.ts:250) — 7 refs
 - **`RepoRegistry`** [class] (src/store/registry.ts:18) — 6 refs
-- **`buildEmbeddingText`** [function] (src/store/vectors.ts:250) — 6 refs
 - **`TfIdfProvider`** [class] (src/store/vectors.ts:44) — 6 refs
 - **`EmbeddingStore`** [class] (src/store/vectors.ts:170) — 6 refs
 - **`EmbeddingProvider`** [interface] (src/store/vectors.ts:15) — 2 refs
@@ -19,9 +19,9 @@ Contains 94 symbols (8 exported) across 3 files.
 
 ## Entry Points
 - **`Database`** [class] — 29 incoming references
-- **`get`** [method] — 16 incoming references
+- **`get`** [method] — 18 incoming references
+- **`rowToSymbol`** [function] — 12 incoming references
 - **`close`** [method] — 12 incoming references
-- **`rowToSymbol`** [function] — 11 incoming references
 - **`findSymbolById`** [method] — 9 incoming references
 
 ## Dependencies
@@ -32,7 +32,7 @@ Contains 94 symbols (8 exported) across 3 files.
 ## Used By
 - **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `clear`, `isFileUpToDate`, `upsertFileHash` (+22 more)
 - **root**: `RepoRegistry`, `Database`, `register`, `close`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks` (+11 more)
-- **server**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `getStats`, `getDomainStats`, `close` (+33 more)
+- **server**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `getStats`, `getDomainStats`, `getAllSymbols` (+35 more)
 - **test**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `close`, `insertSymbol`, `findSymbolByName` (+44 more)
 - **parser**: `load`
 

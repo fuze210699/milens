@@ -6,31 +6,28 @@ paths:
 # Server
 
 ## Overview
-Contains 34 symbols (3 exported) across 1 files.
+Contains 40 symbols (3 exported) across 1 files.
 
 ## Key Symbols
-- **`createMcpServer`** [function] (src/server/mcp.ts:362) — 3 refs
-- **`startStdio`** [function] (src/server/mcp.ts:1707) — 2 refs
-- **`startHttp`** [function] (src/server/mcp.ts:1715) — 2 refs
+- **`createMcpServer`** [function] (src/server/mcp.ts:423) — 2 refs
+- **`startStdio`** [function] (src/server/mcp.ts:2334) — 2 refs
+- **`startHttp`** [function] (src/server/mcp.ts:2342) — 2 refs
 
 ## Entry Points
-- **`get`** [method] — 35 incoming references
-- **`createMcpServer`** [function] — 3 incoming references
+- **`get`** [method] — 7 incoming references
 - **`fmtSymbol`** [function] — 2 incoming references
 - **`walk`** [function] — 2 incoming references
+- **`createMcpServer`** [function] — 2 incoming references
 - **`resolveRoot`** [function] — 2 incoming references
 
 ## Dependencies
-- **store**: `Database`, `RepoRegistry`, `getStats`, `getDomainStats`, `close`, `logToolUsage`, `findByRoot`, `listAll` (+19 more)
-- **parser**: `getParser`, `loadLanguage`
-- **root**: `has`
-- **analyzer**: `resolve`, `find`
+- **store**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `getStats`, `getDomainStats`, `getAllSymbols` (+35 more)
+- **root**: `isTestFile`, `has`
+- **analyzer**: `reviewPr`, `reviewSymbol`, `generateTestPlan`, `findCoverageGaps`, `analyzeTestImpact`, `resolve`, `find`
+- **parser**: `getParser`, `loadLanguage`, `ALL_LANGS`
 
 ## Used By
-- **root**: `createMcpServer`, `startStdio`, `startHttp`, `get`
-- **analyzer**: `get`
-- **parser**: `get`
-- **store**: `get`
+- **root**: `startHttp`, `startStdio`
 
 ## Files
 - src/server/mcp.ts

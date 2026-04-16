@@ -8,6 +8,7 @@ export interface LangSpec {
   extensions: string[];
   wasmName: string;
   allTopLevelExported?: boolean; // Python: all top-level symbols exported when __all__ absent
+  uppercaseExported?: boolean;   // Go: uppercase first letter = exported
   queries: {
     functions?: string;
     classes?: string;
@@ -336,6 +337,15 @@ export function extractFromTree(
   if (spec.allTopLevelExported && exportedNames.size === 0) {
     for (const sym of symbols) {
       if (!sym.name.startsWith('_') && sym.kind !== 'module') sym.exported = true;
+    }
+  }
+
+  // Go convention: uppercase first letter = exported
+  if (spec.uppercaseExported) {
+    for (const sym of symbols) {
+      if (sym.name[0] && sym.name[0] === sym.name[0].toUpperCase() && /[A-Z]/.test(sym.name[0])) {
+        sym.exported = true;
+      }
     }
   }
 

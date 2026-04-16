@@ -79,5 +79,38 @@ CREATE TABLE IF NOT EXISTS tool_usage (
   repo        TEXT
 );
 
+-- Agent annotations: observations about symbols stored by agents
+CREATE TABLE IF NOT EXISTS annotations (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol_id   TEXT NOT NULL,
+  key         TEXT NOT NULL,
+  value       TEXT NOT NULL,
+  agent       TEXT,
+  session_id  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at  TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_annotations_symbol ON annotations(symbol_id, key);
+CREATE INDEX IF NOT EXISTS idx_annotations_session ON annotations(session_id);
+
+-- Agent sessions: multi-agent session management
+CREATE TABLE IF NOT EXISTS agent_sessions (
+  id          TEXT PRIMARY KEY,
+  agent       TEXT NOT NULL,
+  started_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at    TEXT,
+  context_json TEXT,
+  status      TEXT NOT NULL DEFAULT 'active'
+);
+
+-- Vector embeddings for semantic code search
+CREATE TABLE IF NOT EXISTS symbol_embeddings (
+  symbol_id   TEXT PRIMARY KEY,
+  embedding   BLOB NOT NULL,
+  model       TEXT NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_tool_usage_tool ON tool_usage(tool);
 CREATE INDEX IF NOT EXISTS idx_tool_usage_at   ON tool_usage(called_at);

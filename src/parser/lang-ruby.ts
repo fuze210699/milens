@@ -6,6 +6,7 @@ const spec: LangSpec = {
   id: 'ruby',
   extensions: ['.rb', '.rake'],
   wasmName: 'tree-sitter-ruby',
+  allTopLevelExported: true,
   queries: {
     classes: `(class name: (constant) @name) @def`,
     modules: `(module name: (constant) @name) @def`,

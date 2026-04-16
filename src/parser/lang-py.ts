@@ -25,6 +25,9 @@ const spec: LangSpec = {
       (import_from_statement
         module_name: (dotted_name) @source
       ) @def
+      (import_from_statement
+        module_name: (relative_import) @source
+      ) @def
       (import_statement
         name: (dotted_name) @source
       ) @def
@@ -49,6 +52,24 @@ const spec: LangSpec = {
     ) @def`,
   },
   resolveImport(raw, fromFile, root, _aliases) {
+    // Handle relative imports: leading dots
+    const dotMatch = raw.match(/^(\.+)(.*)/);
+    if (dotMatch) {
+      const dots = dotMatch[1].length;
+      const rest = dotMatch[2].replace(/^\./, ''); // remove separator dot
+      const fromDir = join(root, fromFile, '..');
+      let base = fromDir;
+      for (let i = 1; i < dots; i++) base = join(base, '..');
+      const parts = rest ? rest.split('.') : [];
+      const candidates = parts.length > 0
+        ? [join(base, ...parts) + '.py', join(base, ...parts, '__init__.py')]
+        : [join(base, '__init__.py')];
+      for (const p of candidates) {
+        if (existsSync(p)) return relative(root, p).replace(/\\/g, '/');
+      }
+      return null;
+    }
+
     // Convert dotted path: models.user → models/user
     const parts = raw.split('.');
     const candidates = [

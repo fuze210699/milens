@@ -79,7 +79,7 @@ export class Database {
       countLinks: this.db.prepare('SELECT COUNT(*) as c FROM links'),
       countFiles: this.db.prepare('SELECT COUNT(*) as c FROM file_hashes'),
       deleteFileLinks: this.db.prepare(
-        'DELETE FROM links WHERE from_id IN (SELECT id FROM symbols WHERE file_path = ?)'
+        'DELETE FROM links WHERE from_id IN (SELECT id FROM symbols WHERE file_path = ?) OR to_id IN (SELECT id FROM symbols WHERE file_path = ?)'
       ),
       deleteFileSymbols: this.db.prepare('DELETE FROM symbols WHERE file_path = ?'),
     };
@@ -193,6 +193,37 @@ export class Database {
     return rows.map(rowToLink);
   }
 
+  /** Batch link counts for multiple symbol IDs (avoids N+1 queries) */
+  getLinkCountsForSymbols(symbolIds: string[]): Map<string, { incoming: number; outgoing: number }> {
+    if (symbolIds.length === 0) return new Map();
+    const placeholders = symbolIds.map(() => '?').join(',');
+    const inRows = this.db.prepare(
+      `SELECT to_id as id, COUNT(*) as c FROM links WHERE to_id IN (${placeholders}) AND type != 'contains' GROUP BY to_id`,
+    ).all(...symbolIds) as any[];
+    const outRows = this.db.prepare(
+      `SELECT from_id as id, COUNT(*) as c FROM links WHERE from_id IN (${placeholders}) AND type != 'contains' GROUP BY from_id`,
+    ).all(...symbolIds) as any[];
+    const result = new Map<string, { incoming: number; outgoing: number }>();
+    for (const id of symbolIds) result.set(id, { incoming: 0, outgoing: 0 });
+    for (const r of inRows) result.get(r.id)!.incoming = r.c;
+    for (const r of outRows) result.get(r.id)!.outgoing = r.c;
+    return result;
+  }
+
+  /** Batch: get symbol IDs that have at least one incoming link from a test file. */
+  getTestedSymbolIds(symbolIds: string[], isTestFile: (fp: string) => boolean): Set<string> {
+    if (symbolIds.length === 0) return new Set();
+    const placeholders = symbolIds.map(() => '?').join(',');
+    const rows = this.db.prepare(
+      `SELECT DISTINCT l.to_id, s.file_path FROM links l JOIN symbols s ON s.id = l.from_id WHERE l.to_id IN (${placeholders})`,
+    ).all(...symbolIds) as any[];
+    const tested = new Set<string>();
+    for (const r of rows) {
+      if (isTestFile(r.file_path)) tested.add(r.to_id);
+    }
+    return tested;
+  }
+
   findUpstream(symbolId: string, maxDepth = 3): Array<{ symbol: CodeSymbol; depth: number; via: string }> {
     const rows = this.stmts.upstream.all(symbolId, maxDepth) as any[];
     return rows.map(r => ({ symbol: rowToSymbol(r), depth: r.depth, via: r.via }));
@@ -212,6 +243,13 @@ export class Database {
 
   getAllSymbols(): CodeSymbol[] {
     const rows = this.db.prepare('SELECT * FROM symbols').all() as any[];
+    return rows.map(rowToSymbol);
+  }
+
+  getTopSymbolsByHeat(limit = 10): CodeSymbol[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM symbols WHERE heat > 0 AND kind != 'section' ORDER BY heat DESC LIMIT ?`
+    ).all(limit) as any[];
     return rows.map(rowToSymbol);
   }
 
@@ -297,27 +335,42 @@ export class Database {
     const fromId = fromSyms[0].id;
     const toIds = new Set(toSyms.map(s => s.id));
 
-    // BFS outgoing from source
+    // BFS with parent tracking to reconstruct shortest path
     const rows = this.db.prepare(`
-      WITH RECURSIVE path(id, depth, via) AS (
-        SELECT to_id, 1, type FROM links WHERE from_id = ? AND type != 'contains'
+      WITH RECURSIVE path(id, depth, via, parent_id) AS (
+        SELECT to_id, 1, type, from_id FROM links WHERE from_id = ? AND type != 'contains'
         UNION
-        SELECT l.to_id, p.depth + 1, l.type
+        SELECT l.to_id, p.depth + 1, l.type, l.from_id
         FROM links l JOIN path p ON l.from_id = p.id
         WHERE l.type != 'contains' AND p.depth < ?
       )
-      SELECT DISTINCT s.*, p.depth, p.via FROM path p JOIN symbols s ON s.id = p.id ORDER BY p.depth
+      SELECT s.*, p.depth, p.via, p.parent_id FROM path p JOIN symbols s ON s.id = p.id ORDER BY p.depth
     `).all(fromId, maxDepth) as any[];
 
-    const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
+    // Find first row matching target
+    const targetRow = rows.find(r => toIds.has(r.id));
+    if (!targetRow) return null;
+
+    // Build lookup: id → { row, parent_id }
+    const byId = new Map<string, { row: any; parentId: string }>();
     for (const r of rows) {
-      result.push({ symbol: rowToSymbol(r), depth: r.depth, via: r.via });
-      if (toIds.has(r.id)) break;
+      if (!byId.has(r.id)) {
+        byId.set(r.id, { row: r, parentId: r.parent_id });
+      }
     }
 
-    const found = result.find(r => toIds.has(r.symbol.id));
-    if (!found) return null;
-    return result.filter(r => r.depth <= found.depth);
+    // Walk backwards from target to source to reconstruct the actual path
+    const chain: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
+    const visited = new Set<string>();
+    let cur = targetRow;
+    while (cur && cur.id !== fromId && !visited.has(cur.id)) {
+      visited.add(cur.id);
+      chain.push({ symbol: rowToSymbol(cur), depth: cur.depth, via: cur.via });
+      const parent = byId.get(cur.parent_id);
+      cur = parent ? parent.row : null;
+    }
+    chain.reverse();
+    return chain;
   }
 
   getChangedFiles(): string[] {
@@ -328,7 +381,7 @@ export class Database {
   // ── Maintenance ──
 
   deleteFileData(filePath: string): void {
-    this.stmts.deleteFileLinks.run(filePath);
+    this.stmts.deleteFileLinks.run(filePath, filePath);
     this.stmts.deleteFileSymbols.run(filePath);
   }
 
@@ -393,6 +446,14 @@ export class Database {
     // Walk upstream following only 'calls' links to find paths from entrypoints
     const paths: Array<{ path: Array<{ symbol: CodeSymbol; via: string }> }> = [];
     const visited = new Set<string>();
+    const symCache = new Map<string, CodeSymbol | null>();
+
+    const cachedFindSymbol = (id: string): CodeSymbol | null => {
+      if (symCache.has(id)) return symCache.get(id)!;
+      const sym = this.findSymbolById(id);
+      symCache.set(id, sym);
+      return sym;
+    };
 
     const dfs = (currentId: string, currentPath: Array<{ symbol: CodeSymbol; via: string }>, depth: number) => {
       if (depth > maxDepth) return;
@@ -400,7 +461,7 @@ export class Database {
       visited.add(currentId);
 
       const incoming = this.getIncomingLinks(currentId).filter(l => l.type === 'calls' || l.type === 'imports');
-      const sym = this.findSymbolById(currentId);
+      const sym = cachedFindSymbol(currentId);
 
       if (incoming.length === 0 && sym?.exported) {
         // Reached an entrypoint — save this path
@@ -410,15 +471,9 @@ export class Database {
       }
 
       for (const link of incoming) {
-        const fromSym = this.findSymbolById(link.fromId);
+        const fromSym = cachedFindSymbol(link.fromId);
         if (!fromSym) continue;
-        // Skip module-level _top imports — go to their real callers
-        if (fromSym.name === '_top' && fromSym.kind === 'module') {
-          // Recurse from the _top module's incoming callers
-          dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
-        } else {
-          dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
-        }
+        dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
       }
 
       visited.delete(currentId);
@@ -563,6 +618,89 @@ export class Database {
         tool: r.tool, calledAt: r.called_at, durationMs: r.duration_ms, tokensSaved: r.tokens_saved,
       })),
     };
+  }
+
+  // ── Annotations (agent code memory) ──
+
+  addAnnotation(symbolId: string, key: string, value: string, agent?: string, sessionId?: string, ttlHours?: number): number {
+    const expiresAt = ttlHours
+      ? new Date(Date.now() + ttlHours * 3600_000).toISOString().replace('T', ' ').slice(0, 19)
+      : null;
+    const result = this.db.prepare(
+      `INSERT INTO annotations (symbol_id, key, value, agent, session_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(symbolId, key, value, agent ?? null, sessionId ?? null, expiresAt);
+    return result.lastInsertRowid as number;
+  }
+
+  getAnnotations(filters: { symbolId?: string; key?: string; agent?: string; sessionId?: string; limit?: number }): Array<{ id: number; symbolId: string; key: string; value: string; agent: string | null; sessionId: string | null; createdAt: string }> {
+    const clauses: string[] = ["(expires_at IS NULL OR expires_at > datetime('now'))"];
+    const params: any[] = [];
+
+    if (filters.symbolId) { clauses.push('symbol_id = ?'); params.push(filters.symbolId); }
+    if (filters.key) { clauses.push('key = ?'); params.push(filters.key); }
+    if (filters.agent) { clauses.push('agent = ?'); params.push(filters.agent); }
+    if (filters.sessionId) { clauses.push('session_id = ?'); params.push(filters.sessionId); }
+
+    const where = `WHERE ${clauses.join(' AND ')}`;
+    const limit = filters.limit ?? 50;
+
+    const rows = this.db.prepare(
+      `SELECT id, symbol_id, key, value, agent, session_id, created_at
+       FROM annotations ${where}
+       ORDER BY created_at DESC LIMIT ?`
+    ).all(...params, limit) as any[];
+
+    return rows.map(r => ({
+      id: r.id,
+      symbolId: r.symbol_id,
+      key: r.key,
+      value: r.value,
+      agent: r.agent,
+      sessionId: r.session_id,
+      createdAt: r.created_at,
+    }));
+  }
+
+  getAnnotationsForSymbol(symbolId: string): Array<{ key: string; value: string; agent: string | null; createdAt: string }> {
+    const rows = this.db.prepare(
+      `SELECT key, value, agent, created_at FROM annotations
+       WHERE symbol_id = ? AND (expires_at IS NULL OR expires_at > datetime('now'))
+       ORDER BY created_at DESC`
+    ).all(symbolId) as any[];
+    return rows.map(r => ({ key: r.key, value: r.value, agent: r.agent, createdAt: r.created_at }));
+  }
+
+  cleanupExpiredAnnotations(): number {
+    const result = this.db.prepare(
+      `DELETE FROM annotations WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')`
+    ).run();
+    return result.changes;
+  }
+
+  // ── Agent sessions ──
+
+  startSession(id: string, agent: string, context?: string): void {
+    this.db.prepare(
+      `INSERT INTO agent_sessions (id, agent, context_json, status) VALUES (?, ?, ?, 'active')`
+    ).run(id, agent, context ?? null);
+  }
+
+  getSession(id: string): { id: string; agent: string; startedAt: string; endedAt: string | null; context: string | null; status: string } | null {
+    const row = this.db.prepare('SELECT * FROM agent_sessions WHERE id = ?').get(id) as any;
+    if (!row) return null;
+    return { id: row.id, agent: row.agent, startedAt: row.started_at, endedAt: row.ended_at, context: row.context_json, status: row.status };
+  }
+
+  endSession(id: string, status: 'completed' | 'failed' = 'completed'): void {
+    this.db.prepare(
+      `UPDATE agent_sessions SET ended_at = datetime('now'), status = ? WHERE id = ?`
+    ).run(status, id);
+  }
+
+  /** Expose raw handle for subsystems (e.g. EmbeddingStore) that need direct access. */
+  getRawDb(): BetterSqlite3.Database {
+    return this.db;
   }
 
   transaction<T>(fn: () => T): T {

@@ -33,6 +33,7 @@ const spec: LangSpec = {
       (marker_annotation name: (identifier) @callee) @def
       (annotation name: (identifier) @callee) @def
     ]`,
+    variables: `(field_declaration declarator: (variable_declarator name: (identifier) @name)) @def`,
     heritage: `[
       (class_declaration
         name: (identifier) @child

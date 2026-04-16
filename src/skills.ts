@@ -337,6 +337,16 @@ When the user says... → do this FIRST:
 | "update/write docs for \`X\`" | \`${t('grep')}({pattern: "X", include: "**/*.md"})\` — find existing docs mentioning X, then \`${t('context')}({name: "X"})\` for full symbol info |
 | "research/explore docs" | \`${t('get_file_symbols')}({file: "<doc.md>"})\` — see document outline (headings as sections) |
 | "what docs mention \`X\`" | \`${t('grep')}({pattern: "X", include: "**/*.md"})\` — find all markdown references |
+| "review this PR" | \`${t('review_pr')}({repo: "<workspaceRoot>"})\` — risk assessment for changed files |
+| "is \`X\` risky to change" | \`${t('review_symbol')}({name: "X", repo: "<workspaceRoot>"})\` |
+| "write tests for \`X\`" | \`${t('test_plan')}({name: "X", repo: "<workspaceRoot>"})\` — deps, mocks, suggested tests |
+| "what needs tests" | \`${t('test_coverage_gaps')}({repo: "<workspaceRoot>"})\` — untested symbols by risk |
+| "which tests to run" | \`${t('test_impact')}({repo: "<workspaceRoot>"})\` — maps changes → test files |
+| "remember/note that \`X\`..." | \`${t('annotate')}({symbol: "X", key: "note", value: "...", repo: "<workspaceRoot>"})\` |
+| "what do we know about \`X\`" | \`${t('recall')}({symbol: "X", repo: "<workspaceRoot>"})\` |
+| "start new session" | \`${t('session_start')}({agent: "...", repo: "<workspaceRoot>"})\` |
+| "find code like \`X\`" | \`${t('find_similar')}({name: "X", repo: "<workspaceRoot>"})\` |
+| "search for \`concept\`" | \`${t('semantic_search')}({query: "concept", repo: "<workspaceRoot>"})\` |
 
 ## Documentation Workflows
 
@@ -381,6 +391,28 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` sy
 | \`${t('get_type_hierarchy')}\` | Class inheritance tree |
 | \`${t('find_dead_code')}\` | Unused exported symbols |
 | \`${t('status')}\` | Index health check |
+| \`${t('edit_check')}\` | Pre-edit safety: callers + export status + re-export chains + test coverage |
+| \`${t('trace')}\` | Execution flow: call chains from entrypoints to a symbol |
+| \`${t('routes')}\` | Detect framework routes/endpoints (Express, FastAPI, NestJS, etc.) |
+| \`${t('smart_context')}\` | Intent-aware context: understand/edit/debug/test |
+| \`${t('overview')}\` | Combined context + impact + grep in one call |
+| \`${t('domains')}\` | Domain clusters: groups of files forming logical modules |
+| \`${t('repos')}\` | List all indexed repositories with summary stats |
+| \`${t('ast_explore')}\` | Explore raw AST structure of a code file |
+| \`${t('test_query')}\` | Run raw SQL query against the milens index database |
+| \`${t('review_pr')}\` | PR risk assessment: scores changed symbols by blast radius + test coverage |
+| \`${t('review_symbol')}\` | Single symbol risk: role, heat, dependents, test status |
+| \`${t('test_plan')}\` | Dependency-aware test plan: mocks, strategies, suggested tests |
+| \`${t('test_coverage_gaps')}\` | Untested exported symbols sorted by risk |
+| \`${t('test_impact')}\` | Which tests to run for current changes |
+| \`${t('annotate')}\` | Store observation/note about a symbol (persists across sessions) |
+| \`${t('recall')}\` | Retrieve annotations (filter by symbol, key, agent, session) |
+| \`${t('session_start')}\` | Register agent session for multi-agent coordination |
+| \`${t('session_context')}\` | Get session metadata + annotations |
+| \`${t('handoff')}\` | Transfer context between agent sessions |
+| \`${t('codebase_summary')}\` | High-level bootstrapping context: domains, key symbols, coverage |
+| \`${t('semantic_search')}\` | Hybrid FTS5 + vector search (requires --embeddings) |
+| \`${t('find_similar')}\` | Find symbols similar by embedding proximity |
 
 ### Keeping the Index Fresh
 

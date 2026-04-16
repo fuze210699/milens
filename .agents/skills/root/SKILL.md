@@ -6,7 +6,7 @@ description: Code intelligence for the root area — symbols, dependencies, and 
 # Root
 
 ## Overview
-Contains 124 symbols (91 exported) across 8 files.
+Contains 136 symbols (103 exported) across 8 files.
 
 ## Key Symbols
 - **`CodeSymbol`** [interface] (src/types.ts:8) — 29 refs

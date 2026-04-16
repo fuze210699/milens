@@ -375,7 +375,7 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - \`overview\` — combined context + impact + grep in one call (preferred for editing workflows)
 - \`edit_check\` — pre-edit safety: callers + export status + re-export chains + test coverage + ⚠ warnings (fastest for edits)
 - \`trace\` — execution flow: call chains from entrypoints to a symbol (or downstream from it)
-- \`routes\` — detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Go, PHP, Rails)
+- \`routes\` — detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Django, Go, Gin, PHP, Rails, Sinatra, Spring)
 - \`smart_context\` — intent-aware context: understand/edit/debug/test (returns only what matters for intent)
 - \`domains\` — show domain clusters: groups of files forming logical modules based on dependency graph
 - \`repos\` — list all indexed repositories with summary stats (multi-repo support)

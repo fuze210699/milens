@@ -4,30 +4,70 @@
 
 ## What is milens?
 
-milens indexes source code into a SQLite knowledge graph containing symbols (functions, classes, methods, interfaces, etc.) and their relationships (calls, imports, extends, implements, contains). It exposes this graph through 9 MCP tools for AI agent consumption.
+milens indexes source code into a SQLite knowledge graph containing symbols (functions, classes, methods, interfaces, etc.) and their relationships (calls, imports, extends, implements, contains). It exposes this graph through 32 MCP tools for AI agent consumption.
 
 ## MCP Tools
 
+### Search & Navigation
 - `query({query, limit?})` — BM25 full-text search across symbol names and file paths
-- `context({name})` — 360° view: incoming refs (who calls this?), outgoing deps (what does this call?), exported status
-- `impact({target, direction, depth?})` — Recursive graph traversal showing blast radius. Direction: `upstream` (what depends on this?) or `downstream` (what does this call?)
-- `status()` — Symbol count, link count, file count for the indexed repo
-- `detect_changes({ref?})` — Git diff → affected symbols and their direct dependents
-- `explain_relationship({from, to})` — Shortest path between two symbols in the dependency graph
-- `find_dead_code({kind?, limit?})` — Exported symbols with zero incoming references
+- `grep({pattern, scope?, includePattern?})` — Text search ALL files — code, templates, configs, docs
+- `context({name})` — 360° view: incoming refs + outgoing deps + exported status
 - `get_file_symbols({file})` — All symbols in a specific file with relationship counts
 - `get_type_hierarchy({name})` — Inheritance/implementation tree for a class, interface, or trait
 
+### Impact & Safety
+- `impact({target, direction?, depth?})` — Recursive graph traversal showing blast radius
+- `edit_check({name})` — Pre-edit safety: callers + exports + re-export chains + test coverage + warnings
+- `detect_changes({ref?})` — Git diff → affected symbols and their direct dependents
+- `find_dead_code({kind?, limit?})` — Exported symbols with zero incoming references
+
+### Understanding
+- `smart_context({name, intent})` — Intent-aware context: understand/edit/debug/test
+- `trace({to?, from?})` — Execution flow: call chains to/from entrypoints
+- `routes({framework?})` — Detect framework routes/endpoints (11 frameworks)
+- `explain_relationship({from, to})` — Shortest path between two symbols
+- `overview({name})` — Combined context + impact + grep in one call
+
+### Codebase Overview
+- `domains({})` — Domain clusters: groups of files forming logical modules
+- `repos({})` — List all indexed repositories
+- `status({})` — Index stats, domains, test coverage, accuracy report
+- `codebase_summary({})` — High-level bootstrapping context for agents
+
+### Review & Risk Assessment
+- `review_pr({})` — PR risk assessment: scores changed symbols by blast radius + test coverage
+- `review_symbol({name})` — Single symbol risk: role, heat, dependents, test status
+
+### Testing
+- `test_plan({name})` — Dependency-aware test plan: mocks, strategies, suggested tests
+- `test_coverage_gaps({})` — Untested exported symbols sorted by risk
+- `test_impact({})` — Maps git changes → test files to run
+
+### Developer Tools
+- `ast_explore({code, language})` — Parse code snippet → S-expression AST tree
+- `test_query({query, code, language})` — Test tree-sitter query against code snippet
+
+### Annotations & Sessions
+- `annotate({symbol, key, value})` — Store observation/note about a symbol (persists across sessions)
+- `recall({symbol?, key?, agent?})` — Retrieve annotations
+- `session_start({agent})` — Register agent session for multi-agent coordination
+- `session_context({})` — Get session metadata + annotations
+- `handoff({from_session, to_session})` — Transfer context between agent sessions
+
+### Search & Similarity
+- `semantic_search({query})` — Hybrid FTS5 + vector cosine similarity search (requires --embeddings)
+- `find_similar({name})` — Find symbols similar by embedding proximity (requires --embeddings)
+
 ## Architecture
 
-- **Parser**: Declarative `LangSpec` configs with tree-sitter query strings. One universal `extractFromTree()` function handles all 8 languages.
-- **Analyzer**: Pipeline — scan files → group by language → parse/extract → resolve cross-file links → persist to SQLite.
+- **Parser**: Declarative `LangSpec` configs with tree-sitter query strings. One universal `extractFromTree()` function handles all 12 languages.
+- **Analyzer**: Pipeline — scan files → group by language → parse/extract → resolve cross-file links → enrich (roles, heat, domains) → persist to SQLite.
 - **Storage**: SQLite with FTS5 search, recursive CTEs for transitive dependency traversal, WAL mode.
-- **Server**: MCP server with stdio and StreamableHTTP transports.
+- **Server**: MCP server with stdio and StreamableHTTP transports. 4 Resources + 3 Guided Prompts.
 
 ## Supported Languages
 
-TypeScript, JavaScript, Python, Java, Go, Rust, PHP, Vue
+TypeScript, JavaScript, Python, Java, Go, Rust, PHP, Ruby, Vue, HTML, CSS, Markdown
 
 ## CLI Commands
 
@@ -43,6 +83,7 @@ milens serve --http                # Start MCP server (HTTP on port 3100)
 milens status                      # Index stats
 milens list                        # List all indexed repos
 milens clean -p <path>             # Remove index
+milens dashboard                   # Usage analytics dashboard
 ```
 
 ## Setup

@@ -5,10 +5,14 @@ applyTo: "test/**"
 # Test
 
 ## Overview
-Contains 85 symbols (29 exported) across 25 files.
+Contains 116 symbols (43 exported) across 26 files.
 
 ## Key Symbols
+- **`User`** [interface] (test/fixtures/ts-project/src/models.ts:1) — 5 refs
 - **`createUser`** [function] (test/fixtures/ts-project/src/models.ts:9) — 2 refs
+- **`UserRole`** [type] (test/fixtures/ts-project/src/models.ts:7) — 2 refs
+- **`create_user`** [function] (test/fixtures/py-project/models.py:10) — 2 refs
+- **`User`** [class] (test/fixtures/py-project/models.py:1) — 2 refs
 - **`Project Guide`** [section] (test/fixtures/md-project/docs/guide.md:1) — 1 refs
 - **`Getting Started`** [section] (test/fixtures/md-project/docs/guide.md:5) — 1 refs
 - **`Architecture`** [section] (test/fixtures/md-project/docs/guide.md:15) — 1 refs
@@ -18,23 +22,19 @@ Contains 85 symbols (29 exported) across 25 files.
 - **`Endpoints`** [section] (test/fixtures/md-project/docs/guide.md:37) — 1 refs
 - **`Error Codes`** [section] (test/fixtures/md-project/docs/guide.md:42) — 1 refs
 - **`Contributing`** [section] (test/fixtures/md-project/docs/guide.md:46) — 1 refs
-- **`User`** [interface] (test/fixtures/ts-project/src/models.ts:1) — 1 refs
-- **`UserRole`** [type] (test/fixtures/ts-project/src/models.ts:7) — 1 refs
-- **`NewUser`** [function] (test/fixtures/go-project/models/user.go:14) — 1 refs
-- **`My Project`** [section] (test/fixtures/md-project/README.md:1) — 0 refs
-- **`Installation`** [section] (test/fixtures/md-project/README.md:5) — 0 refs
+- **`UserController`** [class] (test/fixtures/ts-project/src/nest-sample.ts:18) — 1 refs
 
 ## Entry Points
+- **`User`** [interface] — 5 incoming references
 - **`createUser`** [function] — 2 incoming references
-- **`Project Guide`** [section] — 1 incoming references
-- **`Getting Started`** [section] — 1 incoming references
-- **`Architecture`** [section] — 1 incoming references
-- **`Models`** [section] — 1 incoming references
+- **`UserRole`** [type] — 2 incoming references
+- **`create_user`** [function] — 2 incoming references
+- **`User`** [class] — 2 incoming references
 
 ## Dependencies
-- **store**: `Database`, `close`, `insertSymbol`, `findSymbolByName`, `insertLink`, `getIncomingLinks`, `getOutgoingLinks`, `rebuildSearch` (+14 more)
+- **store**: `Database`, `close`, `insertSymbol`, `findSymbolByName`, `insertLink`, `getIncomingLinks`, `getOutgoingLinks`, `rebuildSearch` (+15 more)
 - **root**: `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+2 more)
-- **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `extractHtmlScripts`, `extractHtmlRefs`, `extractMarkdown` (+1 more)
+- **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `spec`, `extractHtmlScripts`, `extractHtmlRefs` (+2 more)
 - **analyzer**: `resolveLinks`, `resolveLinksWithStats`, `scanFiles`, `analyze`, `loadAliases`, `find`
 
 ## Files
@@ -52,6 +52,7 @@ Contains 85 symbols (29 exported) across 25 files.
 - test/fixtures/ts-project/src/UserProfile.vue
 - test/fixtures/ts-project/src/auth.ts
 - test/fixtures/ts-project/src/models.ts
+- test/fixtures/ts-project/src/nest-sample.ts
 - test/fixtures/vue-project-refs/src/composables/useClipboard.js
 - test/fixtures/vue-project-refs/src/views/TestView.vue
 - test/fixtures/vue-project/src/composables/useClipboard.js

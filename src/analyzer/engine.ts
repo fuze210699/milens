@@ -11,6 +11,7 @@ import { extractMarkdown } from '../parser/lang-md.js';
 import { resolveLinks, resolveLinksWithStats } from './resolver.js';
 import { enrichMetadata } from './enrich.js';
 import { Database } from '../store/db.js';
+import { TfIdfProvider, EmbeddingStore, buildEmbeddingText } from '../store/vectors.js';
 import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, AnalysisStats } from '../types.js';
 import type Parser from 'web-tree-sitter';
 import type { LangSpec } from '../parser/extract.js';
@@ -81,6 +82,7 @@ interface EngineOptions {
   verbose?: boolean;
   force?: boolean;
   aliases?: Record<string, string>;
+  embeddings?: boolean;
 }
 
 function buildChunks(files: FileWithSpec[]): FileWithSpec[][] {
@@ -360,6 +362,32 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     db.setMeta('exported_production_symbols', String(exportedProduction.length));
     db.rebuildSearch();
   });
+
+  // Phase 8: Generate embeddings (optional)
+  if (opts.embeddings) {
+    const provider = new TfIdfProvider();
+    const texts = allSymbols.map(s => buildEmbeddingText({
+      name: s.name, kind: s.kind, filePath: s.filePath, signature: s.signature,
+    }));
+    provider.trainIdf(texts);
+    await provider.init();
+
+    const store = new EmbeddingStore(db.getRawDb(), provider.dimensions);
+    const EMBED_BATCH = 200;
+    let embedded = 0;
+    for (let i = 0; i < allSymbols.length; i += EMBED_BATCH) {
+      const batch = allSymbols.slice(i, i + EMBED_BATCH);
+      const batchTexts = texts.slice(i, i + EMBED_BATCH);
+      const vecs = await provider.embedBatch(batchTexts);
+      db.transaction(() => {
+        for (let j = 0; j < batch.length; j++) {
+          store.store(batch[j].id, vecs[j], provider.name);
+        }
+      });
+      embedded += batch.length;
+    }
+    if (opts.verbose) console.log(`[embed] Generated ${embedded} embeddings (${provider.name})`);
+  }
 
   const stats: AnalysisStats = {
     filesScanned: files.length,

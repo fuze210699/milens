@@ -7,32 +7,38 @@ alwaysApply: false
 # Store
 
 ## Overview
-Contains 60 symbols (2 exported) across 2 files.
+Contains 94 symbols (8 exported) across 3 files.
 
 ## Key Symbols
-- **`Database`** [class] (src/store/db.ts:10) — 13 refs
+- **`Database`** [class] (src/store/db.ts:10) — 22 refs
 - **`RepoRegistry`** [class] (src/store/registry.ts:18) — 4 refs
+- **`buildEmbeddingText`** [function] (src/store/vectors.ts:232) — 4 refs
+- **`TfIdfProvider`** [class] (src/store/vectors.ts:44) — 4 refs
+- **`EmbeddingStore`** [class] (src/store/vectors.ts:170) — 4 refs
+- **`EmbeddingProvider`** [interface] (src/store/vectors.ts:15) — 2 refs
+- **`NeuralProvider`** [class] (src/store/vectors.ts:122) — 0 refs
+- **`SimilarResult`** [interface] (src/store/vectors.ts:23) — 0 refs
 
 ## Entry Points
-- **`Database`** [class] — 13 incoming references
-- **`close`** [method] — 8 incoming references
-- **`rowToSymbol`** [function] — 5 incoming references
-- **`findSymbolByName`** [method] — 5 incoming references
-- **`findSymbolById`** [method] — 4 incoming references
+- **`Database`** [class] — 22 incoming references
+- **`get`** [method] — 14 incoming references
+- **`rowToSymbol`** [function] — 11 incoming references
+- **`findSymbolById`** [method] — 8 incoming references
+- **`getIncomingLinks`** [method] — 8 incoming references
 
 ## Dependencies
-- **root**: `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has`
-- **server**: `get`
+- **root**: `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has`, `t`
 - **scripts**: `run`
 - **analyzer**: `find`, `resolve`
 
 ## Used By
-- **analyzer**: `Database`, `clear`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction`, `clearSymbolsAndLinks`, `deleteFileData` (+7 more)
+- **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `clear`, `isFileUpToDate`, `upsertFileHash` (+22 more)
 - **root**: `RepoRegistry`, `Database`, `register`, `close`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks` (+11 more)
-- **server**: `Database`, `RepoRegistry`, `getStats`, `getDomainStats`, `close`, `logToolUsage`, `findByRoot`, `listAll` (+19 more)
-- **test**: `Database`, `close`, `insertSymbol`, `findSymbolByName`, `insertLink`, `getIncomingLinks`, `getOutgoingLinks`, `rebuildSearch` (+14 more)
+- **server**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `getStats`, `getDomainStats`, `close` (+32 more)
+- **test**: `Database`, `close`, `insertSymbol`, `findSymbolByName`, `insertLink`, `getIncomingLinks`, `getOutgoingLinks`, `rebuildSearch` (+15 more)
 - **parser**: `load`
 
 ## Files
 - src/store/db.ts
 - src/store/registry.ts
+- src/store/vectors.ts

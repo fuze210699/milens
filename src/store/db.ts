@@ -565,6 +565,89 @@ export class Database {
     };
   }
 
+  // ── Annotations (agent code memory) ──
+
+  addAnnotation(symbolId: string, key: string, value: string, agent?: string, sessionId?: string, ttlHours?: number): number {
+    const expiresAt = ttlHours
+      ? new Date(Date.now() + ttlHours * 3600_000).toISOString().replace('T', ' ').slice(0, 19)
+      : null;
+    const result = this.db.prepare(
+      `INSERT INTO annotations (symbol_id, key, value, agent, session_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(symbolId, key, value, agent ?? null, sessionId ?? null, expiresAt);
+    return result.lastInsertRowid as number;
+  }
+
+  getAnnotations(filters: { symbolId?: string; key?: string; agent?: string; sessionId?: string; limit?: number }): Array<{ id: number; symbolId: string; key: string; value: string; agent: string | null; sessionId: string | null; createdAt: string }> {
+    const clauses: string[] = ["(expires_at IS NULL OR expires_at > datetime('now'))"];
+    const params: any[] = [];
+
+    if (filters.symbolId) { clauses.push('symbol_id = ?'); params.push(filters.symbolId); }
+    if (filters.key) { clauses.push('key = ?'); params.push(filters.key); }
+    if (filters.agent) { clauses.push('agent = ?'); params.push(filters.agent); }
+    if (filters.sessionId) { clauses.push('session_id = ?'); params.push(filters.sessionId); }
+
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const limit = filters.limit ?? 50;
+
+    const rows = this.db.prepare(
+      `SELECT id, symbol_id, key, value, agent, session_id, created_at
+       FROM annotations ${where}
+       ORDER BY created_at DESC LIMIT ?`
+    ).all(...params, limit) as any[];
+
+    return rows.map(r => ({
+      id: r.id,
+      symbolId: r.symbol_id,
+      key: r.key,
+      value: r.value,
+      agent: r.agent,
+      sessionId: r.session_id,
+      createdAt: r.created_at,
+    }));
+  }
+
+  getAnnotationsForSymbol(symbolId: string): Array<{ key: string; value: string; agent: string | null; createdAt: string }> {
+    const rows = this.db.prepare(
+      `SELECT key, value, agent, created_at FROM annotations
+       WHERE symbol_id = ? AND (expires_at IS NULL OR expires_at > datetime('now'))
+       ORDER BY created_at DESC`
+    ).all(symbolId) as any[];
+    return rows.map(r => ({ key: r.key, value: r.value, agent: r.agent, createdAt: r.created_at }));
+  }
+
+  cleanupExpiredAnnotations(): number {
+    const result = this.db.prepare(
+      `DELETE FROM annotations WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')`
+    ).run();
+    return result.changes;
+  }
+
+  // ── Agent sessions ──
+
+  startSession(id: string, agent: string, context?: string): void {
+    this.db.prepare(
+      `INSERT INTO agent_sessions (id, agent, context_json, status) VALUES (?, ?, ?, 'active')`
+    ).run(id, agent, context ?? null);
+  }
+
+  getSession(id: string): { id: string; agent: string; startedAt: string; endedAt: string | null; context: string | null; status: string } | null {
+    const row = this.db.prepare('SELECT * FROM agent_sessions WHERE id = ?').get(id) as any;
+    if (!row) return null;
+    return { id: row.id, agent: row.agent, startedAt: row.started_at, endedAt: row.ended_at, context: row.context_json, status: row.status };
+  }
+
+  endSession(id: string, status: 'completed' | 'failed' = 'completed'): void {
+    this.db.prepare(
+      `UPDATE agent_sessions SET ended_at = datetime('now'), status = ? WHERE id = ?`
+    ).run(status, id);
+  }
+
+  /** Expose raw handle for subsystems (e.g. EmbeddingStore) that need direct access. */
+  getRawDb(): BetterSqlite3.Database {
+    return this.db;
+  }
+
   transaction<T>(fn: () => T): T {
     return this.db.transaction(fn)();
   }

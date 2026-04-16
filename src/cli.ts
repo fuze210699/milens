@@ -29,6 +29,7 @@ program
   .option('--skills-claude', 'Generate skill files for Claude Code only')
   .option('--skills-agents', 'Generate skill files for AGENTS.md only')
   .option('--skills-windsurf', 'Generate config for Windsurf only')
+  .option('--embeddings', 'Generate vector embeddings for semantic search')
   .action(async (opts) => {
     const rootPath = resolve(opts.path);
     const outDir = opts.output ?? join(rootPath, '.milens');
@@ -45,6 +46,7 @@ program
       verbose: opts.verbose,
       force: opts.force,
       aliases,
+      embeddings: opts.embeddings,
     });
 
     // Register in global registry

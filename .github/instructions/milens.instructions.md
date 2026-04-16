@@ -5,7 +5,7 @@ applyTo: "**"
 <!-- milens:start -->
 # Milens — Code Intelligence (MCP)
 
-This project is indexed by milens (403 symbols, 636 links, 56 files).
+This project is indexed by milens (558 symbols, 915 links, 60 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
@@ -66,6 +66,16 @@ When the user says... → do this FIRST:
 | "update/write docs for `X`" | `mcp_milens_grep({pattern: "X", include: "**/*.md"})` — find existing docs mentioning X, then `mcp_milens_context({name: "X"})` for full symbol info |
 | "research/explore docs" | `mcp_milens_get_file_symbols({file: "<doc.md>"})` — see document outline (headings as sections) |
 | "what docs mention `X`" | `mcp_milens_grep({pattern: "X", include: "**/*.md"})` — find all markdown references |
+| "review this PR" | `mcp_milens_review_pr({repo: "<workspaceRoot>"})` — risk assessment for changed files |
+| "is `X` risky to change" | `mcp_milens_review_symbol({name: "X", repo: "<workspaceRoot>"})` |
+| "write tests for `X`" | `mcp_milens_test_plan({name: "X", repo: "<workspaceRoot>"})` — deps, mocks, suggested tests |
+| "what needs tests" | `mcp_milens_test_coverage_gaps({repo: "<workspaceRoot>"})` — untested symbols by risk |
+| "which tests to run" | `mcp_milens_test_impact({repo: "<workspaceRoot>"})` — maps changes → test files |
+| "remember/note that `X`..." | `mcp_milens_annotate({symbol: "X", key: "note", value: "...", repo: "<workspaceRoot>"})` |
+| "what do we know about `X`" | `mcp_milens_recall({symbol: "X", repo: "<workspaceRoot>"})` |
+| "start new session" | `mcp_milens_session_start({agent: "...", repo: "<workspaceRoot>"})` |
+| "find code like `X`" | `mcp_milens_find_similar({name: "X", repo: "<workspaceRoot>"})` |
+| "search for `concept`" | `mcp_milens_semantic_search({query: "concept", repo: "<workspaceRoot>"})` |
 
 ## Documentation Workflows
 
@@ -110,6 +120,19 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symb
 | `mcp_milens_get_type_hierarchy` | Class inheritance tree |
 | `mcp_milens_find_dead_code` | Unused exported symbols |
 | `mcp_milens_status` | Index health check |
+| `mcp_milens_review_pr` | PR risk assessment: scores changed symbols by blast radius + test coverage |
+| `mcp_milens_review_symbol` | Single symbol risk: role, heat, dependents, test status |
+| `mcp_milens_test_plan` | Dependency-aware test plan: mocks, strategies, suggested tests |
+| `mcp_milens_test_coverage_gaps` | Untested exported symbols sorted by risk |
+| `mcp_milens_test_impact` | Which tests to run for current changes |
+| `mcp_milens_annotate` | Store observation/note about a symbol (persists across sessions) |
+| `mcp_milens_recall` | Retrieve annotations (filter by symbol, key, agent, session) |
+| `mcp_milens_session_start` | Register agent session for multi-agent coordination |
+| `mcp_milens_session_context` | Get session metadata + annotations |
+| `mcp_milens_handoff` | Transfer context between agent sessions |
+| `mcp_milens_codebase_summary` | High-level bootstrapping context: domains, key symbols, coverage |
+| `mcp_milens_semantic_search` | Hybrid FTS5 + vector search (requires --embeddings) |
+| `mcp_milens_find_similar` | Find symbols similar by embedding proximity |
 
 ### Keeping the Index Fresh
 

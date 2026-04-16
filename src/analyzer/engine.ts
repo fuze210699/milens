@@ -10,6 +10,7 @@ import { extractHtmlScripts, extractHtmlRefs } from '../parser/lang-html.js';
 import { extractMarkdown } from '../parser/lang-md.js';
 import { resolveLinks, resolveLinksWithStats } from './resolver.js';
 import { enrichMetadata } from './enrich.js';
+import { isTestFile } from '../utils.js';
 import { Database } from '../store/db.js';
 import { TfIdfProvider, EmbeddingStore, buildEmbeddingText } from '../store/vectors.js';
 import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, AnalysisStats } from '../types.js';
@@ -570,13 +571,4 @@ function parseDocFile(source: string, filePath: string, spec: LangSpec): Extract
     return result;
   }
   return null;
-}
-
-/** Check if a file path looks like a test/spec file */
-function isTestFile(filePath: string): boolean {
-  return /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
-    /^tests?[/\\]/.test(filePath) ||
-    /__tests__[/\\]/.test(filePath) ||
-    /_test\.(go|py|rb|rs|java|php)$/.test(filePath) ||
-    /^test_.*\.py$/.test(filePath.split('/').pop() ?? '');
 }

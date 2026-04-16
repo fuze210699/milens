@@ -1,11 +1,12 @@
 # Root
 
 ## Overview
-Contains 122 symbols (90 exported) across 7 files.
+Contains 124 symbols (91 exported) across 8 files.
 
 ## Key Symbols
-- **`CodeSymbol`** [interface] (src/types.ts:8) — 26 refs
-- **`SymbolLink`** [interface] (src/types.ts:26) — 10 refs
+- **`CodeSymbol`** [interface] (src/types.ts:8) — 29 refs
+- **`SymbolLink`** [interface] (src/types.ts:26) — 13 refs
+- **`isTestFile`** [function] (src/utils.ts:2) — 11 refs
 - **`RawCall`** [interface] (src/types.ts:44) — 7 refs
 - **`RawImport`** [interface] (src/types.ts:35) — 6 refs
 - **`ExtractionResult`** [interface] (src/types.ts:60) — 6 refs
@@ -18,14 +19,13 @@ Contains 122 symbols (90 exported) across 7 files.
 - **`generateSkills`** [function] (src/skills.ts:19) — 2 refs
 - **`AnalysisStats`** [interface] (src/types.ts:113) — 2 refs
 - **`RepoEntry`** [interface] (src/types.ts:125) — 2 refs
-- **`SymbolKind`** [type] (src/types.ts:3) — 2 refs
 
 ## Entry Points
-- **`CodeSymbol`** [interface] — 26 incoming references
+- **`CodeSymbol`** [interface] — 29 incoming references
 - **`has`** [function] — 22 incoming references
-- **`SymbolLink`** [interface] — 10 incoming references
+- **`SymbolLink`** [interface] — 13 incoming references
+- **`isTestFile`** [function] — 11 incoming references
 - **`RawCall`** [interface] — 7 incoming references
-- **`RawImport`** [interface] — 6 incoming references
 
 ## Dependencies
 - **analyzer**: `loadAliases`, `analyze`, `resolve`
@@ -34,11 +34,11 @@ Contains 122 symbols (90 exported) across 7 files.
 - **scripts**: `outDir`
 
 ## Used By
-- **analyzer**: `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding` (+7 more)
+- **analyzer**: `isTestFile`, `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding` (+8 more)
 - **parser**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+4 more)
+- **server**: `isTestFile`, `has`
 - **store**: `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has`, `t`
 - **test**: `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+2 more)
-- **server**: `has`
 
 ## Files
 - AGENTS.md
@@ -47,4 +47,5 @@ Contains 122 symbols (90 exported) across 7 files.
 - src/cli.ts
 - src/skills.ts
 - src/types.ts
+- src/utils.ts
 - vitest.config.ts

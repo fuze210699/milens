@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import type { Database } from '../store/db.js';
 import type { CodeSymbol } from '../types.js';
+import { isTestFile } from '../utils.js';
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
@@ -29,14 +30,6 @@ function classifyRisk(score: number, hasUntested: boolean, hasCriticalHub: boole
   if (score >= 10) return 'MEDIUM';
   if (hasUntested) return 'MEDIUM';
   return 'LOW';
-}
-
-function isTestFile(filePath: string): boolean {
-  return /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
-    /^tests?[/\\]/.test(filePath) ||
-    /__tests__[/\\]/.test(filePath) ||
-    /_test\.(go|py|rb|rs|java|php)$/.test(filePath) ||
-    /^test_.*\.py$/.test(filePath.split('/').pop() ?? '');
 }
 
 function scoreSymbol(sym: CodeSymbol, dependents: number, tested: boolean): { score: number; reasons: string[] } {
@@ -85,11 +78,16 @@ function getChangedFiles(root: string, ref: string, base?: string): string[] {
   const diffTarget = base ? `${base}...${ref}` : ref;
 
   const output = execFileSync('git', ['diff', '--name-only', diffTarget], { cwd: root, encoding: 'utf-8' });
-  const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: root, encoding: 'utf-8' });
-  return [...new Set([
-    ...output.trim().split('\n'),
-    ...staged.trim().split('\n'),
-  ])].filter(Boolean);
+  const files = output.trim().split('\n').filter(Boolean);
+
+  // Only include staged files when reviewing working tree (no explicit base/ref pair)
+  if (!base) {
+    const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: root, encoding: 'utf-8' });
+    const stagedFiles = staged.trim().split('\n').filter(Boolean);
+    return [...new Set([...files, ...stagedFiles])];
+  }
+
+  return [...new Set(files)];
 }
 
 function isSymbolTested(db: Database, sym: CodeSymbol): boolean {

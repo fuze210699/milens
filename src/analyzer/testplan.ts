@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import type { Database } from '../store/db.js';
 import type { CodeSymbol, SymbolLink } from '../types.js';
+import { isTestFile } from '../utils.js';
 
 export interface MockSuggestion {
   dependency: string;
@@ -36,14 +37,6 @@ export interface TestImpactResult {
   mustRun: string[];
   shouldRun: string[];
   coverageGaps: Array<{ name: string; filePath: string; dependents: number }>;
-}
-
-function isTestFile(filePath: string): boolean {
-  return /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
-    /^tests?[/\\]/.test(filePath) ||
-    /__tests__[/\\]/.test(filePath) ||
-    /_test\.(go|py|rb|rs|java|php)$/.test(filePath) ||
-    /^test_.*\.py$/.test(filePath.split('/').pop() ?? '');
 }
 
 function classifyMockStrategy(sym: CodeSymbol, linkType: string): { strategy: 'stub' | 'spy' | 'fake'; reason: string } {
@@ -108,7 +101,7 @@ function buildTestSuggestions(
   return suggestions;
 }
 
-export function generateTestPlan(db: Database, symbolName: string, depth = 1): TestPlan | null {
+export function generateTestPlan(db: Database, symbolName: string): TestPlan | null {
   const syms = db.findSymbolByName(symbolName);
   if (syms.length === 0) return null;
 
@@ -222,7 +215,10 @@ export function analyzeTestImpact(db: Database, root: string, ref = 'HEAD'): Tes
   try {
     const output = execFileSync('git', ['diff', '--name-only', ref], { cwd: root, encoding: 'utf-8' });
     const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: root, encoding: 'utf-8' });
-    changedFiles = [...new Set([...output.trim().split('\n'), ...staged.trim().split('\n')])].filter(Boolean);
+    changedFiles = [...new Set([
+      ...output.trim().split('\n'),
+      ...staged.trim().split('\n'),
+    ])].filter(Boolean);
   } catch {
     return { changedSymbols: [], mustRun: [], shouldRun: [], coverageGaps: [] };
   }
@@ -231,6 +227,17 @@ export function analyzeTestImpact(db: Database, root: string, ref = 'HEAD'): Tes
   const mustRun = new Set<string>();
   const shouldRun = new Set<string>();
   const coverageGaps: TestImpactResult['coverageGaps'] = [];
+
+  // Cache incoming links to avoid redundant queries for shared upstream symbols
+  const incomingCache = new Map<string, ReturnType<Database['getIncomingLinks']>>();
+  function getCachedIncoming(symId: string) {
+    let cached = incomingCache.get(symId);
+    if (!cached) {
+      cached = db.getIncomingLinks(symId);
+      incomingCache.set(symId, cached);
+    }
+    return cached;
+  }
 
   for (const file of changedFiles) {
     // If the changed file IS a test file, it must run
@@ -244,7 +251,7 @@ export function analyzeTestImpact(db: Database, root: string, ref = 'HEAD'): Tes
       changedSymbols.push({ name: sym.name, filePath: sym.filePath });
 
       // Find test files that directly reference this symbol
-      const incoming = db.getIncomingLinks(sym.id);
+      const incoming = getCachedIncoming(sym.id);
       let hasDirectTest = false;
       for (const link of incoming) {
         const from = db.findSymbolById(link.fromId);
@@ -257,7 +264,7 @@ export function analyzeTestImpact(db: Database, root: string, ref = 'HEAD'): Tes
       // Find test files that reference upstream callers (indirect coverage)
       const upstream = db.findUpstream(sym.id, 2);
       for (const { symbol: upSym } of upstream) {
-        const upIncoming = db.getIncomingLinks(upSym.id);
+        const upIncoming = getCachedIncoming(upSym.id);
         for (const link of upIncoming) {
           const from = db.findSymbolById(link.fromId);
           if (from && isTestFile(from.filePath)) {

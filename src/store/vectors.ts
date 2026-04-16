@@ -198,9 +198,11 @@ export class EmbeddingStore {
   get(symbolId: string): Float32Array | null {
     const row = this.stmts.get.get(symbolId) as any;
     if (!row) return null;
+    const buf: Buffer = row.embedding;
+    if (buf.byteLength < this.dimensions * 4) return null; // corrupted/mismatched
     // Copy to avoid byteOffset issues with SQLite Buffers
     const copy = new Float32Array(this.dimensions);
-    copy.set(new Float32Array(row.embedding.buffer, row.embedding.byteOffset, this.dimensions));
+    copy.set(new Float32Array(buf.buffer, buf.byteOffset, this.dimensions));
     return copy;
   }
 
@@ -208,22 +210,38 @@ export class EmbeddingStore {
     return (this.stmts.count.get() as any).c;
   }
 
-  /** Brute-force cosine search across all stored embeddings. */
+  /** Brute-force cosine search across all stored embeddings.
+   *  Uses iterate() to avoid loading all rows into a JS array at once,
+   *  and maintains a bounded top-K result set during scanning. */
   searchSimilar(queryVec: Float32Array, limit: number, excludeId?: string): SimilarResult[] {
-    const rows = this.stmts.getAll.all() as any[];
     const results: SimilarResult[] = [];
+    let minScore = -Infinity;
 
-    for (const row of rows) {
+    for (const row of this.stmts.getAll.iterate() as Iterable<any>) {
       if (excludeId && row.symbol_id === excludeId) continue;
+      const buf: Buffer = row.embedding;
+      if (buf.byteLength < this.dimensions * 4) continue; // skip corrupted
       // Copy to own buffer to avoid shared ArrayBuffer offset issues
       const vec = new Float32Array(this.dimensions);
-      vec.set(new Float32Array(row.embedding.buffer, row.embedding.byteOffset, this.dimensions));
+      vec.set(new Float32Array(buf.buffer, buf.byteOffset, this.dimensions));
       const score = cosineSimilarity(queryVec, vec);
-      results.push({ symbolId: row.symbol_id, score });
+      if (results.length < limit) {
+        results.push({ symbolId: row.symbol_id, score });
+        if (results.length === limit) {
+          results.sort((a, b) => b.score - a.score);
+          minScore = results[results.length - 1].score;
+        }
+      } else if (score > minScore) {
+        results[results.length - 1] = { symbolId: row.symbol_id, score };
+        results.sort((a, b) => b.score - a.score);
+        minScore = results[results.length - 1].score;
+      }
     }
 
-    results.sort((a, b) => b.score - a.score);
-    return results.slice(0, limit);
+    if (results.length < limit) {
+      results.sort((a, b) => b.score - a.score);
+    }
+    return results;
   }
 }
 

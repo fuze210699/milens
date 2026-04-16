@@ -6,11 +6,13 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { resolve, relative, join, dirname } from 'node:path';
 import { execSync, execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import ignore from 'ignore';
 import { Database } from '../store/db.js';
 import { RepoRegistry } from '../store/registry.js';
+import { isTestFile } from '../utils.js';
 import { reviewPr, reviewSymbol } from '../analyzer/review.js';
 import { generateTestPlan, findCoverageGaps, analyzeTestImpact } from '../analyzer/testplan.js';
 import { TfIdfProvider, EmbeddingStore, buildEmbeddingText } from '../store/vectors.js';
@@ -187,15 +189,6 @@ function fmtImpact(items: Array<{ symbol: any; depth: number; via: string }>, de
   return lines.join('\n');
 }
 
-/** Check if a file path looks like a test/spec file */
-function isTestFilePath(filePath: string): boolean {
-  return /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
-    /^tests?[/\\]/.test(filePath) ||
-    /__tests__[/\\]/.test(filePath) ||
-    /_test\.(go|py|rb|rs|java|php)$/.test(filePath) ||
-    /^test_.*\.py$/.test(filePath.split('/').pop() ?? '');
-}
-
 // ── Text grep across project files ──
 
 const GREP_SKIP_DIRS = new Set([
@@ -223,11 +216,11 @@ interface GrepMatch {
   text: string;
 }
 
-function grepFiles(
+async function grepFiles(
   rootPath: string,
   pattern: string,
   options: { isRegex?: boolean; caseSensitive?: boolean; maxResults?: number; includePattern?: string },
-): GrepMatch[] {
+): Promise<GrepMatch[]> {
   const { isRegex = false, caseSensitive = false, maxResults = 50, includePattern } = options;
   const flags = caseSensitive ? '' : 'i';
   let regex: RegExp;
@@ -241,10 +234,10 @@ function grepFiles(
   const includeRe = includePattern ? globToRegex(includePattern) : null;
   const results: GrepMatch[] = [];
 
-  function walk(dir: string) {
+  async function walk(dir: string) {
     if (results.length >= maxResults) return;
     let entries: string[];
-    try { entries = readdirSync(dir); } catch { return; }
+    try { entries = await readdir(dir); } catch { return; }
 
     for (const entry of entries) {
       if (results.length >= maxResults) return;
@@ -255,19 +248,19 @@ function grepFiles(
       if (GREP_SKIP_DIRS.has(entry)) continue;
       if (ig.ignores(rel)) continue;
 
-      let stat;
-      try { stat = statSync(abs); } catch { continue; }
+      let st;
+      try { st = await stat(abs); } catch { continue; }
 
-      if (stat.isDirectory()) {
-        walk(abs);
-      } else if (stat.isFile()) {
+      if (st.isDirectory()) {
+        await walk(abs);
+      } else if (st.isFile()) {
         const ext = '.' + entry.split('.').pop()?.toLowerCase();
         if (BINARY_EXTENSIONS.has(ext)) continue;
-        if (stat.size > 512 * 1024) continue; // skip files > 512KB
+        if (st.size > 512 * 1024) continue; // skip files > 512KB
         if (includeRe && !includeRe.test(rel)) continue;
 
         try {
-          const content = readFileSync(abs, 'utf-8');
+          const content = await readFile(abs, 'utf-8');
           const lines = content.split('\n');
           for (let i = 0; i < lines.length && results.length < maxResults; i++) {
             if (regex.test(lines[i])) {
@@ -279,7 +272,7 @@ function grepFiles(
     }
   }
 
-  walk(rootPath);
+  await walk(rootPath);
   return results;
 }
 
@@ -497,7 +490,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const effectiveInclude = scope === 'code' && !include
         ? '**/*.{ts,tsx,js,jsx,mjs,cjs,vue,py,go,rs,java,php,rb}'
         : include;
-      const matches = grepFiles(root, pattern, {
+      const matches = await grepFiles(root, pattern, {
         isRegex, caseSensitive, maxResults: limit, includePattern: effectiveInclude,
       });
 
@@ -756,7 +749,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       }
 
       // Section 4: Grep (text references across all files)
-      const grepMatches = grepFiles(root, name, { maxResults: 20 });
+      const grepMatches = await grepFiles(root, name, { maxResults: 20 });
       if (grepMatches.length > 0) {
         const grouped = new Map<string, { line: number; text: string }[]>();
         for (const m of grepMatches) {
@@ -1227,7 +1220,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       // Build handoff context
       const handoffContext = JSON.stringify({
         from: { session: from_session, agent: fromSession.agent },
-        original_context: fromSession.context ? JSON.parse(fromSession.context) : null,
+        original_context: fromSession.context ? (() => { try { return JSON.parse(fromSession.context!); } catch { return fromSession.context; } })() : null,
         additional_context: context ?? null,
         annotations_count: annotations.length,
       });
@@ -1472,7 +1465,7 @@ export function createMcpServer(rootPath?: string): McpServer {
         }
 
         // 3. Export chain — is this re-exported from barrel files?
-        const grepMatches = grepFiles(root, name, { maxResults: 10, includePattern: '**/index.{ts,js,mjs}' });
+        const grepMatches = await grepFiles(root, name, { maxResults: 10, includePattern: '**/index.{ts,js,mjs}' });
         const reExportMatches = grepMatches.filter(m =>
           /export\s*\{[^}]*/.test(m.text) && m.text.includes('from')
         );
@@ -1504,7 +1497,7 @@ export function createMcpServer(rootPath?: string): McpServer {
         const incoming = db.getIncomingLinks(sym.id);
         const testRefs = incoming.filter(l => {
           const from = db.findSymbolById(l.fromId);
-          return from && isTestFilePath(from.filePath);
+          return from && isTestFile(from.filePath);
         });
         if (testRefs.length > 0) {
           const testFiles = [...new Set(testRefs.map(l => {
@@ -1621,7 +1614,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const routes: RouteMatch[] = [];
 
       for (const rp of activePatterns) {
-        const matches = grepFiles(root, rp.pattern.source, {
+        const matches = await grepFiles(root, rp.pattern.source, {
           isRegex: true, maxResults: limit, includePattern: rp.fileGlob,
         });
 
@@ -1760,7 +1753,7 @@ export function createMcpServer(rootPath?: string): McpServer {
           }
 
           // Re-export detection
-          const reExportMatches = grepFiles(root, name, { maxResults: 5, includePattern: '**/index.{ts,js,mjs}' })
+          const reExportMatches = (await grepFiles(root, name, { maxResults: 5, includePattern: '**/index.{ts,js,mjs}' }))
             .filter(m => /export\s*\{/.test(m.text) && m.text.includes('from'));
           if (reExportMatches.length > 0) {
             sections.push(`re-exported via: ${reExportMatches.map(m => `${m.file}:${m.line}`).join(', ')}`);
@@ -1769,7 +1762,7 @@ export function createMcpServer(rootPath?: string): McpServer {
           // Test coverage
           const testRefs = incoming.filter(l => {
             const from = db.findSymbolById(l.fromId);
-            return from && isTestFilePath(from.filePath);
+            return from && isTestFile(from.filePath);
           });
           if (testRefs.length > 0) {
             sections.push(`✓ has test coverage`);
@@ -1815,7 +1808,7 @@ export function createMcpServer(rootPath?: string): McpServer {
           const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
           const testRefs = incoming.filter(l => {
             const from = db.findSymbolById(l.fromId);
-            return from && isTestFilePath(from.filePath);
+            return from && isTestFile(from.filePath);
           });
 
           if (testRefs.length > 0) {
@@ -1845,7 +1838,7 @@ export function createMcpServer(rootPath?: string): McpServer {
           // Inputs — what calls this? (test should cover these call patterns)
           const nonTestCallers = incoming.filter(l => {
             const from = db.findSymbolById(l.fromId);
-            return from && !isTestFilePath(from.filePath);
+            return from && !isTestFile(from.filePath);
           });
           if (nonTestCallers.length > 0) {
             sections.push(`callers to cover (${nonTestCallers.length}):`);
@@ -2000,8 +1993,10 @@ export function createMcpServer(rootPath?: string): McpServer {
         return { content: [{ type: 'text' as const, text }] };
       }
 
-      // Vector results
+      // Vector results — train IDF on corpus so query vector matches stored embeddings
       const provider = new TfIdfProvider();
+      const allSyms = db.getAllSymbols();
+      provider.trainIdf(allSyms.map(s => buildEmbeddingText({ name: s.name, kind: s.kind, filePath: s.filePath, signature: s.signature })));
       const store = new EmbeddingStore(db.getRawDb(), provider.dimensions);
       const queryVec = await provider.embed(query);
       const vectorResults = store.searchSimilar(queryVec, maxResults * 2);
@@ -2080,6 +2075,8 @@ export function createMcpServer(rootPath?: string): McpServer {
       }
 
       const provider = new TfIdfProvider();
+      const allSyms = db.getAllSymbols();
+      provider.trainIdf(allSyms.map(s => buildEmbeddingText({ name: s.name, kind: s.kind, filePath: s.filePath, signature: s.signature })));
       const store = new EmbeddingStore(db.getRawDb(), provider.dimensions);
 
       // Get or compute target embedding

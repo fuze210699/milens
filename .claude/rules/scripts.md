@@ -9,7 +9,7 @@ paths:
 Contains 29 symbols (0 exported) across 1 files.
 
 ## Entry Points
-- **`run`** [function] — 14 incoming references
+- **`run`** [function] — 16 incoming references
 - **`ROOT`** [variable] — 2 incoming references
 - **`outDir`** [variable] — 2 incoming references
 - **`resolveTargets`** [function] — 1 incoming references
@@ -21,6 +21,7 @@ Contains 29 symbols (0 exported) across 1 files.
 ## Used By
 - **root**: `outDir`
 - **store**: `run`
+- **test**: `run`
 
 ## Files
 - scripts/build-standalone.mjs

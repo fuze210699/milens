@@ -1,7 +1,7 @@
 # Test
 
 ## Overview
-Contains 116 symbols (43 exported) across 26 files.
+Contains 129 symbols (43 exported) across 31 files.
 
 ## Key Symbols
 - **`User`** [interface] (test/fixtures/ts-project/src/models.ts:1) — 5 refs
@@ -28,10 +28,11 @@ Contains 116 symbols (43 exported) across 26 files.
 - **`User`** [class] — 2 incoming references
 
 ## Dependencies
-- **store**: `Database`, `close`, `insertSymbol`, `findSymbolByName`, `insertLink`, `getIncomingLinks`, `getOutgoingLinks`, `rebuildSearch` (+15 more)
+- **store**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `close`, `insertSymbol`, `findSymbolByName` (+44 more)
 - **root**: `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+2 more)
 - **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `spec`, `extractHtmlScripts`, `extractHtmlRefs` (+2 more)
-- **analyzer**: `resolveLinks`, `resolveLinksWithStats`, `scanFiles`, `analyze`, `loadAliases`, `find`
+- **analyzer**: `resolveLinks`, `resolveLinksWithStats`, `reviewSymbol`, `scanFiles`, `generateTestPlan`, `findCoverageGaps`, `analyze`, `loadAliases` (+1 more)
+- **scripts**: `run`
 
 ## Files
 - test/fixtures/go-project/models/user.go
@@ -54,9 +55,14 @@ Contains 116 symbols (43 exported) across 26 files.
 - test/fixtures/vue-project/src/composables/useClipboard.js
 - test/fixtures/vue-project/src/views/TestView.vue
 - test/unit/database.test.ts
+- test/unit/db-extended.test.ts
 - test/unit/extractor.test.ts
 - test/unit/html-css.test.ts
 - test/unit/markdown.test.ts
+- test/unit/registry.test.ts
 - test/unit/resolver.test.ts
+- test/unit/review.test.ts
 - test/unit/scanner.test.ts
+- test/unit/testplan.test.ts
+- test/unit/vectors.test.ts
 - test/unit/vue-import.test.ts

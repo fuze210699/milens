@@ -6,12 +6,12 @@ paths:
 # Server
 
 ## Overview
-Contains 40 symbols (3 exported) across 1 files.
+Contains 39 symbols (3 exported) across 1 files.
 
 ## Key Symbols
-- **`createMcpServer`** [function] (src/server/mcp.ts:395) — 2 refs
-- **`startStdio`** [function] (src/server/mcp.ts:2310) — 2 refs
-- **`startHttp`** [function] (src/server/mcp.ts:2318) — 2 refs
+- **`createMcpServer`** [function] (src/server/mcp.ts:388) — 2 refs
+- **`startStdio`** [function] (src/server/mcp.ts:2307) — 2 refs
+- **`startHttp`** [function] (src/server/mcp.ts:2315) — 2 refs
 
 ## Entry Points
 - **`get`** [method] — 6 incoming references
@@ -21,10 +21,10 @@ Contains 40 symbols (3 exported) across 1 files.
 - **`resolveRoot`** [function] — 2 incoming references
 
 ## Dependencies
-- **store**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `getStats`, `getDomainStats`, `close` (+32 more)
+- **store**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `getStats`, `getDomainStats`, `close` (+33 more)
+- **root**: `isTestFile`, `has`
 - **analyzer**: `reviewPr`, `reviewSymbol`, `generateTestPlan`, `findCoverageGaps`, `analyzeTestImpact`, `resolve`, `find`
 - **parser**: `getParser`, `loadLanguage`, `ALL_LANGS`
-- **root**: `has`
 
 ## Used By
 - **root**: `startHttp`, `startStdio`

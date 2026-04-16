@@ -297,27 +297,40 @@ export class Database {
     const fromId = fromSyms[0].id;
     const toIds = new Set(toSyms.map(s => s.id));
 
-    // BFS outgoing from source
+    // BFS with parent tracking to reconstruct shortest path
     const rows = this.db.prepare(`
-      WITH RECURSIVE path(id, depth, via) AS (
-        SELECT to_id, 1, type FROM links WHERE from_id = ? AND type != 'contains'
+      WITH RECURSIVE path(id, depth, via, parent_id) AS (
+        SELECT to_id, 1, type, from_id FROM links WHERE from_id = ? AND type != 'contains'
         UNION
-        SELECT l.to_id, p.depth + 1, l.type
+        SELECT l.to_id, p.depth + 1, l.type, l.from_id
         FROM links l JOIN path p ON l.from_id = p.id
         WHERE l.type != 'contains' AND p.depth < ?
       )
-      SELECT DISTINCT s.*, p.depth, p.via FROM path p JOIN symbols s ON s.id = p.id ORDER BY p.depth
+      SELECT s.*, p.depth, p.via, p.parent_id FROM path p JOIN symbols s ON s.id = p.id ORDER BY p.depth
     `).all(fromId, maxDepth) as any[];
 
-    const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
+    // Find first row matching target
+    const targetRow = rows.find(r => toIds.has(r.id));
+    if (!targetRow) return null;
+
+    // Build lookup: id → { row, parent_id }
+    const byId = new Map<string, { row: any; parentId: string }>();
     for (const r of rows) {
-      result.push({ symbol: rowToSymbol(r), depth: r.depth, via: r.via });
-      if (toIds.has(r.id)) break;
+      if (!byId.has(r.id)) {
+        byId.set(r.id, { row: r, parentId: r.parent_id });
+      }
     }
 
-    const found = result.find(r => toIds.has(r.symbol.id));
-    if (!found) return null;
-    return result.filter(r => r.depth <= found.depth);
+    // Walk backwards from target to source to reconstruct the actual path
+    const chain: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
+    let cur = targetRow;
+    while (cur && cur.id !== fromId) {
+      chain.push({ symbol: rowToSymbol(cur), depth: cur.depth, via: cur.via });
+      const parent = byId.get(cur.parent_id);
+      cur = parent ? parent.row : null;
+    }
+    chain.reverse();
+    return chain;
   }
 
   getChangedFiles(): string[] {
@@ -587,7 +600,7 @@ export class Database {
     if (filters.agent) { clauses.push('agent = ?'); params.push(filters.agent); }
     if (filters.sessionId) { clauses.push('session_id = ?'); params.push(filters.sessionId); }
 
-    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const where = `WHERE ${clauses.join(' AND ')}`;
     const limit = filters.limit ?? 50;
 
     const rows = this.db.prepare(

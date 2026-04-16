@@ -6,7 +6,7 @@ description: Code intelligence for the store area — symbols, dependencies, and
 # Store
 
 ## Overview
-Contains 97 symbols (8 exported) across 3 files.
+Contains 98 symbols (8 exported) across 3 files.
 
 ## Key Symbols
 - **`Database`** [class] (src/store/db.ts:10) — 29 refs
@@ -23,15 +23,15 @@ Contains 97 symbols (8 exported) across 3 files.
 - **`get`** [method] — 18 incoming references
 - **`rowToSymbol`** [function] — 12 incoming references
 - **`close`** [method] — 12 incoming references
-- **`findSymbolById`** [method] — 9 incoming references
+- **`findSymbolById`** [method] — 8 incoming references
 
 ## Dependencies
-- **root**: `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has`, `t`
+- **root**: `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has`, `isTestFile`, `t`
 - **scripts**: `run`
 - **analyzer**: `find`, `resolve`
 
 ## Used By
-- **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `clear`, `isFileUpToDate`, `upsertFileHash` (+22 more)
+- **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `clear`, `isFileUpToDate`, `upsertFileHash` (+23 more)
 - **root**: `RepoRegistry`, `Database`, `register`, `close`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks` (+11 more)
 - **server**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `getStats`, `getDomainStats`, `getAllSymbols` (+35 more)
 - **test**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `close`, `insertSymbol`, `findSymbolByName` (+44 more)

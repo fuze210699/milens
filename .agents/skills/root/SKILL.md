@@ -11,7 +11,7 @@ Contains 124 symbols (91 exported) across 8 files.
 ## Key Symbols
 - **`CodeSymbol`** [interface] (src/types.ts:8) — 29 refs
 - **`SymbolLink`** [interface] (src/types.ts:26) — 13 refs
-- **`isTestFile`** [function] (src/utils.ts:2) — 11 refs
+- **`isTestFile`** [function] (src/utils.ts:2) — 12 refs
 - **`RawCall`** [interface] (src/types.ts:44) — 7 refs
 - **`RawImport`** [interface] (src/types.ts:35) — 6 refs
 - **`ExtractionResult`** [interface] (src/types.ts:60) — 6 refs
@@ -27,9 +27,9 @@ Contains 124 symbols (91 exported) across 8 files.
 
 ## Entry Points
 - **`CodeSymbol`** [interface] — 29 incoming references
-- **`has`** [function] — 23 incoming references
+- **`has`** [function] — 24 incoming references
 - **`SymbolLink`** [interface] — 13 incoming references
-- **`isTestFile`** [function] — 11 incoming references
+- **`isTestFile`** [function] — 12 incoming references
 - **`RawCall`** [interface] — 7 incoming references
 
 ## Dependencies
@@ -42,7 +42,7 @@ Contains 124 symbols (91 exported) across 8 files.
 - **analyzer**: `isTestFile`, `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding` (+8 more)
 - **parser**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+4 more)
 - **server**: `isTestFile`, `has`
-- **store**: `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has`, `t`
+- **store**: `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has`, `isTestFile`, `t`
 - **test**: `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+2 more)
 
 ## Files

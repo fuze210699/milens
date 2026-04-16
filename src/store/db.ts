@@ -79,7 +79,7 @@ export class Database {
       countLinks: this.db.prepare('SELECT COUNT(*) as c FROM links'),
       countFiles: this.db.prepare('SELECT COUNT(*) as c FROM file_hashes'),
       deleteFileLinks: this.db.prepare(
-        'DELETE FROM links WHERE from_id IN (SELECT id FROM symbols WHERE file_path = ?)'
+        'DELETE FROM links WHERE from_id IN (SELECT id FROM symbols WHERE file_path = ?) OR to_id IN (SELECT id FROM symbols WHERE file_path = ?)'
       ),
       deleteFileSymbols: this.db.prepare('DELETE FROM symbols WHERE file_path = ?'),
     };
@@ -208,6 +208,20 @@ export class Database {
     for (const r of inRows) result.get(r.id)!.incoming = r.c;
     for (const r of outRows) result.get(r.id)!.outgoing = r.c;
     return result;
+  }
+
+  /** Batch: get symbol IDs that have at least one incoming link from a test file. */
+  getTestedSymbolIds(symbolIds: string[], isTestFile: (fp: string) => boolean): Set<string> {
+    if (symbolIds.length === 0) return new Set();
+    const placeholders = symbolIds.map(() => '?').join(',');
+    const rows = this.db.prepare(
+      `SELECT DISTINCT l.to_id, s.file_path FROM links l JOIN symbols s ON s.id = l.from_id WHERE l.to_id IN (${placeholders})`,
+    ).all(...symbolIds) as any[];
+    const tested = new Set<string>();
+    for (const r of rows) {
+      if (isTestFile(r.file_path)) tested.add(r.to_id);
+    }
+    return tested;
   }
 
   findUpstream(symbolId: string, maxDepth = 3): Array<{ symbol: CodeSymbol; depth: number; via: string }> {
@@ -367,7 +381,7 @@ export class Database {
   // ── Maintenance ──
 
   deleteFileData(filePath: string): void {
-    this.stmts.deleteFileLinks.run(filePath);
+    this.stmts.deleteFileLinks.run(filePath, filePath);
     this.stmts.deleteFileSymbols.run(filePath);
   }
 

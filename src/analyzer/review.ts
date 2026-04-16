@@ -82,7 +82,7 @@ function getChangedFiles(root: string, ref: string, base?: string): string[] {
 
   // Only include staged files when reviewing working tree (no explicit base/ref pair)
   if (!base) {
-    const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: root, encoding: 'utf-8' });
+    const staged = execFileSync('git', ['diff', '--cached', '--name-only', ref], { cwd: root, encoding: 'utf-8' });
     const stagedFiles = staged.trim().split('\n').filter(Boolean);
     return [...new Set([...files, ...stagedFiles])];
   }

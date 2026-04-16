@@ -174,28 +174,28 @@ export function generateTestPlan(db: Database, symbolName: string): TestPlan | n
 
 export function findCoverageGaps(db: Database, filePath?: string, limit = 30): CoverageGap[] {
   const allSymbols = filePath ? db.getSymbolsByFile(filePath) : db.getAllSymbols();
+
+  // Filter candidates first
+  const candidates = allSymbols.filter(sym =>
+    sym.exported &&
+    sym.kind !== 'type' && sym.kind !== 'interface' && sym.kind !== 'enum' &&
+    !isTestFile(sym.filePath)
+  );
+
+  // Batch check test coverage
+  const testedIds = db.getTestedSymbolIds(candidates.map(s => s.id), isTestFile);
   const gaps: CoverageGap[] = [];
 
-  for (const sym of allSymbols) {
-    if (!sym.exported) continue;
-    if (sym.kind === 'type' || sym.kind === 'interface' || sym.kind === 'enum') continue;
-    if (isTestFile(sym.filePath)) continue;
+  for (const sym of candidates) {
+    if (testedIds.has(sym.id)) continue;
 
-    const incoming = db.getIncomingLinks(sym.id);
-    const hasTest = incoming.some(l => {
-      const from = db.findSymbolById(l.fromId);
-      return from && isTestFile(from.filePath);
-    });
+    const upstream = db.findUpstream(sym.id, 1);
+    const dependents = upstream.length;
+    const risk: 'low' | 'medium' | 'high' =
+      (sym.role === 'hub' || dependents > 5) ? 'high' :
+      (sym.role === 'entrypoint' || dependents > 2) ? 'medium' : 'low';
 
-    if (!hasTest) {
-      const upstream = db.findUpstream(sym.id, 1);
-      const dependents = upstream.length;
-      const risk: 'low' | 'medium' | 'high' =
-        (sym.role === 'hub' || dependents > 5) ? 'high' :
-        (sym.role === 'entrypoint' || dependents > 2) ? 'medium' : 'low';
-
-      gaps.push({ symbol: sym, dependents, riskIfUntested: risk });
-    }
+    gaps.push({ symbol: sym, dependents, riskIfUntested: risk });
   }
 
   // Sort by risk (high > medium > low) then by dependents descending
@@ -214,7 +214,7 @@ export function analyzeTestImpact(db: Database, root: string, ref = 'HEAD'): Tes
   let changedFiles: string[];
   try {
     const output = execFileSync('git', ['diff', '--name-only', ref], { cwd: root, encoding: 'utf-8' });
-    const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: root, encoding: 'utf-8' });
+    const staged = execFileSync('git', ['diff', '--cached', '--name-only', ref], { cwd: root, encoding: 'utf-8' });
     changedFiles = [...new Set([
       ...output.trim().split('\n'),
       ...staged.trim().split('\n'),

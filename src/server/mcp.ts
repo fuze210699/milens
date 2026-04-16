@@ -312,8 +312,8 @@ function safeRegex(pattern: string, flags: string): RegExp {
   // Reject nested quantifiers: quantifier applied to a group that contains a quantifier
   // e.g. (a+)+, (a*)+, (a{2,})+, (?:a+)*, (.+)+
   if (/([+*}])\s*\)\s*[+*?{]/.test(pattern)) throw new Error('Unsafe regex pattern');
-  // Reject quantifier directly after quantifier: a++, a*+, a+{2}
-  if (/[+*?}]\s*[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
+  // Reject quantifier directly after quantifier: a++, a*+, a+{2}, but allow lazy quantifiers: a+?, a*?, a??
+  if (/[+*}]\s*[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
   // Reject overlapping alternation inside quantified groups: (a|a)*, (ab|a)+
   if (/\((?:[^)]*\|[^)]*)\)[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
   // Reject backreferences inside quantified groups (exponential matching)
@@ -329,10 +329,13 @@ function safeRegex(pattern: string, flags: string): RegExp {
 }
 
 function globToRegex(glob: string): RegExp {
-  // Expand brace patterns {a,b,c} → (a|b|c) BEFORE escaping
+  // Extract brace patterns {a,b,c} as placeholders BEFORE escaping
+  const braceGroups: string[] = [];
   let expanded = glob.replace(/\{([^}]+)\}/g, (_, inner: string) => {
     const alts = inner.split(',').map(s => s.trim());
-    return `(${alts.join('|')})`;
+    const idx = braceGroups.length;
+    braceGroups.push(alts.map(a => a.replace(/[.+^$|[\]\\]/g, '\\$&')).join('|'));
+    return `§BRACE${idx}§`;
   });
   const escaped = expanded
     .replace(/[.+^$|[\]\\]/g, '\\$&')
@@ -340,7 +343,12 @@ function globToRegex(glob: string): RegExp {
     .replace(/\*/g, '[^/]*')
     .replace(/§STARSTAR§/g, '.*')
     .replace(/\?/g, '.');
-  return new RegExp(`^${escaped}$`, 'i');
+  // Restore brace groups after escaping
+  let result = escaped;
+  for (let i = 0; i < braceGroups.length; i++) {
+    result = result.replace(`§BRACE${i}§`, `(${braceGroups[i]})`);
+  }
+  return new RegExp(`^${result}$`, 'i');
 }
 
 function loadGrepIgnoreRules(rootPath: string): ReturnType<typeof ignore> {
@@ -1515,19 +1523,11 @@ export function createMcpServer(rootPath?: string): McpServer {
             sections.push(`  ${fmtSymbol(d)}`);
           }
         }
-      }
 
-      // 5. Unresolved warning (only for internal)
-      const unresolved = db.getUnresolvedStats();
-      if (unresolved.imports > 0 || unresolved.calls > 0) {
-        sections.push(`⚠ index has ${unresolved.imports} unresolved internal imports, ${unresolved.calls} unresolved internal calls — callers list may be incomplete`);
-      }
-
-      // 6. Test coverage for this symbol (reuse callers data from step 2)
-      for (const sym of symbols) {
-        const incoming = db.getIncomingLinks(sym.id);
+        // 5. Test coverage (reuse incoming from step 2)
+        const allIncoming = db.getIncomingLinks(sym.id);
         const testFiles = new Set<string>();
-        for (const l of incoming) {
+        for (const l of allIncoming) {
           const from = db.findSymbolById(l.fromId);
           if (from && isTestFile(from.filePath)) {
             testFiles.add(from.filePath);
@@ -1538,6 +1538,12 @@ export function createMcpServer(rootPath?: string): McpServer {
         } else if (sym.exported) {
           sections.push(`⚠ no test coverage for this exported symbol`);
         }
+      }
+
+      // 6. Unresolved warning (only for internal)
+      const unresolved = db.getUnresolvedStats();
+      if (unresolved.imports > 0 || unresolved.calls > 0) {
+        sections.push(`⚠ index has ${unresolved.imports} unresolved internal imports, ${unresolved.calls} unresolved internal calls — callers list may be incomplete`);
       }
 
       return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
@@ -1813,18 +1819,19 @@ export function createMcpServer(rootPath?: string): McpServer {
             sections.push(`no call chains found (may be entrypoint or unreachable)`);
           }
 
-          // What does this call? (downstream immediate)
-          const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type === 'calls');
-          if (outgoing.length > 0) {
-            sections.push(`calls (${outgoing.length}):`);
-            for (const l of outgoing) {
+          // Fetch outgoing once, split by type
+          const allOutgoing = db.getOutgoingLinks(sym.id);
+          const callLinks = allOutgoing.filter(l => l.type === 'calls');
+          if (callLinks.length > 0) {
+            sections.push(`calls (${callLinks.length}):`);
+            for (const l of callLinks) {
               const to = db.findSymbolById(l.toId);
               sections.push(`  ${to ? fmtSymbol(to) : l.toId}`);
             }
           }
 
-          // Data types used
-          const dataTypes = db.getOutgoingLinks(sym.id)
+          // Data types used (reuse allOutgoing)
+          const dataTypes = allOutgoing
             .filter(l => l.type === 'imports')
             .map(l => db.findSymbolById(l.toId))
             .filter(s => s && (s.kind === 'interface' || s.kind === 'type' || s.kind === 'class'))
@@ -1834,47 +1841,35 @@ export function createMcpServer(rootPath?: string): McpServer {
           }
 
         } else if (intent === 'test') {
-          // Test coverage + what to mock
+          // Test coverage + what to mock — pre-resolve all link symbols
           const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-          const testRefs = incoming.filter(l => {
-            const from = db.findSymbolById(l.fromId);
-            return from && isTestFile(from.filePath);
-          });
+          const incomingResolved = incoming.map(l => ({ link: l, sym: db.findSymbolById(l.fromId) }));
+          const testRefs = incomingResolved.filter(r => r.sym && isTestFile(r.sym.filePath));
 
           if (testRefs.length > 0) {
-            const testFiles = [...new Set(testRefs.map(l => {
-              const from = db.findSymbolById(l.fromId);
-              return from?.filePath;
-            }).filter(Boolean))];
+            const testFiles = [...new Set(testRefs.map(r => r.sym!.filePath))];
             sections.push(`✓ tested from: ${testFiles.join(', ')}`);
           } else {
             sections.push(`⚠ no existing tests`);
           }
 
-          // Dependencies to mock
+          // Dependencies to mock — pre-resolve outgoing symbols
           const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
-          const externalDeps = outgoing.filter(l => {
-            const to = db.findSymbolById(l.toId);
-            return to && to.filePath !== sym.filePath;
-          });
+          const outgoingResolved = outgoing.map(l => ({ link: l, sym: db.findSymbolById(l.toId) }));
+          const externalDeps = outgoingResolved.filter(r => r.sym && r.sym.filePath !== sym.filePath);
           if (externalDeps.length > 0) {
             sections.push(`dependencies to mock (${externalDeps.length}):`);
-            for (const l of externalDeps) {
-              const to = db.findSymbolById(l.toId);
-              if (to) sections.push(`  ${l.type}: ${fmtSymbol(to)}`);
+            for (const r of externalDeps) {
+              sections.push(`  ${r.link.type}: ${fmtSymbol(r.sym!)}`);
             }
           }
 
           // Inputs — what calls this? (test should cover these call patterns)
-          const nonTestCallers = incoming.filter(l => {
-            const from = db.findSymbolById(l.fromId);
-            return from && !isTestFile(from.filePath);
-          });
+          const nonTestCallers = incomingResolved.filter(r => r.sym && !isTestFile(r.sym.filePath));
           if (nonTestCallers.length > 0) {
             sections.push(`callers to cover (${nonTestCallers.length}):`);
-            for (const l of nonTestCallers.slice(0, 5)) {
-              const from = db.findSymbolById(l.fromId);
-              if (from) sections.push(`  ${fmtSymbol(from)}`);
+            for (const r of nonTestCallers.slice(0, 5)) {
+              sections.push(`  ${fmtSymbol(r.sym!)}`);
             }
           }
         }
@@ -2179,11 +2174,11 @@ export function createMcpServer(rootPath?: string): McpServer {
         return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: `No symbols in "${filePath}".` }] };
       }
       const lines: string[] = [`${filePath}: ${symbols.length} symbols\n`];
+      const linkCounts = db.getLinkCountsForSymbols(symbols.map(s => s.id));
       for (const sym of symbols) {
-        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-        const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+        const counts = linkCounts.get(sym.id) ?? { incoming: 0, outgoing: 0 };
         const exp = sym.exported ? ' (exported)' : '';
-        lines.push(`${fmtSymbol(sym, 'L2')}${exp} ← ${incoming.length} refs, → ${outgoing.length} deps`);
+        lines.push(`${fmtSymbol(sym, 'L2')}${exp} ← ${counts.incoming} refs, → ${counts.outgoing} deps`);
       }
       return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: lines.join('\n') }] };
     },

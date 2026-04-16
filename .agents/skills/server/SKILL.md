@@ -9,9 +9,9 @@ description: Code intelligence for the server area — symbols, dependencies, an
 Contains 40 symbols (3 exported) across 1 files.
 
 ## Key Symbols
-- **`createMcpServer`** [function] (src/server/mcp.ts:413) — 2 refs
-- **`startStdio`** [function] (src/server/mcp.ts:2332) — 2 refs
-- **`startHttp`** [function] (src/server/mcp.ts:2340) — 2 refs
+- **`createMcpServer`** [function] (src/server/mcp.ts:421) — 2 refs
+- **`startStdio`** [function] (src/server/mcp.ts:2327) — 2 refs
+- **`startHttp`** [function] (src/server/mcp.ts:2335) — 2 refs
 
 ## Entry Points
 - **`get`** [method] — 7 incoming references

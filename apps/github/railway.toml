@@ -8,7 +8,7 @@
 
 [build]
 builder = "nixpacks"
-buildCommand = "npm install"
+buildCommand = "npm install && npm run verify"
 
 [deploy]
 startCommand = "npm start"

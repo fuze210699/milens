@@ -1,7 +1,7 @@
 {
   "name": "milens",
-  "version": "0.6.3",
-  "description": "Lightweight Code Intelligence Platform — analyze codebases and build knowledge graphs",
+  "version": "0.6.4",
+  "description": "AI-DOS: Code Intelligence Platform — knowledge graphs, security scanning, and closed-loop AI development. 33 MCP tools, 6 sub-agent prompts, 50 security rules.",
   "type": "module",
   "bin": {
     "milens": "./dist/cli.js"
@@ -10,7 +10,9 @@
     "dist/",
     "docs/*.svg",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    ".agents/skills/",
+    "adapters/"
   ],
   "scripts": {
     "build": "tsc && node -e \"require('fs').copyFileSync('src/store/schema.sql','dist/store/schema.sql')\"",
@@ -31,7 +33,15 @@
     "tree-sitter",
     "static-analysis",
     "codebase-indexer",
-    "ai-agent"
+    "ai-agent",
+    "security-scan",
+    "vibe-code",
+    "closed-loop",
+    "ai-dos",
+    "model-context-protocol",
+    "sub-agent",
+    "code-review",
+    "impact-analysis"
   ],
   "repository": {
     "type": "git",
@@ -40,6 +50,10 @@
   "homepage": "https://github.com/fuze210699/milens#readme",
   "bugs": {
     "url": "https://github.com/fuze210699/milens/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/fuze210699"
   },
   "engines": {
     "node": ">=20.0.0"

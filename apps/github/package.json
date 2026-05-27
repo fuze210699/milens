@@ -1,0 +1,18 @@
+{
+  "name": "milens-github-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Milens GitHub App — AI-powered code intelligence for your repositories",
+  "type": "module",
+  "main": "app.js",
+  "scripts": {
+    "start": "probot run ./app.js",
+    "dev": "probot run ./app.js"
+  },
+  "dependencies": {
+    "probot": "^13.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

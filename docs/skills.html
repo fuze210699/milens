@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skills Catalog — Milens</title>
+  <meta name="description" content="Build your Milens install. Pick skills, prompts, and tools from the catalog without dragging the full stack into every project.">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #7ee787;
+      --orange: #d2991d;
+      --radius: 8px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+    /* ── Nav ── */
+    .nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+    .nav-logo { font-size: 1.2em; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .nav-logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 24px; }
+    .nav-links a { color: var(--muted); font-size: 0.9em; }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-links a.active { color: var(--accent); font-weight: 600; }
+    .nav-cta { background: var(--accent); color: #fff !important; padding: 6px 16px; border-radius: 6px; font-weight: 600; font-size: 0.85em; }
+    .nav-cta:hover { background: #79b8ff; text-decoration: none !important; }
+    @media (max-width: 768px) { .nav-links { gap: 12px; font-size: 0.8em; } .nav-links a.hide-mobile { display: none; } }
+
+    /* ── Hero ── */
+    .hero { text-align: center; padding: 72px 0 48px; }
+    .hero h1 { font-size: 2.8em; color: var(--text); line-height: 1.2; margin-bottom: 16px; letter-spacing: -0.02em; }
+    .hero h1 span { color: var(--accent); }
+    .hero .subtitle { font-size: 1.1em; color: var(--muted); max-width: 700px; margin: 0 auto 32px; line-height: 1.6; }
+    .hero-stats { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .stat-badge { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 20px; font-size: 0.88em; color: var(--muted); text-align: center; }
+    .stat-badge strong { display: block; color: var(--text); font-size: 1.2em; }
+    @media (max-width: 640px) { .hero h1 { font-size: 1.8em; } .hero-stats { gap: 8px; } .stat-badge { padding: 10px 14px; font-size: 0.78em; } }
+
+    /* ── Presets ── */
+    .presets { text-align: center; padding: 0 0 40px; }
+    .presets-label { display: block; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78em; font-weight: 700; color: var(--muted); margin-bottom: 16px; }
+    .presets-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .preset-btn { background: var(--card); border: 2px solid var(--border); color: var(--text); padding: 10px 22px; border-radius: var(--radius); font-size: 0.9em; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+    .preset-btn:hover { border-color: var(--muted); }
+    .preset-btn.active { border-color: var(--accent); background: rgba(88,166,255,0.1); color: var(--accent); }
+    .presets-count { color: var(--muted); font-size: 0.88em; }
+    .presets-count strong { color: var(--text); }
+
+    /* ── Category Tabs ── */
+    .tabs { padding: 0 0 32px; text-align: center; }
+    .tabs-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    .tab-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 8px 18px; border-radius: 20px; font-size: 0.85em; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+    .tab-btn:hover { border-color: var(--muted); color: var(--text); }
+    .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* ── Catalog Grid ── */
+    .catalog { padding: 0 0 64px; }
+    .catalog-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    @media (max-width: 900px) { .catalog-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px) { .catalog-grid { grid-template-columns: 1fr; } }
+    .catalog-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; transition: border-color 0.2s, opacity 0.2s; display: flex; flex-direction: column; }
+    .catalog-card:hover { border-color: var(--muted); }
+    .catalog-card.hidden { display: none; }
+    .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .card-icon { font-size: 1.5em; }
+    .card-name { font-size: 1.05em; font-weight: 700; color: var(--text); }
+    .card-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.72em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .card-badge.prompt { background: rgba(88,166,255,0.12); color: var(--accent); border: 1px solid rgba(88,166,255,0.25); }
+    .card-badge.skill { background: rgba(126,231,135,0.12); color: var(--green); border: 1px solid rgba(126,231,135,0.25); }
+    .card-badge.tool { background: rgba(210,153,29,0.12); color: var(--orange); border: 1px solid rgba(210,153,29,0.25); }
+    .card-desc { color: var(--muted); font-size: 0.9em; line-height: 1.5; margin-bottom: 12px; flex: 1; }
+    .card-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+    .card-tool-tag { background: rgba(139,148,158,0.1); border: 1px solid rgba(139,148,158,0.2); color: var(--muted); padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-family: 'SF Mono', 'Fira Code', monospace; }
+    .card-link { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85em; font-weight: 600; margin-top: auto; }
+
+    .empty-state { grid-column: 1 / -1; text-align: center; padding: 48px 24px; color: var(--muted); }
+    .empty-state p { font-size: 1em; }
+
+    /* ── Terminal ── */
+    .section-label { display: block; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78em; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+    .section-title { font-size: 1.8em; color: var(--text); margin-bottom: 12px; }
+    .section-subtitle { color: var(--muted); font-size: 1.02em; max-width: 640px; margin-bottom: 32px; line-height: 1.6; }
+    .terminal { background: #0d1117; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: 0 auto 64px; max-width: 680px; }
+    .terminal-bar { background: #161b22; padding: 10px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
+    .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .terminal-dot.red { background: #f85149; }
+    .terminal-dot.yellow { background: #d2991d; }
+    .terminal-dot.green { background: #7ee787; }
+    .terminal-bar span { color: var(--muted); font-size: 0.82em; margin-left: 8px; }
+    .terminal-body { padding: 20px 24px; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 0.88em; line-height: 1.7; overflow-x: auto; }
+    .terminal-body .prompt { color: var(--green); }
+    .terminal-body .check { color: var(--green); }
+    .terminal-body .dim { color: var(--muted); }
+    @media (max-width: 640px) { .terminal-body { font-size: 0.75em; } }
+
+    /* ── Footer ── */
+    .footer { border-top: 1px solid var(--border); padding: 48px 0 32px; text-align: center; }
+    .footer-links { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .footer-links a { color: var(--muted); font-size: 0.9em; }
+    .footer p { color: var(--muted); font-size: 0.82em; }
+
+    html { scroll-behavior: smooth; }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo"><span>◆</span> Milens</a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="index.html#pricing" class="hide-mobile">Pricing</a>
+      <a href="index.html#security" class="hide-mobile">Security</a>
+      <a href="skills.html" class="active">Skills</a>
+      <a href="https://github.com/fuze210699/milens">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero">
+  <div class="container">
+    <h1>Build your <span>Milens</span> install.</h1>
+    <p class="subtitle">Pick skills, prompts, and tools from the catalog without dragging the full stack into every project. Start from a profile preset, tune for the actual work.</p>
+    <div class="hero-stats">
+      <div class="stat-badge"><strong>6</strong> Prompts</div>
+      <div class="stat-badge"><strong>6</strong> Skills</div>
+      <div class="stat-badge"><strong>33</strong> Tools</div>
+      <div class="stat-badge"><strong>50+</strong> Rules</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Profile Presets ── -->
+<section class="presets">
+  <div class="container">
+    <span class="presets-label">Profile Presets</span>
+    <div class="presets-row" id="presetButtons">
+      <button class="preset-btn" data-preset="core">Core <span style="color:var(--muted);font-weight:400;">(6 items)</span></button>
+      <button class="preset-btn" data-preset="developer">Developer <span style="color:var(--muted);font-weight:400;">(12 items)</span></button>
+      <button class="preset-btn" data-preset="security">Security <span style="color:var(--muted);font-weight:400;">(8 items)</span></button>
+      <button class="preset-btn active" data-preset="full">Full <span style="color:var(--muted);font-weight:400;">(18 items)</span></button>
+    </div>
+    <p class="presets-count">Showing <strong id="visibleCount">18</strong> of <strong id="totalCount">18</strong> items</p>
+  </div>
+</section>
+
+<!-- ── Category Tabs ── -->
+<section class="tabs">
+  <div class="container">
+    <div class="tabs-row" id="tabButtons">
+      <button class="tab-btn active" data-category="all">All</button>
+      <button class="tab-btn" data-category="planning">Planning</button>
+      <button class="tab-btn" data-category="review">Review</button>
+      <button class="tab-btn" data-category="testing">Testing</button>
+      <button class="tab-btn" data-category="security">Security</button>
+      <button class="tab-btn" data-category="refactoring">Refactoring</button>
+      <button class="tab-btn" data-category="debugging">Debugging</button>
+      <button class="tab-btn" data-category="tools">Tools</button>
+    </div>
+  </div>
+</section>
+
+<!-- ── Catalog Grid ── -->
+<section class="catalog">
+  <div class="container">
+    <div class="catalog-grid" id="catalogGrid">
+
+      <!-- ── Prompts ── -->
+      <div class="catalog-card" data-profile="core developer security full" data-categories="planning" data-type="prompt">
+        <div class="card-header">
+          <span class="card-icon">📋</span>
+          <span class="card-name">milens-planner</span>
+          <span class="card-badge prompt">Prompt</span>
+        </div>
+        <p class="card-desc">Implementation planning with blast radius awareness. Research codebase, analyze impact, plan tests, produce structured plan.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">impact</span>
+          <span class="card-tool-tag">context</span>
+          <span class="card-tool-tag">codebase_summary</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="core developer security full" data-categories="review" data-type="prompt">
+        <div class="card-header">
+          <span class="card-icon">✅</span>
+          <span class="card-name">milens-reviewer</span>
+          <span class="card-badge prompt">Prompt</span>
+        </div>
+        <p class="card-desc">Automated PR risk assessment. Scores every changed symbol CRITICAL/HIGH/MEDIUM/LOW based on heat, dependents, and coverage.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">review_pr</span>
+          <span class="card-tool-tag">review_symbol</span>
+          <span class="card-tool-tag">detect_changes</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="core developer security full" data-categories="testing" data-type="prompt">
+        <div class="card-header">
+          <span class="card-icon">🧪</span>
+          <span class="card-name">milens-tester</span>
+          <span class="card-badge prompt">Prompt</span>
+        </div>
+        <p class="card-desc">Test-driven development with coverage gap detection. Find gaps → generate plans → implement → verify.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">test_coverage_gaps</span>
+          <span class="card-tool-tag">test_plan</span>
+          <span class="card-tool-tag">test_impact</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="developer full" data-categories="planning" data-type="prompt">
+        <div class="card-header">
+          <span class="card-icon">🏗️</span>
+          <span class="card-name">milens-architect</span>
+          <span class="card-badge prompt">Prompt</span>
+        </div>
+        <p class="card-desc">Architecture analysis and domain mapping. Visualize codebase structure, identify hub symbols, find domain clusters.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">domains</span>
+          <span class="card-tool-tag">codebase_summary</span>
+          <span class="card-tool-tag">impact</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="developer security full" data-categories="security" data-type="prompt">
+        <div class="card-header">
+          <span class="card-icon">🔒</span>
+          <span class="card-name">milens-security</span>
+          <span class="card-badge prompt">Prompt</span>
+        </div>
+        <p class="card-desc">Security audit with OWASP mapping. Secret detection, injection scanning, hidden Unicode, dependency audit — one prompt.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">security_scan</span>
+          <span class="card-tool-tag">grep</span>
+          <span class="card-tool-tag">impact</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="developer full" data-categories="debugging" data-type="prompt">
+        <div class="card-header">
+          <span class="card-icon">🐛</span>
+          <span class="card-name">milens-debugger</span>
+          <span class="card-badge prompt">Prompt</span>
+        </div>
+        <p class="card-desc">Root cause analysis with execution tracing. Context → Trace → Impact → Relationship → Root Cause.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">trace</span>
+          <span class="card-tool-tag">context</span>
+          <span class="card-tool-tag">explain_relationship</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <!-- ── Skills ── -->
+      <div class="catalog-card" data-profile="core developer security full" data-categories="testing" data-type="skill">
+        <div class="card-header">
+          <span class="card-icon">🟢</span>
+          <span class="card-name">milens-tdd</span>
+          <span class="card-badge skill">Skill</span>
+        </div>
+        <p class="card-desc">Test-Driven Development workflow. Auto-discovers gaps, generates test plans, implements tests, and verifies coverage.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">test_coverage_gaps</span>
+          <span class="card-tool-tag">test_plan</span>
+          <span class="card-tool-tag">test_impact</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="core developer security full" data-categories="review" data-type="skill">
+        <div class="card-header">
+          <span class="card-icon">🔵</span>
+          <span class="card-name">milens-code-review</span>
+          <span class="card-badge skill">Skill</span>
+        </div>
+        <p class="card-desc">Automated Code Review workflow. PR analysis, symbol deep-dive, dead code detection, tech debt grep, review report.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">review_pr</span>
+          <span class="card-tool-tag">review_symbol</span>
+          <span class="card-tool-tag">find_dead_code</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="core developer security full" data-categories="planning" data-type="skill">
+        <div class="card-header">
+          <span class="card-icon">🟣</span>
+          <span class="card-name">milens-plan</span>
+          <span class="card-badge skill">Skill</span>
+        </div>
+        <p class="card-desc">Implementation Planning workflow. Researches full codebase context, analyzes blast radius, and produces structured plan.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">impact</span>
+          <span class="card-tool-tag">context</span>
+          <span class="card-tool-tag">codebase_summary</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="developer security full" data-categories="security" data-type="skill">
+        <div class="card-header">
+          <span class="card-icon">🔴</span>
+          <span class="card-name">milens-security-review</span>
+          <span class="card-badge skill">Skill</span>
+        </div>
+        <p class="card-desc">Security Audit workflow. Scans for secrets, hidden Unicode, dangerous patterns, data leaks — produces security report.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">security_scan</span>
+          <span class="card-tool-tag">grep</span>
+          <span class="card-tool-tag">impact</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="developer full" data-categories="refactoring" data-type="skill">
+        <div class="card-header">
+          <span class="card-icon">🟡</span>
+          <span class="card-name">milens-refactor-clean</span>
+          <span class="card-badge skill">Skill</span>
+        </div>
+        <p class="card-desc">Safe Refactoring workflow. Finds dead code, verifies impact, removes safely, and verifies test coverage after changes.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">find_dead_code</span>
+          <span class="card-tool-tag">impact</span>
+          <span class="card-tool-tag">test_impact</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="developer security full" data-categories="testing" data-type="skill">
+        <div class="card-header">
+          <span class="card-icon">⚪</span>
+          <span class="card-name">milens-eval</span>
+          <span class="card-badge skill">Skill</span>
+        </div>
+        <p class="card-desc">Evaluation & Quality Gate. Plans, implements, verifies scope, reviews risk, runs tests, checks coverage — pass/fail.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">test_impact</span>
+          <span class="card-tool-tag">review_pr</span>
+          <span class="card-tool-tag">test_coverage_gaps</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <!-- ── Tools ── -->
+      <div class="catalog-card" data-profile="core developer security full" data-categories="tools" data-type="tool">
+        <div class="card-header">
+          <span class="card-icon">🔍</span>
+          <span class="card-name">query</span>
+          <span class="card-badge tool">Tool</span>
+        </div>
+        <p class="card-desc">FTS5 symbol search across the entire knowledge graph. Find functions, classes, interfaces by name or keyword instantly.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">fts5</span>
+          <span class="card-tool-tag">semantic</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="core developer security full" data-categories="tools" data-type="tool">
+        <div class="card-header">
+          <span class="card-icon">💥</span>
+          <span class="card-name">impact</span>
+          <span class="card-badge tool">Tool</span>
+        </div>
+        <p class="card-desc">Blast radius analysis. Shows every symbol that would break if a given function changes, with configurable depth traversal.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">upstream</span>
+          <span class="card-tool-tag">downstream</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="developer security full" data-categories="security tools" data-type="tool">
+        <div class="card-header">
+          <span class="card-icon">🛡️</span>
+          <span class="card-name">security_scan</span>
+          <span class="card-badge tool">Tool</span>
+        </div>
+        <p class="card-desc">50-rule security audit. Secrets, injections, hidden Unicode, dangerous patterns — replaces 10 manual grep calls.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">secrets</span>
+          <span class="card-tool-tag">injection</span>
+          <span class="card-tool-tag">unicode</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="core developer security full" data-categories="tools" data-type="tool">
+        <div class="card-header">
+          <span class="card-icon">🔭</span>
+          <span class="card-name">context</span>
+          <span class="card-badge tool">Tool</span>
+        </div>
+        <p class="card-desc">360° symbol view. Incoming references + outgoing dependencies in a single call. Understand any symbol instantly.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">callers</span>
+          <span class="card-tool-tag">callees</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="core developer security full" data-categories="review tools" data-type="tool">
+        <div class="card-header">
+          <span class="card-icon">📊</span>
+          <span class="card-name">review_pr</span>
+          <span class="card-badge tool">Tool</span>
+        </div>
+        <p class="card-desc">PR risk assessment. Git diff → affected symbols with risk scores (LOW/MEDIUM/HIGH/CRITICAL).</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">diff</span>
+          <span class="card-tool-tag">risk</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+      <div class="catalog-card" data-profile="core developer security full" data-categories="tools" data-type="tool">
+        <div class="card-header">
+          <span class="card-icon">📦</span>
+          <span class="card-name">codebase_summary</span>
+          <span class="card-badge tool">Tool</span>
+        </div>
+        <p class="card-desc">~500 token overview of the entire codebase. Domains, top hubs, test coverage, annotation counts — one call.</p>
+        <div class="card-tools">
+          <span class="card-tool-tag">overview</span>
+          <span class="card-tool-tag">tokens</span>
+        </div>
+        <a href="skills.html" class="card-link">Docs →</a>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Install Command ── -->
+<section>
+  <div class="container">
+    <span class="section-label">One Command</span>
+    <h2 class="section-title">Install your selected profile.</h2>
+    <p class="section-subtitle">Run one command. Get exactly the tools, skills, and rules your project needs.</p>
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+        <span>terminal ~ zsh</span>
+      </div>
+      <div class="terminal-body">
+        <span class="prompt">$</span> milens init --profile full --interactive<br><br>
+        <span class="check">✓</span> <span class="dim">Profile: full (33 tools, 6 prompts, 50 rules)</span><br>
+        <span class="check">✓</span> <span class="dim">Skills: 6 installed to .agents/skills/</span><br>
+        <span class="check">✓</span> <span class="dim">Ready! Open your AI agent to start.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://github.com/fuze210699/milens">GitHub</a>
+      <a href="https://github.com/fuze210699/milens#readme">Docs</a>
+      <a href="index.html#pricing">Pricing</a>
+      <a href="index.html#security">Security</a>
+      <a href="skills.html">Skills</a>
+      <a href="https://github.com/fuze210699/milens/blob/main/CONTRIBUTING.md">Contribute</a>
+    </div>
+    <p>Open Source · MIT Licensed · No vendor lock-in</p>
+    <p style="margin-top:4px;">Built for the vibe coding era. Milens — AI-DOS.</p>
+  </div>
+</footer>
+
+<script>
+(function() {
+  var cards = document.querySelectorAll('.catalog-card');
+  var presetBtns = document.querySelectorAll('.preset-btn');
+  var tabBtns = document.querySelectorAll('.tab-btn');
+  var visibleCountEl = document.getElementById('visibleCount');
+  var activePreset = 'full';
+  var activeCategory = 'all';
+
+  function applyFilters() {
+    var visible = 0;
+    cards.forEach(function(card) {
+      var profiles = card.getAttribute('data-profile') || '';
+      var categories = card.getAttribute('data-categories') || '';
+      var matchPreset = activePreset === 'full' || profiles.split(' ').indexOf(activePreset) !== -1;
+      var matchCategory = activeCategory === 'all' || categories.split(' ').indexOf(activeCategory) !== -1;
+      if (matchPreset && matchCategory) {
+        card.classList.remove('hidden');
+        visible++;
+      } else {
+        card.classList.add('hidden');
+      }
+    });
+    visibleCountEl.textContent = visible;
+  }
+
+  presetBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      presetBtns.forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      activePreset = btn.getAttribute('data-preset');
+      applyFilters();
+    });
+  });
+
+  tabBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      tabBtns.forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      activeCategory = btn.getAttribute('data-category');
+      applyFilters();
+    });
+  });
+
+  applyFilters();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Milens Dashboard</title>
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --border: #30363d;
+      --text-primary: #c9d1d9;
+      --text-secondary: #8b949e;
+      --text-muted: #6e7681;
+      --accent: #58a6ff;
+      --accent-muted: #1f6feb;
+      --success: #3fb950;
+      --warning: #d2991d;
+      --danger: #f85149;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 220px;
+      min-width: 220px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+    }
+
+    .sidebar-header {
+      padding: 20px 16px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+    }
+
+    .sidebar-header .subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .nav {
+      flex: 1;
+      padding: 12px 0;
+      overflow-y: auto;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 16px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-left: 2px solid transparent;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      color: var(--accent);
+      background: rgba(88, 166, 255, 0.05);
+      border-left-color: var(--accent);
+    }
+
+    .nav-item .icon {
+      font-size: 16px;
+      width: 20px;
+      text-align: center;
+    }
+
+    .nav-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 8px 16px;
+    }
+
+    .nav-label {
+      padding: 6px 16px;
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 600;
+    }
+
+    .sidebar-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-footer .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--success);
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .toolbar {
+      height: 48px;
+      min-height: 48px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+    }
+
+    .toolbar-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .toolbar-right {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn {
+      padding: 5px 12px;
+      font-size: 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover { background: #30363d; }
+    .btn-primary {
+      background: var(--accent-muted);
+      border-color: var(--accent-muted);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent); }
+
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .card-title {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .card-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .card-sub {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stat-row:last-child { border-bottom: none; }
+
+    .stat-label { font-size: 13px; color: var(--text-secondary); }
+    .stat-value { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .table th {
+      text-align: left;
+      padding: 10px 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    .table tr:hover td { background: var(--bg-tertiary); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-critical { background: rgba(248, 81, 73, 0.2); color: var(--danger); }
+    .badge-high { background: rgba(255, 123, 114, 0.2); color: #ff7b72; }
+    .badge-medium { background: rgba(210, 153, 29, 0.2); color: var(--warning); }
+    .badge-low { background: rgba(88, 166, 255, 0.2); color: var(--accent); }
+    .badge-info { background: rgba(139, 148, 158, 0.2); color: var(--text-secondary); }
+
+    .progress-bar {
+      height: 8px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .progress-fill.success { background: var(--success); }
+    .progress-fill.warning { background: var(--warning); }
+    .progress-fill.danger { background: var(--danger); }
+    .progress-fill.accent { background: var(--accent); }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-muted);
+    }
+
+    .empty-state .icon { font-size: 36px; margin-bottom: 12px; }
+    .empty-state h3 { font-size: 16px; color: var(--text-secondary); margin-bottom: 6px; }
+    .empty-state p { font-size: 13px; }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 24px 0 12px;
+    }
+
+    .section-title:first-child { margin-top: 0; }
+
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .metric-card {
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .metric-card .label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .metric-card .value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .metric-card .delta {
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    .delta.positive { color: var(--success); }
+    .delta.negative { color: var(--danger); }
+
+    .switch-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .switch-row:last-child { border-bottom: none; }
+
+    .switch-label { font-size: 13px; color: var(--text-primary); }
+    .switch-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    .toggle {
+      width: 40px;
+      height: 22px;
+      background: var(--bg-tertiary);
+      border-radius: 11px;
+      border: 1px solid var(--border);
+      position: relative;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .toggle.on { background: var(--accent-muted); border-color: var(--accent-muted); }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--text-primary);
+      top: 2px;
+      left: 2px;
+      transition: transform 0.2s ease;
+    }
+
+    .toggle.on::after { transform: translateX(18px); }
+
+    .chart-placeholder {
+      height: 200px;
+      background: var(--bg-tertiary);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-primary); }
+    ::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border); }
+  </style>
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1>milens</h1>
+      <div class="subtitle">Desktop Dashboard</div>
+    </div>
+    <div class="nav">
+      <div class="nav-label">Views</div>
+      <div class="nav-item active" data-tab="overview">
+        <span class="icon">&#9632;</span>
+        Overview
+      </div>
+      <div class="nav-item" data-tab="domains">
+        <span class="icon">&#9671;</span>
+        Domains
+      </div>
+      <div class="nav-item" data-tab="learning">
+        <span class="icon">&#9737;</span>
+        Learning
+      </div>
+      <div class="nav-item" data-tab="metrics">
+        <span class="icon">&#9776;</span>
+        Metrics
+      </div>
+      <div class="nav-item" data-tab="security">
+        <span class="icon">&#9878;</span>
+        Security
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-label">Configuration</div>
+      <div class="nav-item" data-tab="settings">
+        <span class="icon">&#9881;</span>
+        Settings
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <span class="dot"></span>
+      <span id="connection-status">Not connected</span>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="toolbar">
+      <span class="toolbar-title" id="toolbar-title">Overview</span>
+      <div class="toolbar-right">
+        <button class="btn" id="btn-refresh">Refresh</button>
+        <button class="btn btn-primary" id="btn-analyze">Analyze</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- Overview Tab -->
+      <div class="tab-content active" id="tab-overview">
+        <div class="section-title">Project Summary</div>
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-title">Total Symbols</div>
+            <div class="card-value">--</div>
+            <div class="card-sub">Functions, classes, interfaces</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Total Links</div>
+            <div class="card-value">--</div>
+            <div class="card-sub">Cross-file references</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Files Indexed</div>
+            <div class="card-value">--</div>
+            <div class="card-sub">Source files tracked</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Coverage</div>
+            <div class="card-value">--%</div>
+            <div class="card-sub">Symbol link coverage</div>
+          </div>
+        </div>
+
+        <div class="section-title">Index Health</div>
+        <div class="card" style="max-width: 600px;">
+          <div class="stat-row">
+            <span class="stat-label">Symbols processed</span>
+            <span class="stat-value" id="stat-symbols">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Files parsed</span>
+            <span class="stat-value" id="stat-files">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Link resolution</span>
+            <span class="stat-value" id="stat-links">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Last analysis</span>
+            <span class="stat-value" id="stat-last">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">DB size</span>
+            <span class="stat-value" id="stat-dbsize">--</span>
+          </div>
+        </div>
+
+        <div class="section-title">Recent Activity</div>
+        <div class="empty-state">
+          <div class="icon">&#9889;</div>
+          <h3>No recent activity</h3>
+          <p>Run an analysis to populate activity data.</p>
+        </div>
+      </div>
+
+      <!-- Domains Tab -->
+      <div class="tab-content" id="tab-domains">
+        <div class="section-title">Domain Clusters</div>
+        <div class="chart-placeholder" style="height: 300px;">
+          Domain graph visualization will render here
+        </div>
+
+        <div class="section-title">Domain Breakdown</div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th>Files</th>
+              <th>Symbols</th>
+              <th>Links</th>
+              <th>Cohesion</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                No domain data available. Connect to a milens database.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Learning Tab -->
+      <div class="tab-content" id="tab-learning">
+        <div class="section-title">Annotation Trends</div>
+        <div class="chart-placeholder" style="height: 220px;">
+          Annotation trend chart will render here
+        </div>
+
+        <div class="section-title">Confidence Distribution</div>
+        <div class="card">
+          <div class="stat-row">
+            <span class="stat-label">High confidence (&ge; 0.8)</span>
+            <span class="stat-value">--</span>
+            <div class="progress-bar" style="width: 120px;">
+              <div class="progress-fill success" style="width: 0%;"></div>
+            </div>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Medium confidence (0.5-0.79)</span>
+            <span class="stat-value">--</span>
+            <div class="progress-bar" style="width: 120px;">
+              <div class="progress-fill warning" style="width: 0%;"></div>
+            </div>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Low confidence (&lt; 0.5)</span>
+            <span class="stat-value">--</span>
+            <div class="progress-bar" style="width: 120px;">
+              <div class="progress-fill danger" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">Recent Annotations</div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Kind</th>
+              <th>Confidence</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                No annotations recorded yet.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Metrics Tab -->
+      <div class="tab-content" id="tab-metrics">
+        <div class="section-title">Key Metrics</div>
+        <div class="metric-row">
+          <div class="metric-card">
+            <div class="label">TER</div>
+            <div class="value">--</div>
+            <div class="delta">Token Efficiency Ratio</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">LR</div>
+            <div class="value">--</div>
+            <div class="delta">Learning Rate</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">CQI</div>
+            <div class="value">--</div>
+            <div class="delta">Code Quality Index</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">BRR</div>
+            <div class="value">--</div>
+            <div class="delta">Bug Resolution Rate</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">TCGR</div>
+            <div class="value">--</div>
+            <div class="delta">Test Coverage Growth Rate</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">DCER</div>
+            <div class="value">--</div>
+            <div class="delta">Dead Code Elimination Rate</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">CTR</div>
+            <div class="value">--</div>
+            <div class="delta">Change Throughput Rate</div>
+          </div>
+        </div>
+
+        <div class="section-title">Historical Trends</div>
+        <div class="chart-placeholder" style="height: 260px;">
+          Metrics over time chart will render here
+        </div>
+      </div>
+
+      <!-- Security Tab -->
+      <div class="tab-content" id="tab-security">
+        <div class="section-title">Findings by Severity</div>
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-title">Critical</div>
+            <div class="card-value" style="color: var(--danger);">--</div>
+            <div class="card-sub">Requires immediate attention</div>
+          </div>
+          <div class="card">
+            <div class="card-title">High</div>
+            <div class="card-value" style="color: #ff7b72;">--</div>
+            <div class="card-sub">Fix within this sprint</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Medium</div>
+            <div class="card-value" style="color: var(--warning);">--</div>
+            <div class="card-sub">Address in backlog</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Low / Info</div>
+            <div class="card-value" style="color: var(--accent);">--</div>
+            <div class="card-sub">Informational findings</div>
+          </div>
+        </div>
+
+        <div class="section-title">Scan Results</div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Finding</th>
+              <th>Severity</th>
+              <th>File</th>
+              <th>Line</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                No security scan results available.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="section-title">Vulnerability Timeline</div>
+        <div class="chart-placeholder" style="height: 200px;">
+          Vulnerability timeline chart will render here
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div class="tab-content" id="tab-settings">
+        <div class="section-title">Database Connection</div>
+        <div class="card" style="max-width: 600px;">
+          <div class="stat-row">
+            <span class="stat-label">Database path</span>
+            <span class="stat-value" style="color: var(--text-muted);">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Status</span>
+            <span class="stat-value">Disconnected</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Auto-connect</span>
+            <span class="stat-value">Off</span>
+          </div>
+        </div>
+
+        <div class="section-title">Analysis Profiles</div>
+        <div class="card" style="max-width: 600px;">
+          <div class="stat-row">
+            <span class="stat-label">Active profile</span>
+            <span class="stat-value">Default</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Languages</span>
+            <span class="stat-value">TypeScript, JavaScript, Python</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Max file size</span>
+            <span class="stat-value">5 MB</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Ignore patterns</span>
+            <span class="stat-value">node_modules, .git, dist</span>
+          </div>
+        </div>
+
+        <div class="section-title">Hooks</div>
+        <div class="switch-row">
+          <div>
+            <div class="switch-label">Pre-analysis Hook</div>
+            <div class="switch-desc">Run before each analysis scan</div>
+          </div>
+          <div class="toggle"></div>
+        </div>
+        <div class="switch-row">
+          <div>
+            <div class="switch-label">Post-analysis Hook</div>
+            <div class="switch-desc">Run after analysis completes</div>
+          </div>
+          <div class="toggle"></div>
+        </div>
+        <div class="switch-row">
+          <div>
+            <div class="switch-label">Webhook Notifications</div>
+            <div class="switch-desc">Send results to configured webhook URL</div>
+          </div>
+          <div class="toggle"></div>
+        </div>
+
+        <div class="section-title">Integrations</div>
+        <div class="switch-row">
+          <div>
+            <div class="switch-label">GitHub Integration</div>
+            <div class="switch-desc">Link with GitHub repositories and PRs</div>
+          </div>
+          <div class="toggle"></div>
+        </div>
+        <div class="switch-row">
+          <div>
+            <div class="switch-label">Slack Notifications</div>
+            <div class="switch-desc">Post analysis summaries to Slack</div>
+          </div>
+          <div class="toggle"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Tab navigation
+    const navItems = document.querySelectorAll('.nav-item[data-tab]');
+    const tabContents = document.querySelectorAll('.tab-content');
+    const toolbarTitle = document.getElementById('toolbar-title');
+
+    navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        navItems.forEach(n => n.classList.remove('active'));
+        tabContents.forEach(t => t.classList.remove('active'));
+
+        item.classList.add('active');
+        const tabId = item.getAttribute('data-tab');
+        document.getElementById('tab-' + tabId).classList.add('active');
+        toolbarTitle.textContent = item.textContent.trim();
+      });
+    });
+  </script>
+</body>
+</html>

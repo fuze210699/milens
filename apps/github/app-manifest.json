@@ -1,0 +1,22 @@
+{
+  "name": "Milens",
+  "url": "https://github.com/fuze210699/milens",
+  "hook_attributes": {
+    "url": "https://milens.ai/api/github/webhook"
+  },
+  "redirect_url": "https://milens.ai/api/github/callback",
+  "description": "AI-DOS for your repos. Auto-generates AGENTS.md, skill files, and security reports. PR review with blast radius analysis. 33 MCP tools for your AI coding agent.",
+  "public": true,
+  "default_events": [
+    "issues",
+    "issue_comment",
+    "pull_request",
+    "push"
+  ],
+  "default_permissions": {
+    "contents": "read",
+    "issues": "write",
+    "pull_requests": "write",
+    "metadata": "read"
+  }
+}

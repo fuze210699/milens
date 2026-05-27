@@ -507,7 +507,7 @@ export class Database {
     ).run(tool, durationMs, tokensOut, tokensSaved, repo ?? null);
   }
 
-  getToolUsageStats(): {
+  getToolUsageStats(repo?: string): {
     totalCalls: number;
     totalTokensSaved: number;
     totalTokensOut: number;
@@ -516,13 +516,17 @@ export class Database {
     byDay: Array<{ date: string; calls: number; tokensSaved: number }>;
     recentCalls: Array<{ tool: string; calledAt: string; durationMs: number; tokensSaved: number }>;
   } {
+    const repoFilter = repo ? `WHERE repo = ?` : '';
+    const repoParam = repo ? [repo] : [];
+
     const totals = this.db.prepare(`
       SELECT COUNT(*) as total_calls,
              COALESCE(SUM(tokens_saved), 0) as total_saved,
              COALESCE(SUM(tokens_out), 0) as total_out,
              COALESCE(SUM(duration_ms), 0) as total_ms
       FROM tool_usage
-    `).get() as any;
+      ${repoFilter}
+    `).get(...repoParam) as any;
 
     const byTool = this.db.prepare(`
       SELECT tool, COUNT(*) as calls,
@@ -530,25 +534,28 @@ export class Database {
              COALESCE(SUM(tokens_out), 0) as tokens_out,
              CAST(COALESCE(AVG(duration_ms), 0) AS INTEGER) as avg_ms
       FROM tool_usage
+      ${repoFilter}
       GROUP BY tool
       ORDER BY calls DESC
-    `).all() as any[];
+    `).all(...repoParam) as any[];
 
     const byDay = this.db.prepare(`
       SELECT date(called_at) as date, COUNT(*) as calls,
              COALESCE(SUM(tokens_saved), 0) as tokens_saved
       FROM tool_usage
+      ${repoFilter}
       GROUP BY date(called_at)
       ORDER BY date DESC
       LIMIT 30
-    `).all() as any[];
+    `).all(...repoParam) as any[];
 
     const recentCalls = this.db.prepare(`
       SELECT tool, called_at, duration_ms, tokens_saved
       FROM tool_usage
+      ${repoFilter}
       ORDER BY id DESC
       LIMIT 50
-    `).all() as any[];
+    `).all(...repoParam) as any[];
 
     return {
       totalCalls: totals.total_calls,

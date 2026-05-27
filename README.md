@@ -1,376 +1,293 @@
 <p align="center">
-  <strong>milens</strong><br>
-  <em>Code Intelligence Engine for AI Agents</em>
+  <strong>Milens</strong><br>
+  <em>AI-DOS — The Operating System for AI-Driven Development</em>
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/milens"><img src="https://img.shields.io/npm/v/milens" alt="npm version"></a>
-  <a href="https://github.com/fuze210699/milens/blob/develop/LICENSE"><img src="https://img.shields.io/badge/license-PolyForm--Noncommercial-blue" alt="License: PolyForm Noncommercial"></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node.js >= 20"></a>
-  <img src="https://img.shields.io/badge/languages-12-orange" alt="12 Languages">
-  <img src="https://img.shields.io/badge/MCP_tools-32-purple" alt="32 MCP Tools">
+  <a href="https://www.npmjs.com/package/milens"><img src="https://img.shields.io/npm/v/milens" alt="npm"></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="node"></a>
+  <a href="https://github.com/fuze210699/milens/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="license"></a>
+  <img src="https://img.shields.io/badge/tools-33-purple" alt="33 tools">
+  <img src="https://img.shields.io/badge/prompts-6-orange" alt="6 prompts">
+  <img src="https://img.shields.io/badge/security-50%2B-red" alt="50+ rules">
+  <img src="https://img.shields.io/badge/harnesses-7-lightgrey" alt="7 harnesses">
 </p>
 
-<p align="center">
-  <strong>Index any codebase → Knowledge graph → AI agents that never miss code</strong>
-</p>
+---
 
 <p align="center">
-  <a href="#the-problem">Why?</a> •
-  <a href="#quick-start">Quick Start</a> •
-  <a href="#mcp-tools">MCP Tools</a> •
-  <a href="#tool-examples">Examples</a> •
-  <a href="#editor-setup">Editors</a> •
-  <a href="#supported-languages">Languages</a>
+  <a href="https://github.com/fuze210699/milens">⭐ Star</a> ·
+  <a href="https://github.com/sponsors/fuze210699">💖 Sponsor</a> ·
+  <a href="https://github.com/fuze210699/milens/discussions">💬 Discussions</a> ·
+  <a href="https://github.com/fuze210699/milens/blob/main/docs/pricing.md">Pro $19/seat</a>
 </p>
 
 ---
 
 ## The Problem
 
-You're burning tokens and premium requests on tasks that milens can handle at a fraction of the cost. Every time your agent explores a codebase — reading files one by one, searching for references, tracing call chains — you're paying for what a pre-built knowledge graph delivers instantly.
+AI coding agents are powerful — but they don't truly know your codebase.
 
-**Why not let milens save your wallet?**
+**What happens every session:**
 
-One `milens analyze` replaces dozens of agent tool calls. Instead of the agent spending 10+ steps to map out a function's dependencies, `impact()` returns the full blast radius in a single call.
+1. Agent edits `UserService.validate()`
+2. Doesn't know 47 functions depend on its return type
+3. **Breaking changes ship to production**
 
-If you're concerned about security, read our [Security & Privacy](#security--privacy) guarantees — milens is fully offline, zero telemetry, localhost-only.
+The deeper issue: agents waste **70% of their context window** just trying to understand the codebase. Reading files one by one. Grep'ing for references. Tracing call chains manually. Every session starts from zero — last session's discoveries are gone.
 
-### How milens Solves This
+After 10-20 AI sessions, the codebase accumulates dead code, untested hubs, and forgotten security gaps. The agent gets slower, more confused, and more expensive — while the developer burns tokens and patience.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/fuze210699/milens/develop/docs/diagram1.svg" alt="Without milens vs With milens comparison" width="700">
-</p>
+---
 
-milens builds a **pre-indexed knowledge graph** at analysis time — resolving every import, call, and inheritance chain — so that any tool query returns the full dependency picture instantly, without multi-step exploration.
+## Without Milens vs With Milens
+
+| Situation | Without Milens | With Milens |
+|---|---|---|
+| **Understand a new codebase** | Agent reads 15 files blind (~30,000 tokens) | `codebase_summary()` — 500 tokens, complete overview |
+| **Edit a function safely** | No idea what depends on it. Hope it doesn't break. | `impact({target, depth: 3})` — exact blast radius before every edit |
+| **Find all references** | Grep 5 times, read 8 files, miss template usages | `context({name})` — incoming + outgoing, one call |
+| **Review a PR** | Read diff, guess risk, miss hidden dependencies | `review_pr()` — every symbol scored CRITICAL/HIGH/MEDIUM/LOW |
+| **Security audit** | 10 manual greps for secrets, injections, unicode | `security_scan()` — 50 rules, one tool call |
+| **Start a new session** | Zero context. Re-learn everything from scratch. | `recall()` — agent remembers every past bug, caveat, and pattern |
+| **Write tests** | Guess what needs testing. Guess how to mock. | `test_plan()` — mock strategy + 3 scenarios + coverage gaps sorted by risk |
+| **Find dead code** | Manual search. "Is this still used? I'm not sure." | `find_dead_code()` — every exported symbol with zero references |
+
+**Average savings: ~70% fewer tokens per session. ~50% faster task completion.**
+
+---
+
+## What is Milens?
+
+Milens gives AI coding agents **instant code intelligence**. Instead of reading 15 files to understand a codebase, your agent calls one tool and gets the full picture in 500 tokens.
+
+It builds a **knowledge graph** of your entire project — every function, class, import, call, and inheritance chain — then exposes it through 33 MCP tools. Agents query the graph instead of searching files. The result: **70% fewer tokens** per session, **zero broken dependencies**, and a system that **learns from every session**.
+
+- **Analyze once.** Tree-sitter parses 12 languages into a SQLite knowledge graph.
+- **Query instantly.** FTS5 search, recursive CTE traversal, vector similarity — all in-database.
+- **Edit safely.** Every tool returns a blast radius before you change anything.
+- **Scan automatically.** 50+ security rules run in one call, not ten greps.
+- **Learn continuously.** Annotations persist across sessions. Patterns auto-promote to rules.
+
+Fully offline. Zero telemetry. Localhost-only MCP server. One command to bootstrap.
+
+```
+npx milens init --profile full
+```
 
 ---
 
 ## Quick Start
 
 ```bash
-npx milens analyze                          # index your codebase
+npm install -g milens                     # install globally
+cd your-project
+milens init --profile full --interactive   # bootstrap everything
 ```
 
-Then add the MCP server to your editor ([setup below](#editor-setup)) and your agent immediately gets 32 code intelligence tools.
+That single command analyzes your codebase, builds a knowledge graph, generates `AGENTS.md`, installs skill files, configures security rules, and sets up pre-commit hooks.
+
+Then connect your editor:
+
+```json
+// .vscode/mcp.json — VS Code / Copilot
+{
+  "servers": {
+    "milens": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "milens", "serve", "-p", "${workspaceFolder}"]
+    }
+  }
+}
+```
+
+```bash
+# Claude Code
+claude mcp add milens -- npx -y milens serve -p .
+
+# Cursor — .cursor/mcp.json
+{ "mcpServers": { "milens": { "command": "npx", "args": ["-y", "milens", "serve", "-p", "."] } } }
+
+# OpenCode — .opencode/config.json
+{ "mcp": { "milens": { "command": "npx", "args": ["-y", "milens", "serve"] } } }
+```
+
+Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're ready.
 
 ---
 
-## CLI Commands
+## Architecture
 
-### `milens analyze` — Index a codebase
-
-Parse all source files, resolve cross-file dependencies, and build a searchable knowledge graph.
-
-```bash
-milens analyze                              # index current directory
-milens analyze -p /path/to/repo             # index a specific repo
-milens analyze -p . --force                 # full re-index (ignore cache)
-milens analyze -p . --force --verbose       # full re-index with detailed progress
+```
+                         npx milens init
+                               │
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+         ANALYZE           GENERATE           CONFIGURE
+    tree-sitter parse     AGENTS.md         security rules
+    resolve imports       skill files       pre-commit hooks
+    build graph          adapter packs      CI templates
+              │                │                │
+              └────────────────┼────────────────┘
+                               ▼
+                       milens serve
+                               │
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+         33 MCP TOOLS    6 SUB-AGENT     50+ SECURITY
+       query, impact,     PROMPTS            RULES
+       context, trace,   planner,         secrets, injection,
+       review_pr, ...    reviewer, ...    unicode, crypto, ...
+                               │
+                               ▼
+                        AI CODING AGENT
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+         CODE SAFELY     REVIEW AUTO      LEARN CONTINUOUSLY
+       edit_check()    review_pr()      annotate → recall
+       impact()        security_scan()  evolve → promote
 ```
 
-**Output:** A `.milens/milens.db` SQLite database containing every symbol, relationship, and search index.
+### Four-Layer Stack
 
-**Incremental mode:** By default, only re-parses files whose SHA-256 hash has changed since the last run.
-
-#### Generating AI skill files
-
-Skill files teach your AI agent the codebase structure — key symbols, entry points, cross-area dependencies — without reading every file.
-
-```bash
-milens analyze -p . --skills                # generate for all editors
-milens analyze -p . --skills-copilot        # GitHub Copilot only
-milens analyze -p . --skills-cursor         # Cursor only
-milens analyze -p . --skills-claude         # Claude Code only
-milens analyze -p . --skills-agents         # AGENTS.md only
-milens analyze -p . --skills-windsurf       # Windsurf only
+```
+┌─────────────────────────────────────────────────────────┐
+│  PLATFORM LAYER                                         │
+│  GitHub App · npm · 7 adapter packs · Desktop Dashboard │
+│  Pricing: Free / Pro ($19/seat) / Enterprise            │
+├─────────────────────────────────────────────────────────┤
+│  AUTOMATION LAYER                                       │
+│  6 Hooks (SessionStart, SessionEnd, PreCommit, ...)     │
+│  Auto-annotate · Auto-recall · Watch mode               │
+│  Scheduled evolve (cron/schtasks) · Pre-commit hooks    │
+├─────────────────────────────────────────────────────────┤
+│  WORKFLOW LAYER                                         │
+│  6 Sub-agent Prompts (planner, reviewer, tester, ...)   │
+│  6 Skill files · AGENTS.md auto-generator               │
+│  Selective profiles (minimal/standard/full)             │
+├─────────────────────────────────────────────────────────┤
+│  INTELLIGENCE LAYER                                     │
+│  Knowledge Graph (SQLite+FTS5) · 33 MCP Tools            │
+│  Memory (annotations+sessions) · Learning (confidence)  │
+│  50+ Security Rules (OWASP) · 7 Metrics (TER, CQI, ...) │
+└─────────────────────────────────────────────────────────┘
 ```
 
-| Flag | Output files |
+### Pipeline
+
+| Stage | What Happens | Technology |
+|---|---|---|
+| **Scan** | Discover source files by extension | Node.js `fs` |
+| **Parse** | Extract symbols, imports, calls, heritage | tree-sitter WASM (12 languages) |
+| **Resolve** | Match imports to files, calls to definitions | Cross-file linker |
+| **Enrich** | Compute roles, heat scores, domain clusters | Union-find + PageRank-like |
+| **Persist** | Store everything in SQLite | better-sqlite3 + FTS5 |
+| **Serve** | Expose via MCP protocol | stdio + StreamableHTTP |
+| **Learn** | Annotate → confidence score → promote → skill | SQLite + evolution log |
+| **Scan** | 50+ regex rules across all files | Built-in security engine |
+
+### Design Principles
+
+| Principle | Implementation |
 |---|---|
-| `--skills-copilot` | `.github/instructions/*.instructions.md` + `.github/copilot-instructions.md` |
-| `--skills-cursor` | `.cursor/rules/*.mdc` + `.cursor/index.mdc` |
-| `--skills-claude` | `.claude/skills/generated/*/SKILL.md` + `.claude/rules/*.md` + `CLAUDE.md` |
-| `--skills-agents` | `.agents/skills/*/SKILL.md` + `AGENTS.md` |
-| `--skills-windsurf` | `.windsurfrules` |
-
-> Root config files use `<!-- milens:start/end -->` markers for **idempotent injection** — re-running replaces the milens section without overwriting your custom content.
-
-**Team Collaboration Notes:**
-
-- ✅ **Instruction files are safe to commit** - They use `<workspaceRoot>` placeholder instead of absolute paths
-- ✅ **No merge conflicts** - No machine-specific information (username, absolute paths, etc.)
-- ✅ **Consistent AI assistance** - All team members get the same codebase intelligence
-- ⚠️ **Database is gitignored** - `.milens/*.db` files are local; each developer runs `npx milens analyze` after clone
-
-See [`.milens/README.md`](https://github.com/fuze210699/milens/blob/develop/.milens/README.md) for more details on the index directory.
+| **One parse, infinite queries** | Knowledge graph pre-computed at analyze time |
+| **Zero network** | Everything offline. No API calls. No telemetry. |
+| **Token-compact** | `name [kind] file:line` format saves 40-60% tokens |
+| **Incremental** | SHA-256 file hashing. Only changed files re-parsed. |
+| **In-database traversal** | Recursive CTEs for graph queries. No full graph in memory. |
+| **Localhost only** | HTTP binds 127.0.0.1. No network exposure. |
+| **MCP standard** | Works with any MCP-compatible agent. No vendor lock-in. |
 
 ---
 
-### `milens search` — Find symbols by name
+## MCP Tools (33)
 
-Full-text search (BM25) across all indexed symbol names and file paths.
+### Search & Navigation
 
-```bash
-milens search "UserService"                 # search for symbols
-milens search "auth" --limit 50             # increase result limit (default: 20)
-milens search "handler" -p /path/to/repo    # search in a specific repo
-```
+| Tool | Does |
+|---|---|
+| `query` | FTS5 full-text search for symbol definitions |
+| `grep` | Regex search across ALL project files (code, configs, docs, templates) |
+| `context` | 360° view: who calls this + what this depends on |
+| `get_file_symbols` | Every symbol in a file with ref/dep counts |
+| `get_type_hierarchy` | Full inheritance tree — ancestors + descendants |
 
-**Output format:** `name [kind] file:line (exported)`
+### Safety & Impact
 
-```
-AuthService [class] src/auth.ts:15 (exported)
-hashPassword [function] src/auth.ts:3 (exported)
-```
+| Tool | Does |
+|---|---|
+| `impact` | Blast radius: depth 1-3 traversal showing what breaks |
+| `edit_check` | Pre-edit safety: callers, re-exports, test coverage, warnings |
+| `detect_changes` | Git diff → which symbols changed + their dependents |
+| `find_dead_code` | Exported symbols with zero incoming references |
+| `overview` | context + impact + grep combined in one call |
 
----
+### Understanding Code
 
-### `milens inspect` — 360° symbol view
+| Tool | Does |
+|---|---|
+| `smart_context` | Intent-aware context: `edit` / `debug` / `test` / `understand` |
+| `trace` | Full execution path from entrypoints to target (or reverse) |
+| `routes` | Auto-detect API endpoints across 11 frameworks |
+| `explain_relationship` | Shortest dependency chain between any two symbols |
+| `domains` | Module clusters based on cross-file dependency graph |
 
-Show everything about a symbol: who calls it (incoming) and what it depends on (outgoing).
+### Review & Testing
 
-```bash
-milens inspect "AuthService"
-milens inspect "resolveLinks" -p .
-```
+| Tool | Does |
+|---|---|
+| `review_pr` | Scores every changed symbol CRITICAL/HIGH/MEDIUM/LOW |
+| `review_symbol` | Deep-dive: role, heat, dependents, test status, recommendation |
+| `codebase_summary` | ~500 token overview for session bootstrap |
+| `test_plan` | Mock strategy + 3+ test scenarios based on dependencies |
+| `test_coverage_gaps` | Untested symbols sorted by risk |
+| `test_impact` | Maps changed code → which test files to run |
 
-**Output:**
+### Memory & Sessions
 
-```
-AuthService [class] src/auth.ts:15
-  incoming:
-    calls: handleLogin (src/routes.ts)
-    calls: UserController (src/controllers/user.ts)
-  outgoing:
-    imports: User (src/models.ts)
-    calls: hashPassword (src/auth.ts)
-    calls: createUser (src/models.ts)
-```
+| Tool | Does |
+|---|---|
+| `annotate` | Save observation about a symbol (persists forever) |
+| `recall` | Retrieve past annotations by symbol, key, agent, or session |
+| `session_start` | Begin new session with agent identity |
+| `session_context` | Session metadata + tool calls + annotations |
+| `session_end` | Close session, record stats |
+| `handoff` | Transfer all context from one agent session to another |
 
----
+### Security
 
-### `milens impact` — Blast radius analysis
+| Tool | Does |
+|---|---|
+| `security_scan` | **50+ rules in one call.** Scopes: secrets, injection, unicode, dangerous, config, data-leak, crypto, auth, file-access |
 
-Recursively trace what depends on a symbol (upstream) or what a symbol depends on (downstream).
+### Overview & Similarity
 
-```bash
-milens impact "createUser"                  # upstream: what breaks if this changes?
-milens impact "UserModel" -d downstream     # downstream: what does this depend on?
-milens impact "searchSymbols" --depth 2     # limit traversal depth (default: 3)
-```
+| Tool | Does |
+|---|---|
+| `status` | Index stats, test coverage %, link accuracy |
+| `repos` | List all indexed repositories |
+| `semantic_search` | Meaning-based symbol search (FTS5 + vector hybrid) |
+| `find_similar` | Symbols with shared callers/callees (topological similarity) |
 
-**Output:**
+### Developer
 
-```
-TARGET: createUser [function] src/models.ts:42
-  [depth 1] AuthService [class] src/auth.ts:15 (calls)
-  [depth 1] UserController [class] src/controllers/user.ts:8 (calls)
-  [depth 2] handleLogin [function] src/routes.ts:23 (calls)
-```
-
-**Depth meaning:**
-- Depth 1 = **WILL BREAK** — direct callers/dependents
-- Depth 2 = **LIKELY AFFECTED** — indirect dependents
-- Depth 3 = **MAY NEED TESTING** — transitive dependents
-
----
-
-### `milens serve` — Start MCP server
-
-Expose the knowledge graph to AI agents via the Model Context Protocol.
-
-```bash
-milens serve                                # stdio transport (for editors)
-milens serve -p /path/to/repo               # serve a specific repo
-milens serve --http                         # HTTP transport on port 3100
-milens serve --http --port 8080             # HTTP on custom port
-```
-
-**stdio mode** (default): Used by editors like VS Code, Cursor, and Claude Code. The agent communicates through stdin/stdout.
-
-**HTTP mode**: Used by remote agents or custom integrations. Binds to `127.0.0.1` only — no network exposure.
-
-Endpoint: `POST http://localhost:3100/mcp`
+| Tool | Does |
+|---|---|
+| `ast_explore` | Parse code snippet → S-expression AST tree |
+| `test_query` | Test a tree-sitter query against code |
 
 ---
 
-### `milens status` — Show index stats
+## Tool Output Examples
 
-```bash
-milens status                               # current directory
-milens status -p /path/to/repo              # specific repo
-```
-
-**Output:**
-
-```
-Repository: /home/user/my-project
-Database:   /home/user/my-project/.milens/milens.db
-Indexed:    2026-04-11T10:30:00Z
-Symbols:    210
-Links:      348
-Files:      30
-```
-
----
-
-### `milens list` — List all indexed repositories
-
-```bash
-milens list
-```
-
-**Output:**
-
-```
-3 indexed repositories:
-
-  /home/user/project-a
-    DB:      /home/user/project-a/.milens/milens.db
-    Indexed: 2026-04-11T10:30:00Z
-
-  /home/user/project-b
-    DB:      /home/user/project-b/.milens/milens.db
-    Indexed: 2026-04-10T15:22:00Z
-```
-
----
-
-### `milens clean` — Remove index
-
-```bash
-milens clean                                # remove index for current directory
-milens clean -p /path/to/repo               # remove index for specific repo
-milens clean --all                          # remove ALL indexes
-```
-
----
-
-### `milens dashboard` — Usage analytics
-
-Open a browser-based dashboard showing tool usage statistics, token savings, and response times.
-
-```bash
-milens dashboard                            # open on port 3200
-milens dashboard --port 8080                # custom port
-```
-
----
-
-## MCP Tools
-
-When the MCP server is running, your AI agent gets these 32 tools:
-
-### Search & Navigate
-
-| Tool | What It Does | Example |
-|---|---|---|
-| `query` | Symbol search (FTS5 full-text) | `query({query: "UserService"})` |
-| `grep` | Text search ALL files — code, templates, configs, docs | `grep({pattern: "TODO", scope: "all"})` |
-| `context` | 360° symbol view — incoming refs + outgoing deps | `context({name: "AuthService"})` |
-| `get_file_symbols` | All symbols in a file with ref/dep counts | `get_file_symbols({file: "src/auth.ts"})` |
-| `get_type_hierarchy` | Inheritance/implementation tree | `get_type_hierarchy({name: "BaseController"})` |
-
-### Impact & Safety
-
-| Tool | What It Does | Example |
-|---|---|---|
-| `impact` | Blast radius: what breaks if this changes? | `impact({target: "createUser"})` |
-| `edit_check` | Pre-edit safety: callers + exports + test coverage + ⚠ warnings | `edit_check({name: "resolveLinks"})` |
-| `detect_changes` | Git diff → affected symbols + direct dependents | `detect_changes({})` |
-| `find_dead_code` | Exported symbols with zero references | `find_dead_code({})` |
-
-### Understanding
-
-| Tool | What It Does | Example |
-|---|---|---|
-| `smart_context` | Intent-aware context: `understand`/`edit`/`debug`/`test` | `smart_context({name: "analyze", intent: "edit"})` |
-| `trace` | Execution flow: call chains to/from entrypoints | `trace({to: "searchSymbols"})` |
-| `routes` | Detect framework routes/endpoints (11 frameworks) | `routes({})` |
-| `explain_relationship` | Shortest path between two symbols | `explain_relationship({from: "A", to: "B"})` |
-| `overview` | Combined context + impact + grep in ONE call | `overview({name: "Database"})` |
-
-### Codebase Overview
-
-| Tool | What It Does | Example |
-|---|---|---|
-| `domains` | Domain clusters — groups of files forming logical modules | `domains({})` |
-| `repos` | List all indexed repositories | `repos({})` |
-| `status` | Index stats, domains, test coverage, accuracy report | `status({})` |
-
-### Developer Tools
-
-| Tool | What It Does | Example |
-|---|---|---|
-| `ast_explore` | Parse code snippet → S-expression AST tree | `ast_explore({code: "const x = 1", language: "typescript"})` |
-| `test_query` | Test tree-sitter query against code snippet | `test_query({query: "(identifier) @name", code: "const x = 1", language: "typescript"})` |
-
-### Review & Risk Assessment
-
-| Tool | What It Does | Example |
-|---|---|---|
-| `review_pr` | PR risk assessment: scores changed symbols by blast radius + test coverage | `review_pr({})` |
-| `review_symbol` | Single symbol risk: role, heat, dependents, test status | `review_symbol({name: "AuthService"})` |
-| `codebase_summary` | High-level bootstrapping context: domains, key symbols, coverage | `codebase_summary({})` |
-
-### Testing
-
-| Tool | What It Does | Example |
-|---|---|---|
-| `test_plan` | Dependency-aware test plan: mocks, strategies, suggested tests | `test_plan({name: "createUser"})` |
-| `test_coverage_gaps` | Untested exported symbols sorted by risk | `test_coverage_gaps({})` |
-| `test_impact` | Maps git changes → test files to run | `test_impact({})` |
-
-### Annotations & Sessions
-
-| Tool | What It Does | Example |
-|---|---|---|
-| `annotate` | Store observation/note about a symbol (persists across sessions) | `annotate({symbol: "AuthService", key: "note", value: "needs refactor"})` |
-| `recall` | Retrieve annotations by symbol, key, agent, or session | `recall({symbol: "AuthService"})` |
-| `session_start` | Register agent session for multi-agent coordination | `session_start({agent: "copilot"})` |
-| `session_context` | Get session metadata + annotations | `session_context({})` |
-| `handoff` | Transfer context between agent sessions | `handoff({from_session: "abc", to_session: "def"})` |
-
-### Search & Similarity
-
-| Tool | What It Does | Example |
-|---|---|---|
-| `semantic_search` | Hybrid FTS5 + vector cosine similarity search | `semantic_search({query: "authentication flow"})` |
-| `find_similar` | Find symbols similar by embedding proximity | `find_similar({name: "AuthService"})` |
-
-> `semantic_search` and `find_similar` require `milens analyze --embeddings` to generate vector embeddings.
-
-### Resources & Prompts
-
-**4 Resources:** `milens://overview`, `milens://symbol/{name}`, `milens://file/{path}`, `milens://domain/{name}`
-
-**3 Guided Prompts:** `delete-feature`, `refactor-symbol`, `explore-symbol` — each triggers a multi-step workflow using the tools above.
-
----
-
-## Tool Examples
-
-### Impact Analysis
-
-```
-impact({target: "createUser"})
-
-TARGET: createUser [function] src/models.ts:42
-
-  [depth 1] AuthService [class] src/auth.ts:15 (calls)
-  [depth 1] UserController [class] src/controllers/user.ts:8 (calls)
-  [depth 2] handleLogin [function] src/routes.ts:23 (calls)
-
-3 dependents across 2 depths
-```
-
-### Context (360° Symbol View)
+### Context — 360° Symbol View
 
 ```
 context({name: "AuthService"})
 
 AuthService [class] src/auth.ts:15 (exported)
+role: hub | heat: 0.85
 
 incoming (3):
   calls: handleLogin [function] src/routes.ts:23
@@ -383,238 +300,397 @@ outgoing (3):
   calls: createUser [function] src/models.ts:42
 ```
 
-### Edit Check (Pre-Edit Safety)
+### Impact — Blast Radius
 
 ```
-edit_check({name: "resolveLinks"})
+impact({target: "createUser", direction: "upstream", depth: 3})
 
-resolveLinks [function] src/analyzer/resolver.ts:45 (exported)
+TARGET: createUser [function] src/models.ts:42
 
-callers (2):
-  analyze [function] src/analyzer/engine.ts:89
-  resolveLinksForFile [function] src/analyzer/resolver.ts:120
+  [depth 1] WILL BREAK:
+    AuthService [class] src/auth.ts:15 (calls)
+    UserController [class] src/controllers/user.ts:8 (calls)
 
-re-exported via:
-  src/analyzer/index.ts:3
+  [depth 2] LIKELY AFFECTED:
+    handleLogin [function] src/routes.ts:23 (calls)
+    handleRegister [function] src/routes.ts:45 (calls)
 
-✓ has test coverage
-⚠ 2 direct callers will be affected
+  [depth 3] MAY NEED TESTING:
+    authRouter [variable] src/routes.ts:1 (imports)
+    adminDashboard [function] src/admin.ts:10 (calls)
+
+5 dependents across 3 depths
 ```
 
-### Smart Context (Intent-Aware)
+### Review PR — Risk Assessment
 
 ```
-smart_context({name: "UserService", intent: "edit"})
+review_pr({})
 
-UserService [class] src/services/user.ts:10 (exported)
-role: hub | heat: 0.85
+PR Risk Assessment (vs HEAD):
+  6 changed files, 12 affected symbols
 
-callers (5):
-  handleLogin, handleRegister, UserController, AdminController, testUserService
-direct dependencies (3):
-  User [class], hashPassword [function], db [variable]
-indirect dependents (depth 2): 8 symbols
-re-exported via: src/services/index.ts:2
-✓ has test coverage
+  handlePayment [function] src/payment.ts:30 — heat:92 deps:15 test:no → CRITICAL(85)
+  checkoutRoute [function] src/routes/checkout.ts:5 — heat:78 deps:8 test:yes → HIGH(58)
+  UserModel [class] src/models.ts:20 — heat:65 deps:3 test:yes → MEDIUM(35)
+  formatCurrency [function] src/utils.ts:45 — heat:10 deps:0 test:no → LOW(15)
+
+Summary: CRITICAL=1 HIGH=2 MEDIUM=4 LOW=5
 ```
 
-### Routes Detection
+### Security Scan — 50 Rules at Once
 
 ```
-routes({})
+security_scan({scope: "all", severity: "HIGH"})
 
-11 routes detected:
-
-[express]
-  GET     /api/users  (src/routes/users.ts:12) → getUsers [function]
-  POST    /api/users  (src/routes/users.ts:25) → createUser [function]
-
-[nestjs]
-  GET     /auth/login (src/auth/auth.controller.ts:15) → login [method]
+{
+  "summary": {
+    "totalScanned": 1240,
+    "findings": 8,
+    "bySeverity": { "CRITICAL": 1, "HIGH": 3, "MEDIUM": 4 },
+    "score": 78
+  },
+  "findings": [
+    {
+      "ruleId": "SEC-001",
+      "category": "secrets",
+      "severity": "CRITICAL",
+      "owasp": "A02:2021",
+      "file": "src/config.ts",
+      "line": 15,
+      "match": "password = 'admin123'",
+      "fix": "Move to environment variable: process.env.DB_PASSWORD"
+    },
+    {
+      "ruleId": "SEC-011",
+      "category": "injection",
+      "severity": "HIGH",
+      "owasp": "A03:2021",
+      "file": "src/routes/admin.ts",
+      "line": 42,
+      "match": "eval(userInput)",
+      "fix": "Replace eval() with a safe parser or validator"
+    }
+  ]
+}
 ```
 
 ---
 
-## Editor Setup
+## Sub-agent Prompts (6)
 
-### Editor Support
+Instead of chaining 5-10 tools manually, your agent calls one prompt:
 
-| Editor | MCP | Skills |
+| Prompt | Input | Workflow |
 |---|---|---|
-| **VS Code / Copilot** | ✓ | ✓ |
-| **Cursor** | ✓ | ✓ |
-| **Claude Code** | ✓ | ✓ |
-| **Windsurf** | ✓ | ✓ |
-| **Codex** | ✓ | — |
+| `milens-planner` | Feature description | Research → Analyze Target → Predict Impact → Plan Tests → **Implementation Plan** |
+| `milens-reviewer` | Change description | Scan PR → Deep-dive Symbols → Find Dead Code → Text Search → **Review Report** |
+| `milens-tester` | Symbol name | Find Gaps → Generate Plan → Implement → Verify → **Coverage Report** |
+| `milens-architect` | (none) | Overview → Domains → Routes → Hierarchy → Connections → **Architecture Analysis** |
+| `milens-security` | (none) | Scan PR → Secrets → Unicode → Dangerous → Data Leak → **Security Audit** |
+| `milens-debugger` | Target + error | Context → Trace Execution → Impact → Find Relationship → **Root Cause Analysis** |
 
-### VS Code / GitHub Copilot
+---
+
+## CLI Commands
+
+```
+milens init [--profile minimal|standard|full] [--interactive]    Bootstrap a project
+milens analyze [-p .] [--force] [--skills] [--embeddings]        Index a codebase
+milens serve [-p .] [--http] [--port 3100] [--profile minimal]   Start MCP server
+milens workflow <name>                                            Run predefined pipeline
+milens security scan [--scope secrets] [--severity HIGH]          Security audit
+milens security deps                                              Dependency CVE check
+milens hooks enable|disable|list|profile                          Manage automation
+milens watch [--debounce 2000]                                    Auto re-index on change
+milens evolve [--schedule install|uninstall|status]               Promote learned patterns
+milens metrics                                                    TER, CQI, BRR, CTR...
+milens search <query> [--limit 50]                                Find symbols
+milens inspect <symbol>                                           Incoming + outgoing deps
+milens impact <symbol> [-d downstream] [--depth 2]                Blast radius
+milens status [-p .]                                              Index health
+milens list                                                       All indexed repos
+milens clean [-p .] [--all]                                       Remove index
+milens dashboard [--port 8080]                                    Usage analytics
+```
+
+### Workflow Examples
 
 ```bash
-npx milens analyze -p .                     # index your repo (run once)
+milens workflow tdd                          # Find test gaps → plan → verify
+milens workflow review                       # PR review → risk scores → dead code
+milens workflow plan "Add Stripe billing"    # Full implementation plan
+milens workflow onboard                      # Session startup checklist
+milens workflow security-scan                # All 50 rules at once
 ```
 
-Add to `.vscode/mcp.json`:
+### Profile Selection
 
-```json
-{
-  "servers": {
-    "milens": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "milens", "serve", "-p", "${workspaceFolder}"]
-    }
-  }
-}
-```
-
-<details>
-<summary><strong>Other Editors</strong></summary>
-
-#### Cursor
-
-Add to `.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "milens": {
-      "command": "npx",
-      "args": ["-y", "milens", "serve", "-p", "."]
-    }
-  }
-}
-```
-
-#### Claude Code
+Control how many tools are active to optimize token overhead:
 
 ```bash
-claude mcp add milens -- npx -y milens serve -p .
+MILENS_PROFILE=minimal milens serve          # 10 tools — ~500 token overhead
+MILENS_PROFILE=standard milens serve         # 25 tools — full daily coding
+milens serve --profile full                  # 33 tools — everything
 ```
 
-#### Windsurf
+---
 
-Add to `~/.codeium/windsurf/mcp_config.json`:
+## Security (50+ Rules)
 
-```json
-{
-  "mcpServers": {
-    "milens": {
-      "command": "npx",
-      "args": ["-y", "milens", "serve", "-p", "."]
-    }
-  }
-}
+All 50 rules map to **OWASP Top 10 (2021)**. One tool call covers what used to take 10 manual greps.
+
+| Category | Rules | Detects |
+|---|---|---|
+| **secrets** | 10 | AWS keys, GitHub tokens, OpenAI keys, private keys, hardcoded passwords |
+| **injection** | 9 | SQL injection, XSS, command injection, `eval()`, `exec()`, dangerous DOM |
+| **unicode** | 4 | Zero-width chars, bidi override, homoglyph attacks |
+| **dangerous** | 7 | `os.system`, `subprocess shell`, unsafe deserialization, `spawn shell` |
+| **config** | 5 | CORS wildcards, insecure cookies, debug mode, `--dangerously-skip-permissions` |
+| **data-leak** | 5 | `console.log` of secrets, hardcoded URLs |
+| **crypto** | 4 | MD5, SHA1, `Math.random()` for crypto, hardcoded salt/IV |
+| **auth** | 4 | String comparison, missing middleware, JWT without expiry, session in URL |
+| **file-access** | 2 | Path traversal, unsafe file reads |
+
+```bash
+milens security scan --scope secrets --severity HIGH --format json
+milens security deps                    # Offline CVE check (34 known vulns, 5 ecosystems)
 ```
 
-#### Codex
+From an AI agent: `security_scan({scope: "all", severity: "HIGH"})`
 
-Add to `.codex/config.toml`:
+---
 
-```toml
-[mcp_servers.milens]
-command = "npx"
-args = ["-y", "milens", "serve", "-p", "."]
+## Hook System (6 Triggers)
+
+Automation so your agent never forgets:
+
+| Hook | When | Default Action |
+|---|---|---|
+| `onSessionStart` | Agent begins work | Refresh index + codebase_summary + recall past warnings |
+| `onSessionEnd` | Agent finishes | detect_changes + review_pr + auto-annotate changed symbols |
+| `onPreCommit` | Before `git commit` | detect_changes + review_pr + find_dead_code |
+| `onFileChange` | Files modified | Re-analyze changed files + impact on affected symbols |
+| `onPreCompact` | Before context window compaction | Save codebase_summary snapshot |
+| `onPostCompact` | After compaction | recall annotations to restore lost context |
+
+```bash
+milens hooks enable                          # Turn on all hooks
+milens hooks profile standard                # Preset: SessionStart, SessionEnd, PreCommit
+milens hooks disable --hook preCommit        # Turn off one hook
 ```
 
-</details>
+---
+
+## Learning & Evolution
+
+The system gets smarter every session:
+
+```
+SESSION 1:  Agent finds bug in createUser()
+            → annotate({symbol: "createUser", key: "bug", value: "Call createUser() before normalizeEmail()"})
+            → confidence: 0.5
+
+SESSION 2:  Agent auto-recalls the annotation
+            → "I know createUser() has a known issue. I'll handle the order correctly."
+            → Bug avoided. confidence ↑ 0.7
+
+SESSION 5:  Confidence reaches 0.9
+            → milens evolve promotes it to .agents/skills/milens-bug/SKILL.md
+            → Now enforced as a rule for every future session
+```
+
+```bash
+milens evolve                           # Promote high-confidence patterns now
+milens evolve --schedule install        # Auto-run weekly (cron/schtasks)
+```
 
 ---
 
 ## Supported Languages
 
-| Language | Extensions | Imports | Calls | Heritage | Frameworks |
-|---|---|---|---|---|---|
-| TypeScript | `.ts` `.tsx` | ✓ ESM + require | ✓ + decorators | ✓ extends/implements | NestJS, React JSX |
-| JavaScript | `.js` `.jsx` `.mjs` `.cjs` | ✓ ESM + require | ✓ | ✓ | React JSX, Express |
-| Python | `.py` | ✓ + relative | ✓ + decorators | ✓ | FastAPI, Flask, Django |
-| Java | `.java` | ✓ + static | ✓ + annotations, new | ✓ | Spring |
-| Go | `.go` | ✓ + go.mod | ✓ | ✓ embedding | net/http, Gin |
-| Rust | `.rs` | ✓ | ✓ + macros | ✓ | — |
-| PHP | `.php` | ✓ + include | ✓ + static, new | ✓ + traits | Laravel |
-| Ruby | `.rb` | ✓ | ✓ | ✓ | Rails, Sinatra |
-| Vue | `.vue` | ✓ | ✓ template refs | ✓ | Vue 3 SFC |
-| HTML | `.html` `.htm` | ✓ `<script src>` `<link>` | ✓ inline `<script>` | — | — |
-| CSS | `.css` | ✓ `@import` | — | — | Custom properties |
-| Markdown | `.md` `.mdx` | ✓ local `[links]()` | — | — | Headings → section symbols, parent-child hierarchy |
+12 languages through tree-sitter:
+
+| Language | Files | Imports | Calls | Heritage |
+|---|---|---|---|---|
+| TypeScript | `.ts` `.tsx` | ESM + CJS + decorators | ✓ + decorators | extends / implements |
+| JavaScript | `.js` `.jsx` `.mjs` `.cjs` | ESM + CJS | ✓ | extends |
+| Python | `.py` | import + relative | ✓ + decorators | extends |
+| Java | `.java` | import + static | ✓ + annotations | extends / implements |
+| Go | `.go` | import + go.mod | ✓ | embedding |
+| Rust | `.rs` | use | ✓ + macros | trait impl |
+| PHP | `.php` | use + include | ✓ + static, new | extends + traits |
+| Ruby | `.rb` | require | ✓ | extends |
+| Vue | `.vue` | ESM | ✓ template refs | extends |
+| HTML | `.html` `.htm` | `<script src>` `<link>` | ✓ inline | — |
+| CSS | `.css` | `@import` | — | — |
+| Markdown | `.md` `.mdx` | local `[links]()` | — | headings as sections |
+
+**Framework detection** (via `routes()`)**: Express, FastAPI, NestJS, Flask, Django, Go net/http, Gin, PHP Laravel, Rails, Sinatra, Spring.
 
 ---
 
-## Architecture
+## Editor & Harness Support
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/fuze210699/milens/develop/docs/diagram2.svg" alt="milens architecture: Indexing Pipeline → MCP Server → AI Agent" width="700">
-</p>
+Milens works with any MCP-compatible agent. Two ways to use:
 
-### How it works
+| | MCP Server | CLI |
+|---|---|---|
+| **What** | Real-time tools for AI agents during coding | Direct commands from terminal |
+| **For** | Daily development with AI agents | Scripts, CI/CD, one-off analysis |
+| **Setup** | Add MCP config to editor | `npm install -g milens` |
+| **Tools** | All 33 tools + 6 prompts | Full CLI command set |
+| **Example** | Agent calls `impact()` before editing | `milens security scan --scope secrets` |
 
-1. **Scan** — find all source files matching supported extensions
-2. **Parse** — tree-sitter extracts symbols (functions, classes, methods, etc.) and raw references (imports, calls, extends)
-3. **Resolve** — cross-file link resolution: match import paths to files, match call names to symbol definitions
-4. **Enrich** — compute roles (entrypoint/hub/utility/leaf), heat scores, domain clusters
-5. **Persist** — store everything in SQLite with FTS5 search and recursive CTEs for graph traversal
+**Harness adapters available for 7 editors:**
 
-### Multi-Repo
+| Harness | Config File | Recommended Profile |
+|---|---|---|
+| **Claude Code** | `.claude/mcp.json` | standard (25 tools) |
+| **OpenCode** | `.opencode/config.json` | standard |
+| **VS Code / Copilot** | `.vscode/mcp.json` | standard |
+| **Cursor** | `.cursorrules` | standard |
+| **Codex** | `.codex/codex.md` | standard |
+| **Gemini** | `.gemini/context.md` | minimal (10 tools) |
+| **Zed** | `.zed/settings.json` | minimal |
 
-milens uses a global registry (`~/.milens/`) — one MCP server serves all indexed repos. Pass `repo` to target a specific one when multiple are registered.
+Each adapter is in the `adapters/` directory with ready-to-copy config files and agent instructions.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/fuze210699/milens/develop/docs/diagram3.svg" alt="Multi-repo architecture" width="500">
-</p>
+---
 
-### Design Decisions
+## Metrics
 
-| Decision | Rationale |
-|---|---|
-| **Declarative LangSpec** | Each language = 1 config object with tree-sitter queries. One universal extractor for all 12 languages |
-| **SQLite + recursive CTE** | Impact analysis runs entirely in the database — no full graph in memory |
-| **Token-compact output** | `name [kind] file:line` format — saves 40-60% tokens for AI |
-| **Incremental by hash** | SHA-256 file hashing — only changed files get re-parsed |
-| **Localhost-only HTTP** | Binds `127.0.0.1` — no network exposure without explicit intent |
+Seven quantified metrics for AI-driven development:
 
-### Tech Stack
+```
+$ milens metrics
 
-| Layer | Technology |
-|---|---|
-| **Runtime** | Node.js ≥ 20 |
-| **Language** | TypeScript (ESM) |
-| **Parsing** | tree-sitter (WASM bindings) |
-| **Database** | SQLite (better-sqlite3) + FTS5 |
-| **Graph traversal** | Recursive CTEs |
-| **Agent protocol** | MCP (stdio + StreamableHTTP) |
-| **Testing** | Vitest (136 tests) |
+╔══════════════════════════════════════════════╗
+║         Milens Metrics Report               ║
+╠══════════════════════════════════════════════╣
+║ TER:   Token Efficiency Ratio       0.85     ║
+║ LR:    Learning Rate                0.59     ║
+║ CQI:   Code Quality Index           7.2/10   ║
+║ BRR:   Bug Recurrence Rate          8%       ║
+║ TCGR:  Test Coverage Growth Rate    5.2%/wk  ║
+║ DCER:  Dead Code Elimination Rate   3%       ║
+║ CTR:   Cycle Time Reduction         67%      ║
+╚══════════════════════════════════════════════╝
+```
+
+| Metric | Full Name | What It Tracks |
+|---|---|---|
+| **TER** | Token Efficiency Ratio | Useful tokens ÷ total tokens |
+| **LR** | Learning Rate | Savings gained ÷ savings possible |
+| **CQI** | Code Quality Index | Coverage + security + coupling + docs |
+| **BRR** | Bug Recurrence Rate | Bugs repeated ÷ total fixed |
+| **TCGR** | Test Coverage Growth Rate | Weekly coverage improvement |
+| **DCER** | Dead Code Elimination Rate | Dead symbols ÷ total exported |
+| **CTR** | Cycle Time Reduction | Time saved vs manual approach |
 
 ---
 
 ## Security & Privacy
 
-milens is **offline by design** — zero network calls, zero telemetry.
+**Zero network. Zero telemetry. Zero data leaving your machine.**
 
-| Layer | Protection |
+| Layer | Guarantee |
 |---|---|
-| **Data locality** | Index lives in `.milens/` per repo (gitignored). No source code stored in registry |
-| **HTTP transport** | Binds to `127.0.0.1` only — requires explicit `--http` flag |
-| **User-supplied regex** | Validated against ReDoS patterns |
-| **FTS5 queries** | Each token quoted as a literal — no query injection |
-| **File access** | All reads bounded to the repo root — no path traversal |
-| **Git integration** | `execFileSync` with argument arrays — no shell interpolation |
+| **Data** | Index stored in `.milens/` per repo (gitignored). No source code in registry. |
+| **Network** | HTTP binds `127.0.0.1` only. No outbound connections. |
+| **Input** | User regex validated against ReDoS. FTS5 tokens quoted as literals. |
+| **File access** | All paths bounded to repo root. No traversal possible. |
+| **Git** | `execFileSync` with arg arrays. No shell interpolation. |
+| **Embeddings** | Optional. Generated locally via Xenova transformers. No API calls. |
+
+---
+
+## Pricing
+
+| Tier | Price | Key Features |
+|---|---|---|
+| **Free** | $0 | All 33 tools, public repos, 50+ security rules, CLI, community support. MIT core. |
+| **Pro** | $19/seat/mo | Private repos, GitHub App, advanced scanning, priority support, custom skills |
+| **Enterprise** | Contact | SSO/SAML, audit logging, on-prem, custom rules, SLAs, rollout consulting |
+
+OSS stays free forever. [Full pricing details →](docs/pricing.md)
+
+---
+
+## What's New in v0.7.0
+
+- **6 Sub-agent MCP Prompts** — planner, reviewer, tester, architect, security-auditor, debugger. One prompt replaces 5-10 chained tool calls.
+- **50+ Built-in Security Rules** — OWASP Top 10 mapped. `security_scan()` replaces 10 manual greps. Dependency audit for 5 ecosystems.
+- **Hook System** — 6 event triggers (SessionStart, SessionEnd, PreCommit, FileChange, PreCompact, PostCompact). Auto-annotate, auto-recall.
+- **`milens init`** — One-command bootstrap: analyze + AGENTS.md + skill files + security rules + pre-commit hooks.
+- **`milens workflow`** — 7 predefined pipelines: tdd, review, plan, security-scan, refactor, onboard, handoff.
+- **Selective Profiles** — `minimal` (10 tools), `standard` (25), `full` (33). Control token overhead.
+- **Watch Mode** — Auto re-index on file changes. `milens watch`.
+- **Scheduled Evolve** — Auto-promote high-confidence patterns to skills. `milens evolve --schedule install`.
+- **7 Harness Adapters** — Claude Code, OpenCode, Codex, Cursor, Copilot, Gemini, Zed.
+- **GitHub App** — Probot-based app for automated PR review and `/milens analyze` on repos.
+- **Desktop Dashboard** — Electron-based desktop app with 6 tabs (Overview, Domains, Learning, Metrics, Security, Settings).
+- **Interactive Installer** — `milens init --interactive` walks through every option step by step.
+
+[Full changelog →](https://github.com/fuze210699/milens/releases)
+
+---
+
+## Environment Variables
+
+| Variable | Default | Effect |
+|---|---|---|
+| `MILENS_PROFILE` | (unset = full) | Tool set: `minimal` (10 tools), `standard` (25), `full` (33) |
+| `MILENS_VERSION` | (from package.json) | Override version reported in MCP server metadata |
+
+Use in MCP config:
+```json
+{
+  "mcpServers": {
+    "milens": {
+      "command": "npx",
+      "args": ["-y", "milens", "serve"],
+      "env": { "MILENS_PROFILE": "standard" }
+    }
+  }
+}
+```
+
+Or from CLI:
+```bash
+MILENS_PROFILE=minimal milens serve
+```
 
 ---
 
 ## Development
 
 ```bash
-npm install              # install dependencies
-npm run build            # tsc → dist/
-npm test                 # vitest (136 tests)
-npm run lint             # tsc --noEmit
-npm run self-analyze     # index this repo
-npm run self-serve       # start MCP server on port 3100
+git clone https://github.com/fuze210699/milens.git
+cd milens
+npm install
+npm run build          # tsc → dist/
+npm test               # vitest (136 tests)
+npm run lint           # tsc --noEmit
+npm run self-analyze   # Index milens with milens
+npm run self-serve     # Start MCP on port 3100
 ```
+
+**Tech Stack:** TypeScript (ESM) · tree-sitter (WASM) · SQLite (better-sqlite3 + FTS5) · MCP SDK · Vitest · Commander
 
 ---
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](https://github.com/fuze210699/milens/blob/develop/LICENSE)
+Core (analyzer, parser, store, CLI, MCP tools): **MIT License**
+Advanced features (GitHub App, enterprise): Commercial license
+See [LICENSE](LICENSE) for details.
 
-Architectural inspiration from [GitNexus](https://github.com/abhigyanpatwari/GitNexus) by Abhigyan Patwari.
+---
+
+<p align="center">
+  <a href="https://github.com/fuze210699/milens">GitHub</a> ·
+  <a href="https://github.com/fuze210699/milens/tree/main/docs">Docs</a> ·
+  <a href="https://github.com/fuze210699/milens/blob/main/docs/pricing.md">Pricing</a> ·
+  <a href="https://github.com/fuze210699/milens/blob/main/CONTRIBUTING.md">Contribute</a>
+</p>

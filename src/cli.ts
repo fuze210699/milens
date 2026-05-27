@@ -259,11 +259,23 @@ program
 
     const { Database } = await import('./store/db.js');
     const db = new Database(trackDbPath);
-    const stats = db.getToolUsageStats();
+    
+    // Determine repo filter from --path
+    let repoFilter: string | undefined;
+    if (opts.path) {
+      repoFilter = resolve(opts.path);
+    }
+    
+    const stats = db.getToolUsageStats(repoFilter);
     db.close();
 
     if (stats.totalCalls === 0) {
-      console.log('No usage data yet. Use milens MCP tools first, then check back.');
+      if (repoFilter) {
+        console.log(`No usage data for ${repoFilter}. Use milens MCP tools with this repo first.`);
+        console.log(`Tip: run 'milens dashboard' without --path to see all repos.`);
+      } else {
+        console.log('No usage data yet. Use milens MCP tools first, then check back.');
+      }
       return;
     }
 
@@ -294,7 +306,7 @@ program
       } catch { /* annotation data is optional */ }
     }
 
-    const html = generateDashboardHtml(stats, annotationStats);
+    const html = generateDashboardHtml(stats, annotationStats, repoFilter);
     const port = parseInt(opts.port);
 
     const server = createHttpServer((req, res) => {
@@ -302,10 +314,10 @@ program
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(html);
       } else if (req.url === '/api/stats') {
-        // Live refresh endpoint — re-read DB
+        // Live refresh endpoint — re-read DB with repo filter
         try {
           const liveDb = new Database(trackDbPath);
-          const liveStats = liveDb.getToolUsageStats();
+          const liveStats = liveDb.getToolUsageStats(repoFilter);
           liveDb.close();
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(liveStats));
@@ -342,6 +354,7 @@ program
   .command('evolve')
   .description('Promote high-confidence annotations to rules/skills, flag stale patterns')
   .option('-p, --path <path>', 'Repository root path', '.')
+  .option('-s, --schedule <action>', 'daily|weekly|install|uninstall|status')
   .action(async (opts) => {
     const { Database } = await import('./store/db.js');
     const { RepoRegistry } = await import('./store/registry.js');
@@ -354,6 +367,111 @@ program
     if (!dbPath) { console.error('Not indexed. Run `milens analyze` first.'); process.exit(1); }
     const db = new Database(dbPath);
     const store = new AnnotationStore(db.connection);
+
+    // Handle scheduled evolve
+    if (opts.schedule) {
+      const { execSync } = await import('node:child_process');
+      const { homedir } = await import('node:os');
+      const { join, dirname } = await import('node:path');
+      const milensBin = process.argv[1] || 'milens';
+
+      switch (opts.schedule) {
+        case 'install': {
+          const scheduleType = opts.scheduleType || 'weekly';
+          const cmd = `node ${process.argv[1]} evolve -p "${resolve(opts.path)}"`;
+
+          if (process.platform === 'win32') {
+            // Windows Scheduled Task
+            const taskName = 'MilensEvolve';
+            const scriptPath = join(homedir(), '.milens', 'evolve.bat');
+            try {
+              mkdirSync(dirname(scriptPath), { recursive: true });
+              writeFileSync(scriptPath, `@echo off\ncd /d "${resolve(opts.path)}"\n${cmd}\n`);
+              const interval = scheduleType === 'daily' ? 'DAILY' : 'WEEKLY';
+              execSync(`schtasks /Create /SC ${interval} /TN "${taskName}" /TR "${scriptPath}" /F`, { stdio: 'pipe' });
+              console.log(`✓ Scheduled task "${taskName}" created (${scheduleType})`);
+            } catch (e: any) {
+              console.error(`✗ Failed to create scheduled task: ${e.message}`);
+              console.log('  You can manually run: milens evolve');
+            }
+          } else {
+            // Linux/macOS cron
+            const cronSchedule = scheduleType === 'daily' ? '0 6 * * *' : '0 6 * * 1';
+            const cronEntry = `${cronSchedule} cd "${resolve(opts.path)}" && ${cmd} >> ~/.milens/evolve.log 2>&1`;
+            try {
+              const current = execSync('crontab -l 2>/dev/null || echo ""', { encoding: 'utf-8' }).trim();
+              const newCron = current ? `${current}\n${cronEntry}` : cronEntry;
+              const tmpFile = join(homedir(), '.milens', 'crontab.tmp');
+              mkdirSync(dirname(tmpFile), { recursive: true });
+              writeFileSync(tmpFile, newCron + '\n');
+              execSync(`crontab "${tmpFile}"`, { stdio: 'pipe' });
+              console.log(`✓ Cron job installed (${scheduleType})`);
+            } catch (e: any) {
+              console.error(`✗ Failed to install cron job: ${e.message}`);
+              console.log('  Add this to your crontab:');
+              console.log(`  ${cronEntry}`);
+            }
+          }
+          break;
+        }
+        case 'uninstall': {
+          if (process.platform === 'win32') {
+            try {
+              execSync('schtasks /Delete /TN "MilensEvolve" /F', { stdio: 'pipe' });
+              console.log('✓ Scheduled task "MilensEvolve" removed');
+            } catch {
+              console.log('No scheduled task found.');
+            }
+          } else {
+            try {
+              const current = execSync('crontab -l 2>/dev/null || echo ""', { encoding: 'utf-8' });
+              const filtered = current.split('\n').filter(line => !line.includes('milens evolve')).join('\n');
+              const tmpFile = join(homedir(), '.milens', 'crontab.tmp');
+              writeFileSync(tmpFile, filtered);
+              execSync(`crontab "${tmpFile}"`, { stdio: 'pipe' });
+              console.log('✓ Milens cron job removed');
+            } catch {
+              console.log('No cron job found.');
+            }
+          }
+          break;
+        }
+        case 'status': {
+          if (process.platform === 'win32') {
+            try {
+              const result = execSync('schtasks /Query /TN "MilensEvolve"', { encoding: 'utf-8' });
+              console.log('Scheduled task: ACTIVE');
+              console.log(result.split('\n').slice(2).join('\n'));
+            } catch {
+              console.log('No scheduled task configured.');
+              console.log('Run: milens evolve --schedule install');
+            }
+          } else {
+            try {
+              const cron = execSync('crontab -l 2>/dev/null || echo ""', { encoding: 'utf-8' });
+              const milensLines = cron.split('\n').filter(l => l.includes('milens evolve'));
+              if (milensLines.length > 0) {
+                console.log('Scheduled cron jobs:');
+                milensLines.forEach(l => console.log(`  ${l}`));
+              } else {
+                console.log('No cron job configured.');
+                console.log('Run: milens evolve --schedule install');
+              }
+            } catch {
+              console.log('No cron job configured.');
+            }
+          }
+          break;
+        }
+        default:
+          console.log(`Unknown schedule action: ${opts.schedule}`);
+          console.log('Use: install, uninstall, status');
+      }
+
+      // Don't run evolve after schedule management
+      db.close();
+      return;
+    }
 
     // 1. Run decay pass
     const { decayed, archived } = runDecayPass(store);
@@ -432,6 +550,473 @@ program
     db.close();
   });
 
+program
+  .command('workflow <name>')
+  .description('Run a predefined milens workflow')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .option('--format <format>', 'Output format: table|json|markdown', 'table')
+  .action(async (name: string, opts) => {
+    const { Database } = await import('./store/db.js');
+    const { RepoRegistry } = await import('./store/registry.js');
+    const { AnnotationStore } = await import('./store/annotations.js');
+
+    const dbPath = new RepoRegistry().findDbPath(resolve(opts.path));
+    if (!dbPath) { console.error('Not indexed. Run `milens analyze` first.'); process.exit(1); }
+    const db = new Database(dbPath);
+    const root = resolve(opts.path);
+
+    switch (name) {
+      case 'tdd': {
+        const coverage = db.getTestCoverage();
+        console.log(`Test Coverage Gaps:`);
+        console.log(`  Exported: ${coverage.exportedProductionSymbols} | Tested: ${coverage.testedSymbols} | Coverage: ${Math.round(coverage.testedSymbols/Math.max(1,coverage.exportedProductionSymbols)*100)}%`);
+        console.log(`\nRun test_coverage_gaps() via MCP for prioritized list.`);
+        break;
+      }
+      case 'review': {
+        console.log('PR Review Report:');
+        try {
+          const { execSync } = await import('node:child_process');
+          const diff = execSync('git diff --name-only HEAD', { cwd: root, encoding: 'utf-8' }).trim();
+          const changedFiles = diff ? diff.split('\n').filter(Boolean) : [];
+          if (changedFiles.length === 0) {
+            console.log('  No changed files detected.');
+          } else {
+            console.log(`  ${changedFiles.length} changed files`);
+            for (const file of changedFiles.slice(0, 15)) {
+              const syms = db.getSymbolsByFile(file);
+              if (syms.length > 0) {
+                for (const sym of syms.slice(0, 5)) {
+                  const incoming = db.getIncomingLinks(sym.id).filter((l: any) => l.type !== 'contains');
+                  const depsCount = incoming.length;
+                  const heat = sym.heat ?? 0;
+                  const hasTest = db.getSymbolTestCoverage(sym.id);
+                  const score = Math.round((heat / 100) * 40 + Math.min(depsCount / 10, 1) * 35 + (hasTest ? 0 : 25));
+                  let level = 'LOW';
+                  if (score > 75) level = 'CRITICAL';
+                  else if (score > 50) level = 'HIGH';
+                  else if (score > 25) level = 'MEDIUM';
+                  console.log(`    ${sym.name} [${sym.kind}] ${file} — heat:${heat} deps:${depsCount} → ${level}(${score})`);
+                }
+              }
+            }
+          }
+        } catch {
+          console.log('  review_pr requires MCP server. Use milens serve and call via MCP.');
+        }
+        break;
+      }
+      case 'plan': {
+        const summary = db.getCodebaseSummary();
+        console.log(`Codebase Summary: ${summary.symbols} symbols, ${summary.links} links, ${summary.files} files`);
+        if (summary.domains.length > 0) {
+          console.log(`Domains: ${summary.domains.map((d: any) => `${d.domain}(${d.symbols}s)`).join(', ')}`);
+        }
+        if (summary.topHubs.length > 0) {
+          console.log(`Top hubs: ${summary.topHubs.map((h: any) => `${h.name}(${h.kind},heat:${h.heat})`).join(', ')}`);
+        }
+        break;
+      }
+      case 'onboard': {
+        const summary = db.getCodebaseSummary();
+        console.log(`Milens Onboarding Report:`);
+        console.log(`  Symbols: ${summary.symbols} | Links: ${summary.links} | Files: ${summary.files}`);
+        console.log(`  Coverage: ${summary.coveragePct}%`);
+        console.log(`\nSession startup — call:`);
+        console.log(`  1. session_start() → codebase_summary() → recall()`);
+        break;
+      }
+      default:
+        console.log(`Unknown workflow: ${name}`);
+        console.log(`Available: tdd, review, plan, onboard, security-scan, refactor, handoff`);
+    }
+    db.close();
+  });
+
+program
+  .command('init')
+  .description('Bootstrap milens for a project: index + AGENTS.md + skills + hooks')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .option('--profile <profile>', 'minimal|standard|full', 'standard')
+  .option('--with <modules>', 'Comma-separated extra modules (security,ci,hooks)')
+  .option('--interactive', 'Interactive install mode')
+  .action(async (opts) => {
+    const root = resolve(opts.path);
+
+    // Interactive install mode
+    if (opts.interactive) {
+      const { createInterface } = await import('node:readline');
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+      const ask = (q: string): Promise<string> => new Promise(resolve => rl.question(q, resolve));
+
+      console.log('\n╔══════════════════════════════════════╗');
+      console.log('║   Milens Interactive Installer       ║');
+      console.log('╚══════════════════════════════════════╝\n');
+
+      // Profile selection
+      console.log('Choose a profile:');
+      console.log('  1. minimal  — Core tools only (10 tools, ~500 token overhead)');
+      console.log('  2. standard — Full vibe coding toolkit (25 tools) [Recommended]');
+      console.log('  3. full     — Everything including experimental features (33 tools)');
+      const profileChoice = await ask('\nProfile [2]: ');
+      const profileMap: Record<string, string> = { '1': 'minimal', '2': 'standard', '3': 'full', '': 'standard' };
+      opts.profile = profileMap[profileChoice.trim()] || 'standard';
+
+      // Security rules
+      const securityChoice = await ask('Include security scanning rules? [Y/n]: ');
+      opts.with = opts.with || '';
+      if (securityChoice.trim().toLowerCase() !== 'n') {
+        opts.with += (opts.with ? ',' : '') + 'security';
+      }
+
+      // CI/CD templates
+      const ciChoice = await ask('Include CI/CD templates (GitHub Actions)? [Y/n]: ');
+      if (ciChoice.trim().toLowerCase() !== 'n') {
+        opts.with += (opts.with ? ',' : '') + 'ci';
+      }
+
+      // Git hooks
+      const hooksChoice = await ask('Install pre-commit hooks? [Y/n]: ');
+      if (hooksChoice.trim().toLowerCase() !== 'n') {
+        opts.with += (opts.with ? ',' : '') + 'hooks';
+      }
+
+      // Harness adapters
+      console.log('\nTarget harnesses (comma-separated):');
+      console.log('  claude-code, opencode, codex, cursor, copilot, gemini, zed, all');
+      const harnessChoice = await ask('Harnesses [all]: ');
+      const harnesses = harnessChoice.trim() || 'all';
+
+      // Generate command
+      const withFlags = opts.with ? `--with ${opts.with}` : '';
+      const harnessFlag = harnesses === 'all' ? '' : `--target ${harnesses}`;
+      console.log(`\nGenerated install command:`);
+      console.log(`  npx milens init --profile ${opts.profile} ${withFlags} ${harnessFlag}`.trim());
+
+      const confirm = await ask('\nProceed with install? [Y/n]: ');
+      if (confirm.trim().toLowerCase() === 'n') {
+        console.log('Install cancelled. Run the command above when ready.');
+        rl.close();
+        process.exit(0);
+      }
+
+      rl.close();
+      console.log();
+      // Continue with normal init flow...
+    }
+
+    const { Database } = await import('./store/db.js');
+    const { RepoRegistry } = await import('./store/registry.js');
+
+    console.log(`Milens init — bootstrapping ${opts.profile} profile for ${root}`);
+
+    const { execSync } = await import('node:child_process');
+    console.log('Step 1/4: Analyzing codebase...');
+    const milensBin = process.argv[1] || 'npx milens';
+    try {
+      const cmd = process.argv[0].includes('node')
+        ? `node ${process.argv[1]} analyze -p "${root}" --force`
+        : `npx milens analyze -p "${root}" --force`;
+      execSync(cmd, { stdio: 'pipe', cwd: root });
+    } catch (e: any) {
+      console.log('  (run `milens analyze -p . --force` manually if this fails)');
+    }
+
+    console.log('Step 2/4: Generating AGENTS.md...');
+    try {
+      const dbPath = new RepoRegistry().findDbPath(root);
+      if (dbPath) {
+        const db = new Database(dbPath);
+        const { generateAgentsMd } = await import('./agents-md.js');
+        const agentsMd = generateAgentsMd(db, root);
+        const { writeFileSync, mkdirSync, existsSync } = await import('node:fs');
+        if (!existsSync(root)) mkdirSync(root, { recursive: true });
+        writeFileSync(resolve(root, 'AGENTS.md'), agentsMd);
+        console.log('  ✓ AGENTS.md created');
+        db.close();
+      }
+    } catch (e: any) {
+      console.log(`  ⚠ AGENTS.md generation skipped: ${e.message}`);
+    }
+
+    if (opts.profile !== 'minimal') {
+      console.log('Step 3/4: Installing skill files...');
+      try {
+        const { cpSync, existsSync, mkdirSync } = await import('node:fs');
+        const { join: pathJoin } = await import('node:path');
+        const { fileURLToPath } = await import('node:url');
+        const skillSrc = pathJoin(resolve(fileURLToPath(import.meta.url), '..', '..'), '.agents', 'skills');
+        const skillDst = pathJoin(root, '.agents', 'skills');
+        if (existsSync(skillSrc)) {
+          if (!existsSync(skillDst)) mkdirSync(skillDst, { recursive: true });
+          cpSync(skillSrc, skillDst, { recursive: true });
+          console.log('  ✓ Skill files installed');
+        } else {
+          console.log('  ⚠ Skill template not found (run from milens repo)');
+        }
+      } catch (e: any) {
+        console.log(`  ⚠ Skill install skipped: ${e.message}`);
+      }
+    }
+
+    if (opts.profile === 'full' || (opts.with && opts.with.includes('hooks'))) {
+      console.log('Step 4/4: Installing git hooks...');
+      try {
+        const { writeFileSync, existsSync, mkdirSync, chmodSync } = await import('node:fs');
+        const hooksDir = resolve(root, '.git', 'hooks');
+        if (!existsSync(hooksDir)) {
+          mkdirSync(hooksDir, { recursive: true });
+        }
+
+        const preCommitContent = `#!/bin/bash
+# Auto-installed by milens init
+echo "Milens: Pre-commit check..."
+npx milens workflow review --path . 2>&1 || true
+echo "Milens: Done."
+`;
+        writeFileSync(resolve(hooksDir, 'pre-commit'), preCommitContent);
+        try { chmodSync(resolve(hooksDir, 'pre-commit'), 0o755); } catch {}
+        console.log('  ✓ Pre-commit hook installed');
+      } catch (e: any) {
+        console.log(`  ⚠ Hook install skipped: ${e.message}`);
+      }
+    }
+
+    console.log(`\n✓ Milens ${opts.profile} profile bootstrapped for ${root}`);
+    console.log('Next steps:');
+    console.log('  1. Open project in your AI coding agent (Claude Code, OpenCode, etc.)');
+    console.log('  2. AGENTS.md auto-loads with codebase context');
+    console.log('  3. Start a session: session_start({agent: "your-agent-name"})');
+  });
+
+program
+  .command('hooks <action>')
+  .description('Manage milens hook system')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .option('--hook <hook>', 'Hook name (sessionStart, sessionEnd, preCommit, fileChange, preCompact, postCompact)')
+  .action(async (action: string, opts) => {
+    const { HookManager } = await import('./server/hooks.js');
+    const manager = new HookManager();
+    const projectPath = resolve(opts.path);
+
+    switch (action) {
+      case 'enable': {
+        if (opts.hook) {
+          manager.enableHook(opts.hook, projectPath);
+          console.log(`Hook "${opts.hook}" enabled for ${projectPath}`);
+        } else {
+          const cfg = manager.loadConfig(projectPath);
+          cfg.enabled = true;
+          manager.saveConfig(cfg, projectPath);
+          console.log(`All hooks enabled for ${projectPath}`);
+        }
+        break;
+      }
+      case 'disable': {
+        if (opts.hook) {
+          manager.disableHook(opts.hook, projectPath);
+          console.log(`Hook "${opts.hook}" disabled for ${projectPath}`);
+        } else {
+          const cfg = manager.loadConfig(projectPath);
+          cfg.enabled = false;
+          manager.saveConfig(cfg, projectPath);
+          console.log(`All hooks disabled for ${projectPath}`);
+        }
+        break;
+      }
+      case 'list': {
+        const cfg = manager.loadConfig(projectPath);
+        console.log(`Hook configuration for ${projectPath}:`);
+        console.log(`  enabled: ${cfg.enabled}`);
+        console.log(`  onSessionStart: ${cfg.onSessionStart}`);
+        console.log(`  onSessionEnd: ${cfg.onSessionEnd}`);
+        console.log(`  onFileChange: ${cfg.onFileChange}`);
+        console.log(`  onPreCommit: ${cfg.onPreCommit}`);
+        console.log(`  onPreCompact: ${cfg.onPreCompact}`);
+        console.log(`  onPostCompact: ${cfg.onPostCompact}`);
+        break;
+      }
+      case 'profile': {
+        const profileName = opts.hook || 'standard';
+        const cfg = manager.loadConfig(projectPath);
+        cfg.enabled = true;
+        if (profileName === 'minimal') {
+          cfg.onSessionStart = false; cfg.onSessionEnd = false;
+          cfg.onFileChange = false; cfg.onPreCommit = true;
+          cfg.onPreCompact = false; cfg.onPostCompact = false;
+        } else if (profileName === 'strict') {
+          cfg.onSessionStart = true; cfg.onSessionEnd = true;
+          cfg.onFileChange = true; cfg.onPreCommit = true;
+          cfg.onPreCompact = true; cfg.onPostCompact = true;
+        } else {
+          cfg.onSessionStart = true; cfg.onSessionEnd = true;
+          cfg.onFileChange = false; cfg.onPreCommit = true;
+          cfg.onPreCompact = false; cfg.onPostCompact = false;
+        }
+        manager.saveConfig(cfg, projectPath);
+        console.log(`Hook profile set to "${profileName}" for ${projectPath}`);
+        break;
+      }
+      default:
+        console.log(`Unknown action: ${action}. Use: enable, disable, list, profile`);
+    }
+  });
+
+const securityCmd = program
+  .command('security')
+  .description('Security scanning and dependency audit');
+
+securityCmd
+  .command('scan')
+  .description('Scan project for security vulnerabilities')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .option('--scope <scope>', 'all|secrets|injection|unicode|dangerous|config|data-leak|crypto|auth|file-access', 'all')
+  .option('--severity <severity>', 'CRITICAL|HIGH|MEDIUM|LOW')
+  .option('--format <format>', 'table|json|markdown', 'table')
+  .action(async (opts) => {
+    const root = resolve(opts.path);
+    const { loadRules } = await import('./security/rules.js');
+    const { readFileSync, existsSync, readdirSync } = await import('node:fs');
+    const { join: pathJoin, relative: pathRelative } = await import('node:path');
+
+    const rules = loadRules();
+    const filtered = rules.filter(r => {
+      if (opts.scope !== 'all' && r.category !== opts.scope) return false;
+      if (opts.severity) {
+        const sevOrder: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+        if ((sevOrder[r.severity] || 0) < (sevOrder[opts.severity] || 0)) return false;
+      }
+      return r.enabled;
+    });
+
+    console.log(`Security Scan — ${filtered.length} active rules, scope: ${opts.scope}\n`);
+
+    const findings: any[] = [];
+    const walkDir = (dir: string) => {
+      try {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const fullPath = pathJoin(dir, entry.name);
+          if (entry.isDirectory()) {
+            if (['node_modules', '.git', 'dist', 'build', '.next'].includes(entry.name)) continue;
+            walkDir(fullPath);
+          } else if (entry.isFile()) {
+            const ext = entry.name.split('.').pop() || '';
+            if (!['ts', 'js', 'tsx', 'jsx', 'py', 'go', 'rs', 'java', 'rb', 'php', 'sql', 'sh', 'yaml', 'yml', 'json', 'html', 'css'].includes(ext)) continue;
+            try {
+              const content = readFileSync(fullPath, 'utf-8');
+              const lines = content.split('\n');
+              for (const rule of filtered) {
+                for (const pattern of rule.patterns) {
+                  pattern.lastIndex = 0;
+                  let match;
+                  while ((match = pattern.exec(content)) !== null) {
+                    const lineNum = content.substring(0, match.index).split('\n').length;
+                    findings.push({
+                      rule: rule.id,
+                      severity: rule.severity,
+                      category: rule.category,
+                      owasp: rule.owasp,
+                      file: pathRelative(root, fullPath),
+                      line: lineNum,
+                      match: match[0].length > 80 ? match[0].slice(0, 77) + '...' : match[0],
+                      fix: rule.fix,
+                    });
+                  }
+                }
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    };
+    walkDir(root);
+
+    const bySev: Record<string, number> = {};
+    for (const f of findings) { bySev[f.severity] = (bySev[f.severity] || 0) + 1; }
+
+    console.log(`Total findings: ${findings.length}`);
+    for (const [s, c] of Object.entries(bySev)) {
+      console.log(`  ${s}: ${c}`);
+    }
+    console.log();
+
+    for (const f of findings.slice(0, 30)) {
+      console.log(`[${f.severity}] ${f.rule} ${f.file}:${f.line} — ${f.match}`);
+    }
+  });
+
+securityCmd
+  .command('deps')
+  .description('Audit dependencies for known vulnerabilities')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .action(async (opts) => {
+    const root = resolve(opts.path);
+    const { auditDependencies } = await import('./security/deps.js');
+    const result = auditDependencies(root);
+
+    console.log(`Dependency Audit — ${result.ecosystem}`);
+    console.log(`  Total: ${result.totalDependencies} | Vulnerable: ${result.vulnerableDependencies}\n`);
+
+    for (const v of result.findings.slice(0, 20)) {
+      console.log(`[${v.severity}] ${v.package} — ${v.id}${v.cve ? ` (${v.cve})` : ''}`);
+      console.log(`  Affected: ${v.affectedVersions} | Fixed: ${v.fixedVersion || 'N/A'}`);
+      console.log(`  ${v.description}`);
+      console.log();
+    }
+  });
+
+program
+  .command('watch')
+  .description('Watch files for changes and auto re-index')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .option('--debounce <ms>', 'Debounce time in ms', '1000')
+  .option('--ignore <glob>', 'Files to ignore (comma-separated)')
+  .action(async (opts) => {
+    const root = resolve(opts.path);
+    const { watch, existsSync } = await import('node:fs');
+    const { join: pathJoin } = await import('node:path');
+
+    console.log(`Watching ${root} for changes... (Ctrl+C to stop)`);
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const changedFiles = new Set<string>();
+    const debounceMs = parseInt(opts.debounce) || 1000;
+    const ignoreList = opts.ignore ? opts.ignore.split(',') : ['node_modules', '.git', 'dist'];
+
+    const triggerRebuild = async () => {
+      if (changedFiles.size === 0) return;
+      const files = [...changedFiles];
+      changedFiles.clear();
+      console.log(`\nRe-indexing ${files.length} changed file(s)...`);
+      const { execSync } = await import('node:child_process');
+      try {
+        execSync(`npx milens analyze -p "${root}" --force`, { stdio: 'pipe', cwd: root });
+        console.log(`✓ Index updated`);
+      } catch {
+        console.log(`⚠ Re-index failed — run manually: milens analyze -p . --force`);
+      }
+    };
+
+    try {
+      const watcher = watch(root, { recursive: true }, (eventType, filename) => {
+        if (!filename) return;
+        if (ignoreList.some((i: string) => filename!.includes(i))) return;
+        changedFiles.add(filename);
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(triggerRebuild, debounceMs);
+      });
+
+      process.on('SIGINT', () => {
+        console.log('\nWatch stopped.');
+        watcher.close();
+        process.exit(0);
+      });
+    } catch {
+      console.error('File watching failed. Use `milens analyze -p . --force` to manually re-index.');
+    }
+  });
+
 program.parse();
 
 // ── Helpers ──
@@ -447,7 +1032,7 @@ function deleteIndex(dbPath: string): void {
   }
 }
 
-function generateDashboardHtml(stats: ReturnType<import('./store/db.js').Database['getToolUsageStats']>, annotationStats?: { total: number; confidenceBands: number[]; recent: { symbol: string; key: string; confidence: number; createdAt: string }[] }): string {
+function generateDashboardHtml(stats: ReturnType<import('./store/db.js').Database['getToolUsageStats']>, annotationStats?: { total: number; confidenceBands: number[]; recent: { symbol: string; key: string; confidence: number; createdAt: string }[] }, repoFilter?: string): string {
   const byToolJson = JSON.stringify(stats.byTool);
   const byDayJson = JSON.stringify(stats.byDay);
   const recentJson = JSON.stringify(stats.recentCalls);
@@ -641,6 +1226,7 @@ function generateDashboardHtml(stats: ReturnType<import('./store/db.js').Databas
       <h1>milens <span>dashboard</span></h1>
     </div>
     <div class="header-right">
+      <span class="repo-badge" style="background:rgba(88,166,255,0.12);color:#58a6ff;border:1px solid rgba(88,166,255,0.25);border-radius:20px;padding:4px 12px;font-size:0.78em;font-weight:600;margin-right:12px;">${repoFilter ? repoFilter.replace(/\\\\/g, '/').split('/').pop() || repoFilter : 'All Repos'}</span>
       <div class="status-dot"></div>
       <span class="status-text">Live</span>
       <button class="refresh-btn" onclick="refreshData()">&#8635; Refresh</button>

@@ -6,32 +6,48 @@ description: Code intelligence for the store area — symbols, dependencies, and
 # Store
 
 ## Overview
-Contains 60 symbols (2 exported) across 2 files.
+Contains 128 symbols (14 exported) across 5 files.
 
 ## Key Symbols
-- **`Database`** [class] (src/store/db.ts:10) — 13 refs
-- **`RepoRegistry`** [class] (src/store/registry.ts:18) — 4 refs
+- **`Database`** [class] (src/store/db.ts:10) — 42 refs
+- **`AnnotationStore`** [class] (src/store/annotations.ts:10) — 14 refs
+- **`RepoRegistry`** [class] (src/store/registry.ts:18) — 6 refs
+- **`buildEmbeddingText`** [function] (src/store/vectors.ts:250) — 4 refs
+- **`TfIdfProvider`** [class] (src/store/vectors.ts:44) — 4 refs
+- **`EmbeddingStore`** [class] (src/store/vectors.ts:170) — 4 refs
+- **`runDecayPass`** [function] (src/store/confidence.ts:84) — 2 refs
+- **`EmbeddingProvider`** [interface] (src/store/vectors.ts:15) — 2 refs
+- **`decayConfidence`** [function] (src/store/confidence.ts:21) — 1 refs
+- **`boostConfidence`** [function] (src/store/confidence.ts:4) — 0 refs
+- **`getStaleAnnotations`** [function] (src/store/confidence.ts:37) — 0 refs
+- **`promoteSecurityAnnotations`** [function] (src/store/confidence.ts:47) — 0 refs
+- **`NeuralProvider`** [class] (src/store/vectors.ts:122) — 0 refs
+- **`SimilarResult`** [interface] (src/store/vectors.ts:23) — 0 refs
 
 ## Entry Points
-- **`Database`** [class] — 13 incoming references
-- **`close`** [method] — 8 incoming references
-- **`rowToSymbol`** [function] — 5 incoming references
-- **`findSymbolByName`** [method] — 5 incoming references
-- **`findSymbolById`** [method] — 4 incoming references
+- **`Database`** [class] — 42 incoming references
+- **`get`** [method] — 21 incoming references
+- **`close`** [method] — 16 incoming references
+- **`AnnotationStore`** [class] — 14 incoming references
+- **`rowToSymbol`** [function] — 13 incoming references
 
 ## Dependencies
-- **root**: `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has`
-- **server**: `get`
+- **root**: `Annotation`, `AnnotationKey`, `Session`, `EvolutionEvent`, `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has` (+1 more)
 - **scripts**: `run`
 - **analyzer**: `find`, `resolve`
 
 ## Used By
-- **analyzer**: `Database`, `clear`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction`, `clearSymbolsAndLinks`, `deleteFileData` (+7 more)
-- **root**: `RepoRegistry`, `Database`, `register`, `close`, `findDbPath`, `searchSymbols`, `findSymbolByName`, `getIncomingLinks` (+11 more)
-- **server**: `Database`, `RepoRegistry`, `getStats`, `getDomainStats`, `close`, `logToolUsage`, `findByRoot`, `listAll` (+19 more)
-- **test**: `Database`, `close`, `insertSymbol`, `findSymbolByName`, `insertLink`, `getIncomingLinks`, `getOutgoingLinks`, `rebuildSearch` (+14 more)
+- **root**: `Database`, `RepoRegistry`, `AnnotationStore`, `runDecayPass`, `getIncomingLinks`, `getAllSymbols`, `getCodebaseSummary`, `register` (+23 more)
+- **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `clear`, `isFileUpToDate`, `upsertFileHash` (+22 more)
+- **server**: `Database`, `AnnotationStore`, `RepoRegistry`, `getCodebaseSummary`, `recall`, `close`, `getStats`, `getTestCoverage` (+33 more)
+- **test**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `close`, `insertSymbol`, `findSymbolByName` (+44 more)
+- **apps**: `remove`, `Database`, `getCodebaseSummary`, `close`
+- **docs**: `remove`
 - **parser**: `load`
 
 ## Files
+- src/store/annotations.ts
+- src/store/confidence.ts
 - src/store/db.ts
 - src/store/registry.ts
+- src/store/vectors.ts

@@ -1,0 +1,9 @@
+{
+  "mcp": {
+    "milens": {
+      "command": "npx",
+      "args": ["milens", "serve"],
+      "env": { "MILENS_PROFILE": "standard" }
+    }
+  }
+}

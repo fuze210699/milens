@@ -166,3 +166,92 @@ export interface EvolutionEvent {
   newValue?: string;
   createdAt: string;
 }
+
+// ── Hook system types ──
+
+export interface HookConfig {
+  enabled: boolean;
+  onSessionStart: boolean;
+  onSessionEnd: boolean;
+  onFileChange: boolean;
+  onPreCommit: boolean;
+  onPreCompact: boolean;
+  onPostCompact: boolean;
+}
+
+export interface HookSessionContext {
+  agent: string;
+  sessionId: string;
+  rootPath: string;
+}
+
+// ── Security types ──
+
+export type SecurityCategory =
+  | 'secrets' | 'injection' | 'unicode' | 'dangerous'
+  | 'config' | 'data-leak' | 'crypto' | 'auth' | 'file-access';
+
+export interface SecurityRule {
+  id: string;
+  category: SecurityCategory;
+  owasp: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  name: string;
+  description: string;
+  patterns: RegExp[];
+  fileGlob?: string;
+  excludeGlob?: string;
+  fix?: string;
+  confidence: number;
+  enabled: boolean;
+}
+
+export interface SecurityMatch {
+  ruleId: string;
+  category: SecurityCategory;
+  severity: string;
+  owasp: string;
+  file: string;
+  line: number;
+  match: string;
+  context: string;
+  fix?: string;
+}
+
+export interface SecurityReport {
+  summary: {
+    totalScanned: number;
+    findings: number;
+    byCategory: Record<string, number>;
+    bySeverity: Record<string, number>;
+    score: number;
+  };
+  findings: SecurityMatch[];
+}
+
+// ── Dependency audit types ──
+
+export type Ecosystem = 'npm' | 'python' | 'rust' | 'go' | 'java' | 'unknown';
+
+export interface DependInfo {
+  name: string;
+  version: string;
+  ecosystem: Ecosystem;
+}
+
+export interface VulnInfo {
+  id: string;
+  cve?: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  package: string;
+  affectedVersions: string;
+  fixedVersion?: string;
+  description: string;
+}
+
+export interface VulnReport {
+  ecosystem: Ecosystem;
+  totalDependencies: number;
+  vulnerableDependencies: number;
+  findings: VulnInfo[];
+}

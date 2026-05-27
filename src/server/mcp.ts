@@ -17,6 +17,8 @@ import { fileURLToPath } from 'node:url';
 import { generateTestPlan } from './test-plan.js';
 import { AnnotationStore } from '../store/annotations.js';
 import { join as pathJoin } from 'node:path';
+import { registerAllPrompts, MILENS_PROMPT_NAMES } from './mcp-prompts.js';
+import { loadRules } from '../security/rules.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_VERSION: string = process.env.MILENS_VERSION ?? JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8')).version;
@@ -427,6 +429,33 @@ export function createMcpServer(rootPath?: string): McpServer {
     }
     return (origTool as any)(...args);
   }) as typeof server.tool;
+
+  // ── Selective tool profiles (W4) ──
+  const profile = process.env.MILENS_PROFILE || undefined;
+  
+  if (profile && profile !== 'full') {
+    const minimal = new Set(['query', 'grep', 'context', 'impact', 'status', 'codebase_summary', 'edit_check', 'detect_changes', 'get_file_symbols', 'overview']);
+    const standard = new Set([...minimal, 'domains', 'repos', 'explain_relationship', 'find_dead_code', 'get_type_hierarchy', 'trace', 'routes', 'smart_context', 'review_pr', 'review_symbol', 'test_coverage_gaps', 'test_plan', 'test_impact', 'session_start', 'recall']);
+    
+    const allowed = profile === 'minimal' ? minimal : standard;
+    
+    // Wrap server.tool again to gate by profile
+    const profileWrappedTool = server.tool.bind(server);
+    server.tool = ((...args: any[]) => {
+      const toolName = args[0] as string;
+      if (!allowed.has(toolName)) {
+        // Return a no-op tool that explains it's disabled
+        const origLength = args.length;
+        const handler = args[origLength - 1];
+        if (typeof handler === 'function') {
+          args[origLength - 1] = async () => ({
+            content: [{ type: 'text', text: `Tool "${toolName}" disabled by profile "${profile}". Use --profile full to enable.` }],
+          });
+        }
+      }
+      return (profileWrappedTool as any)(...args);
+    }) as typeof server.tool;
+  }
 
   // ── Tool: query ──
   server.tool(
@@ -2129,6 +2158,127 @@ export function createMcpServer(rootPath?: string): McpServer {
         },
       }],
     }),
+  );
+
+  // ── Register MCP Prompts (W1) ──
+  registerAllPrompts(server);
+
+  // ── Tool: security_scan (S2) ──
+  server.tool(
+    'security_scan',
+    'Scan codebase for security vulnerabilities using 50+ built-in rules. Replaces multiple manual grep() calls. Categories: secrets, injection, unicode, dangerous, config, data-leak, crypto, auth, file-access.',
+    {
+      scope: z.enum(['all', 'secrets', 'injection', 'unicode', 'dangerous', 'config', 'data-leak', 'crypto', 'auth', 'file-access']).optional().default('all').describe('Scan scope'),
+      repo: z.string().optional().describe('Repository root path'),
+      severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional().describe('Minimum severity filter'),
+      limit: z.number().optional().default(50).describe('Max findings'),
+    },
+    async ({ scope, repo, severity, limit }) => {
+      const { db, root } = getDb(repo);
+      const rules = loadRules();
+      
+      // Filter rules by scope and severity
+      const filtered = rules.filter(r => {
+        if (scope !== 'all' && r.category !== scope) return false;
+        if (severity) {
+          const sevOrder: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+          if ((sevOrder[r.severity] || 0) < (sevOrder[severity] || 0)) return false;
+        }
+        return r.enabled;
+      });
+
+      // Get all source files from the DB
+      const symbols = db.getAllSymbols();
+      const fileSet = new Set<string>();
+      for (const s of symbols) {
+        if (s.filePath && !s.filePath.includes('node_modules') && !s.filePath.includes('.git')) {
+          fileSet.add(s.filePath);
+        }
+      }
+      const files = [...fileSet].slice(0, 1000); // cap at 1000 files
+
+      const { readFileSync: rfs, existsSync: es } = await import('node:fs');
+      const { resolve: resolvePath } = await import('node:path');
+
+      const findings: any[] = [];
+      const byCategory: Record<string, number> = {};
+      const bySeverity: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+
+      for (const file of files) {
+        const fullPath = resolvePath(root, file);
+        if (!es(fullPath)) continue;
+        
+        // Skip files that don't match rule fileGlobs (simple check)
+        const applicableRules = filtered.filter(r => {
+          if (!r.fileGlob) return true;
+          // Simple glob: just check extension
+          const ext = r.fileGlob.replace('**/*.', '').replace('**/*', '');
+          return file.endsWith(ext) || r.fileGlob === '**/*';
+        });
+
+        if (applicableRules.length === 0) continue;
+
+        try {
+          const content = rfs(fullPath, 'utf-8');
+          const lines = content.split('\n');
+
+          for (const rule of applicableRules) {
+            for (const pattern of rule.patterns) {
+              let match;
+              // Reset regex lastIndex for global patterns
+              pattern.lastIndex = 0;
+              while ((match = pattern.exec(content)) !== null) {
+                const lineNum = content.substring(0, match.index).split('\n').length;
+                const ctxStart = Math.max(0, lineNum - 3);
+                const ctxEnd = Math.min(lines.length, lineNum + 2);
+                const context = lines.slice(ctxStart, ctxEnd).join('\n');
+                
+                findings.push({
+                  ruleId: rule.id,
+                  category: rule.category,
+                  severity: rule.severity,
+                  owasp: rule.owasp,
+                  file,
+                  line: lineNum,
+                  match: match[0].length > 100 ? match[0].slice(0, 97) + '...' : match[0],
+                  context,
+                  fix: rule.fix,
+                });
+
+                byCategory[rule.category] = (byCategory[rule.category] || 0) + 1;
+                bySeverity[rule.severity] = (bySeverity[rule.severity] || 0) + 1;
+              }
+            }
+          }
+        } catch {
+          // Skip unreadable files
+        }
+      }
+
+      // Calculate security score (100 - deductions)
+      const deduction = findings.filter((f: any) => f.severity === 'CRITICAL').length * 5 +
+        findings.filter((f: any) => f.severity === 'HIGH').length * 2 +
+        findings.filter((f: any) => f.severity === 'MEDIUM').length * 0.5;
+      const score = Math.max(0, Math.round(100 - deduction));
+
+      const limited = findings.slice(0, limit);
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            summary: {
+              totalScanned: files.length,
+              findings: findings.length,
+              byCategory,
+              bySeverity,
+              score,
+            },
+            findings: limited,
+          }, null, 2),
+        }],
+      };
+    },
   );
 
   return server;

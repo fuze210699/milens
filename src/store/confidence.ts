@@ -43,6 +43,43 @@ export function getStaleAnnotations(
   return stale;
 }
 
+/** Promote high-confidence security annotations to SECURITY.md rules */
+export function promoteSecurityAnnotations(
+  store: AnnotationStore,
+  rootPath: string,
+): { promoted: number; content: string } {
+  const securityAnnotations = store.recall({ key: 'security', limit: 1000 });
+  const promotable = securityAnnotations.filter(a => a.confidence >= 0.8);
+
+  if (promotable.length === 0) return { promoted: 0, content: '' };
+
+  const lines = [
+    '## Auto-generated Security Rules (Milens Evolved)',
+    `> Generated on ${new Date().toISOString().split('T')[0]} from ${promotable.length} high-confidence annotations`,
+    '',
+  ];
+
+  for (const ann of promotable) {
+    const severity = ann.confidence >= 0.95 ? 'CRITICAL' : ann.confidence >= 0.9 ? 'HIGH' : 'MEDIUM';
+    lines.push(`### SEC-${ann.id.slice(0, 8)}: ${ann.symbol} — ${ann.value.slice(0, 80)}`);
+    lines.push(`- **Severity:** ${severity}`);
+    lines.push(`- **Confidence:** ${(ann.confidence * 100).toFixed(0)}%`);
+    lines.push(`- **Pattern:** ${ann.value}`);
+    lines.push(`- **Agent:** ${ann.agent || 'unknown'}`);
+    lines.push(`- **Last updated:** ${ann.updatedAt}`);
+    lines.push('');
+
+    // Log promotion event
+    try {
+      store.logEvolutionEvent(ann.id, 'promoted', '', `SECURITY.md (${rootPath})`);
+    } catch {
+      // evolution_log may not exist in older DBs
+    }
+  }
+
+  return { promoted: promotable.length, content: lines.join('\n') };
+}
+
 /** Run full decay pass on all annotations */
 export function runDecayPass(store: AnnotationStore): { decayed: number; archived: number } {
   const stale = store.getStaleAnnotations(30, 1.0); // all older than 30 days

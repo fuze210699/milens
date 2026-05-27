@@ -8,7 +8,7 @@
 
 [build]
 builder = "nixpacks"
-buildCommand = "npm install && npm run verify"
+buildCommand = "npm install -g milens@latest && npm install && npm run verify"
 
 [deploy]
 startCommand = "npm start"

@@ -43,6 +43,9 @@ function checkRateLimit(installationId, tier, repoId) {
 
 async function getTier(context) {
   const repo = context.payload.repository;
+
+  // Env override for dev/test — set MILENS_PRO_TIER=true to allow private repos
+  if (process.env.MILENS_PRO_TIER === 'true') return 'pro';
   if (!repo.private) return 'free';
 
   try {

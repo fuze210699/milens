@@ -310,6 +310,100 @@ program
     });
   });
 
+program
+  .command('evolve')
+  .description('Promote high-confidence annotations to rules/skills, flag stale patterns')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .action(async (opts) => {
+    const { Database } = await import('./store/db.js');
+    const { RepoRegistry } = await import('./store/registry.js');
+    const { AnnotationStore } = await import('./store/annotations.js');
+    const { runDecayPass } = await import('./store/confidence.js');
+    const { join: pathJoin } = await import('node:path');
+    const { existsSync, mkdirSync, writeFileSync } = await import('node:fs');
+
+    const dbPath = new RepoRegistry().findDbPath(resolve(opts.path));
+    if (!dbPath) { console.error('Not indexed. Run `milens analyze` first.'); process.exit(1); }
+    const db = new Database(dbPath);
+    const store = new AnnotationStore(db.connection);
+
+    // 1. Run decay pass
+    const { decayed, archived } = runDecayPass(store);
+    if (decayed > 0 || archived > 0) {
+      console.log(`Decayed: ${decayed} | Archived: ${archived}`);
+    }
+
+    // 2. Find promotable annotations (confidence >= 0.8)
+    const promotable = store.getPromotableAnnotations();
+    if (promotable.length === 0) {
+      console.log('No annotations ready for promotion.');
+      db.close();
+      return;
+    }
+
+    // 3. Group by key
+    const groups = new Map<string, typeof promotable>();
+    for (const ann of promotable) {
+      const arr = groups.get(ann.key) ?? [];
+      arr.push(ann);
+      groups.set(ann.key, arr);
+    }
+
+    // 4. Generate rule/skill files
+    let promoted = 0;
+    for (const [key, anns] of groups) {
+      const lines = [
+        `# Milens Evolved ${key.toUpperCase()} Rules`,
+        `# Auto-generated from ${anns.length} high-confidence annotations`,
+        '',
+      ];
+      for (const a of anns) {
+        lines.push(`- **${a.symbol}**: ${a.value}`);
+      }
+
+      // Write to .agents/skills/{key}.md
+      const skillDir = pathJoin(resolve(opts.path), '.agents', 'skills', `milens-${key}`);
+      if (!existsSync(skillDir)) mkdirSync(skillDir, { recursive: true });
+      writeFileSync(pathJoin(skillDir, 'SKILL.md'), lines.join('\n'));
+
+      // Log promotion
+      for (const a of anns) {
+        store.logEvolutionEvent(a.id, 'promoted', '', skillDir);
+      }
+      promoted += anns.length;
+    }
+
+    // 5. Find stale annotations (old + low confidence)
+    const stale = store.getStaleAnnotations(30, 0.5);
+    if (stale.length > 0) {
+      console.log(`Flagged stale: ${stale.length} annotations (30+ days, low confidence)`);
+    }
+
+    console.log(`\nMilens Evolution Report:`);
+    console.log(`  Promoted to rules:  ${promoted} patterns (from ${groups.size} categories)`);
+    console.log(`  Flagged stale:      ${stale.length} annotations`);
+    console.log(`  Archived (decayed): ${archived} annotations`);
+
+    db.close();
+  });
+
+program
+  .command('metrics')
+  .description('Compute code quality and efficiency metrics')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .action(async (opts) => {
+    const { Database } = await import('./store/db.js');
+    const { RepoRegistry } = await import('./store/registry.js');
+    const { computeMetrics, formatMetricsReport } = await import('./metrics.js');
+
+    const dbPath = new RepoRegistry().findDbPath(resolve(opts.path));
+    if (!dbPath) { console.error('Not indexed. Run `milens analyze` first.'); process.exit(1); }
+    const db = new Database(dbPath);
+    const metrics = computeMetrics(db);
+    console.log(formatMetricsReport(metrics));
+    db.close();
+  });
+
 program.parse();
 
 // ── Helpers ──

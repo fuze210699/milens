@@ -128,3 +128,41 @@ export interface RepoEntry {
   analyzedAt: string;
   hash: string;
 }
+
+// ── Annotation & Memory types ──
+
+export type AnnotationKey =
+  | 'note' | 'bug' | 'security' | 'architecture'
+  | 'workflow' | 'test' | 'dependency' | 'refactor';
+
+export interface Annotation {
+  id: string;
+  symbol: string;
+  key: AnnotationKey;
+  value: string;
+  agent?: string;
+  sessionId?: string;
+  confidence: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Session {
+  id: string;
+  agent: string;
+  status: 'active' | 'completed' | 'failed';
+  startedAt: string;
+  endedAt?: string;
+  toolCallsCount: number;
+  annotationsCount: number;
+  context?: string;
+}
+
+export interface EvolutionEvent {
+  id: number;
+  annotationId: string;
+  event: 'created' | 'confidence_up' | 'confidence_down' | 'promoted' | 'demoted' | 'archived';
+  oldValue?: string;
+  newValue?: string;
+  createdAt: string;
+}

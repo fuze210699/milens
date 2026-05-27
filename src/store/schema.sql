@@ -114,3 +114,49 @@ CREATE TABLE IF NOT EXISTS symbol_embeddings (
 
 CREATE INDEX IF NOT EXISTS idx_tool_usage_tool ON tool_usage(tool);
 CREATE INDEX IF NOT EXISTS idx_tool_usage_at   ON tool_usage(called_at);
+
+-- Annotations: cross-session memory for AI agents
+CREATE TABLE IF NOT EXISTS annotations (
+  id          TEXT PRIMARY KEY,
+  symbol      TEXT NOT NULL,
+  key         TEXT NOT NULL,
+  value       TEXT NOT NULL,
+  agent       TEXT,
+  session_id  TEXT,
+  confidence  REAL DEFAULT 0.5,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_annotations_symbol ON annotations(symbol);
+CREATE INDEX IF NOT EXISTS idx_annotations_key    ON annotations(key);
+CREATE INDEX IF NOT EXISTS idx_annotations_session ON annotations(session_id);
+
+-- Sessions: multi-agent coordination
+CREATE TABLE IF NOT EXISTS sessions (
+  id                TEXT PRIMARY KEY,
+  agent             TEXT NOT NULL,
+  status            TEXT DEFAULT 'active',
+  started_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at          TEXT,
+  tool_calls_count  INTEGER DEFAULT 0,
+  annotations_count INTEGER DEFAULT 0,
+  context           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_agent  ON sessions(agent);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+
+-- Evolution log: track pattern promotion/demotion/archive
+CREATE TABLE IF NOT EXISTS evolution_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  annotation_id TEXT NOT NULL,
+  event       TEXT NOT NULL,
+  old_value   TEXT,
+  new_value   TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (annotation_id) REFERENCES annotations(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_evolution_annotation ON evolution_log(annotation_id);

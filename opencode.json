@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "milens": {
+      "type": "local",
+      "command": ["npx", "-y", "milens", "serve", "-p", "."],
+      "enabled": true
+    }
+  }
+}

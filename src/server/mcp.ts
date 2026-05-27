@@ -6,19 +6,17 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { resolve, relative, join, dirname } from 'node:path';
 import { execSync, execFileSync } from 'node:child_process';
-import { readFileSync, mkdirSync } from 'node:fs';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readFileSync, readdirSync, statSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import ignore from 'ignore';
 import { Database } from '../store/db.js';
 import { RepoRegistry } from '../store/registry.js';
-import { isTestFile } from '../utils.js';
-import { reviewPr, reviewSymbol } from '../analyzer/review.js';
-import { generateTestPlan, findCoverageGaps, analyzeTestImpact } from '../analyzer/testplan.js';
-import { TfIdfProvider, EmbeddingStore, buildEmbeddingText } from '../store/vectors.js';
 import { getParser, loadLanguage } from '../parser/loader.js';
 import { ALL_LANGS } from '../parser/languages.js';
 import { fileURLToPath } from 'node:url';
+import { generateTestPlan } from './test-plan.js';
+import { AnnotationStore } from '../store/annotations.js';
+import { join as pathJoin } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_VERSION: string = process.env.MILENS_VERSION ?? JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8')).version;
@@ -33,8 +31,6 @@ class LazyDb {
   private statsCache: { data: ReturnType<Database['getStats']>; ts: number } | null = null;
   private domainCache: { data: ReturnType<Database['getDomainStats']>; ts: number } | null = null;
   private static CACHE_TTL = 30_000; // 30s TTL
-  // Cached TF-IDF provider (trained once per DB session, reused across semantic_search/find_similar calls)
-  private tfidfCache: { provider: TfIdfProvider; store: EmbeddingStore } | null = null;
 
   constructor(private dbPath: string) {}
 
@@ -74,19 +70,6 @@ class LazyDb {
   invalidateCache(): void {
     this.statsCache = null;
     this.domainCache = null;
-    this.tfidfCache = null;
-  }
-
-  /** Get or build a TF-IDF provider + embedding store, trained on the corpus. */
-  getTfidf(): { provider: TfIdfProvider; store: EmbeddingStore } {
-    if (this.tfidfCache) return this.tfidfCache;
-    const db = this.get();
-    const provider = new TfIdfProvider();
-    const allSyms = db.getAllSymbols();
-    provider.trainIdf(allSyms.map(s => buildEmbeddingText({ name: s.name, kind: s.kind, filePath: s.filePath, signature: s.signature })));
-    const store = new EmbeddingStore(db.getRawDb(), provider.dimensions);
-    this.tfidfCache = { provider, store };
-    return this.tfidfCache;
   }
 
   private resetTimer(): void {
@@ -100,7 +83,6 @@ class LazyDb {
     this.timer = null;
     this.statsCache = null;
     this.domainCache = null;
-    this.tfidfCache = null;
   }
 
   shutdown(): void {
@@ -126,21 +108,6 @@ const TOKEN_SAVINGS_MULTIPLIER: Record<string, number> = {
   domains: 3,         // vs exploring file structure
   status: 2,          // vs checking multiple stats
   detect_changes: 4,  // vs git diff + manual symbol mapping
-  review_pr: 10,        // vs detect_changes + impact per symbol + coverage check
-  review_symbol: 5,     // vs edit_check + impact + coverage
-  test_plan: 7,          // vs context + outgoing links + mock analysis
-  test_coverage_gaps: 5, // vs scanning all symbols + checking test refs
-  test_impact: 6,        // vs detect_changes + upstream traversal + test file mapping
-  annotate: 2,           // simple write
-  recall: 3,             // vs manual grep for notes
-  session_start: 1,      // simple write
-  session_context: 2,    // session lookup
-  handoff: 3,            // session transfer
-  codebase_summary: 8,   // vs domains + status + query for top symbols
-  semantic_search: 5,    // vs multiple query + grep calls to find related code
-  find_similar: 4,       // vs manual comparison of symbol signatures
-  ast_explore: 2,        // vs reading raw AST manually
-  test_query: 2,         // vs writing SQL + checking schema
   explain_relationship: 4, // vs manual path finding
   find_dead_code: 3,  // vs manual export usage search
   get_file_symbols: 2,// vs reading entire file
@@ -205,6 +172,15 @@ function fmtImpact(items: Array<{ symbol: any; depth: number; via: string }>, de
   return lines.join('\n');
 }
 
+/** Check if a file path looks like a test/spec file */
+function isTestFilePath(filePath: string): boolean {
+  return /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
+    /^tests?[/\\]/.test(filePath) ||
+    /__tests__[/\\]/.test(filePath) ||
+    /_test\.(go|py|rb|rs|java|php)$/.test(filePath) ||
+    /^test_.*\.py$/.test(filePath.split('/').pop() ?? '');
+}
+
 // ── Text grep across project files ──
 
 const GREP_SKIP_DIRS = new Set([
@@ -232,11 +208,11 @@ interface GrepMatch {
   text: string;
 }
 
-async function grepFiles(
+function grepFiles(
   rootPath: string,
   pattern: string,
   options: { isRegex?: boolean; caseSensitive?: boolean; maxResults?: number; includePattern?: string },
-): Promise<GrepMatch[]> {
+): GrepMatch[] {
   const { isRegex = false, caseSensitive = false, maxResults = 50, includePattern } = options;
   const flags = caseSensitive ? '' : 'i';
   let regex: RegExp;
@@ -250,10 +226,10 @@ async function grepFiles(
   const includeRe = includePattern ? globToRegex(includePattern) : null;
   const results: GrepMatch[] = [];
 
-  async function walk(dir: string) {
+  function walk(dir: string) {
     if (results.length >= maxResults) return;
     let entries: string[];
-    try { entries = await readdir(dir); } catch { return; }
+    try { entries = readdirSync(dir); } catch { return; }
 
     for (const entry of entries) {
       if (results.length >= maxResults) return;
@@ -264,19 +240,19 @@ async function grepFiles(
       if (GREP_SKIP_DIRS.has(entry)) continue;
       if (ig.ignores(rel)) continue;
 
-      let st;
-      try { st = await stat(abs); } catch { continue; }
+      let stat;
+      try { stat = statSync(abs); } catch { continue; }
 
-      if (st.isDirectory()) {
-        await walk(abs);
-      } else if (st.isFile()) {
+      if (stat.isDirectory()) {
+        walk(abs);
+      } else if (stat.isFile()) {
         const ext = '.' + entry.split('.').pop()?.toLowerCase();
         if (BINARY_EXTENSIONS.has(ext)) continue;
-        if (st.size > 512 * 1024) continue; // skip files > 512KB
+        if (stat.size > 512 * 1024) continue; // skip files > 512KB
         if (includeRe && !includeRe.test(rel)) continue;
 
         try {
-          const content = await readFile(abs, 'utf-8');
+          const content = readFileSync(abs, 'utf-8');
           const lines = content.split('\n');
           for (let i = 0; i < lines.length && results.length < maxResults; i++) {
             if (regex.test(lines[i])) {
@@ -288,7 +264,7 @@ async function grepFiles(
     }
   }
 
-  await walk(rootPath);
+  walk(rootPath);
   return results;
 }
 
@@ -300,9 +276,7 @@ function escapeRegExp(s: string): string {
 function matchesScope(lineText: string, scope: 'imports' | 'definitions'): boolean {
   const trimmed = lineText.trimStart();
   if (scope === 'imports') {
-    return /^(import\s|from\s|require\(|use\s|include\s|require_relative|require\s)/.test(trimmed)
-      || /^"[^"]*"\s*$/.test(trimmed)  // Go import block line: "fmt"
-      || /^\w+\s+"[^"]*"\s*$/.test(trimmed);  // Go aliased import: alias "pkg"
+    return /^(import\s|from\s|require\(|use\s|include\s|require_relative|require\s)/.test(trimmed);
   }
   // definitions: function, class, interface, struct, trait, enum, type, def, fn, pub fn, etc.
   return /^(export\s+)?(async\s+)?(function|class|interface|type|enum|struct|trait|const|let|var|def|fn|pub\s+fn|pub\s+struct|pub\s+enum|module)\s/.test(trimmed);
@@ -311,11 +285,8 @@ function matchesScope(lineText: string, scope: 'imports' | 'definitions'): boole
 /** Validate user-supplied regex is safe from catastrophic backtracking (ReDoS). */
 function safeRegex(pattern: string, flags: string): RegExp {
   if (pattern.length > 200) throw new Error('Pattern too long');
-  // Reject nested quantifiers: quantifier applied to a group that contains a quantifier
-  // e.g. (a+)+, (a*)+, (a{2,})+, (?:a+)*, (.+)+
-  if (/([+*}])\s*\)\s*[+*?{]/.test(pattern)) throw new Error('Unsafe regex pattern');
-  // Reject quantifier directly after quantifier: a++, a*+, a+{2}, but allow lazy quantifiers: a+?, a*?, a??
-  if (/[+*}]\s*[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
+  // Reject nested quantifiers like (a+)+, (a*)*,  (a{1,})+
+  if (/([+*}])\)?[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
   // Reject overlapping alternation inside quantified groups: (a|a)*, (ab|a)+
   if (/\((?:[^)]*\|[^)]*)\)[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
   // Reject backreferences inside quantified groups (exponential matching)
@@ -331,26 +302,12 @@ function safeRegex(pattern: string, flags: string): RegExp {
 }
 
 function globToRegex(glob: string): RegExp {
-  // Extract brace patterns {a,b,c} as placeholders BEFORE escaping
-  const braceGroups: string[] = [];
-  let expanded = glob.replace(/\{([^}]+)\}/g, (_, inner: string) => {
-    const alts = inner.split(',').map(s => s.trim());
-    const idx = braceGroups.length;
-    braceGroups.push(alts.map(a => a.replace(/[.+^$|[\]\\]/g, '\\$&')).join('|'));
-    return `§BRACE${idx}§`;
-  });
-  const escaped = expanded
-    .replace(/[.+^$|[\]\\]/g, '\\$&')
+  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, '\\$&')
     .replace(/\*\*/g, '§STARSTAR§')
     .replace(/\*/g, '[^/]*')
     .replace(/§STARSTAR§/g, '.*')
     .replace(/\?/g, '.');
-  // Restore brace groups after escaping
-  let result = escaped;
-  for (let i = 0; i < braceGroups.length; i++) {
-    result = result.replace(`§BRACE${i}§`, `(${braceGroups[i]})`);
-  }
-  return new RegExp(`^${result}$`, 'i');
+  return new RegExp(`^${escaped}$`, 'i');
 }
 
 function loadGrepIgnoreRules(rootPath: string): ReturnType<typeof ignore> {
@@ -375,24 +332,11 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - \`overview\` — combined context + impact + grep in one call (preferred for editing workflows)
 - \`edit_check\` — pre-edit safety: callers + export status + re-export chains + test coverage + ⚠ warnings (fastest for edits)
 - \`trace\` — execution flow: call chains from entrypoints to a symbol (or downstream from it)
-- \`routes\` — detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Django, Go, Gin, PHP, Rails, Sinatra, Spring)
+- \`routes\` — detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Go, PHP, Rails)
 - \`smart_context\` — intent-aware context: understand/edit/debug/test (returns only what matters for intent)
 - \`domains\` — show domain clusters: groups of files forming logical modules based on dependency graph
 - \`repos\` — list all indexed repositories with summary stats (multi-repo support)
 - \`detect_changes\` — git diff → affected symbols
-- \`review_pr\` — PR risk assessment: blast radius + test coverage per changed symbol → LOW/MEDIUM/HIGH/CRITICAL
-- \`review_symbol\` — quick single-symbol risk: role, heat, dependents, test coverage, risk level
-- \`test_plan\` — dependency-aware test plan: deps to mock, mock strategies (stub/spy/fake), suggested tests
-- \`test_coverage_gaps\` — untested exported symbols sorted by risk (hub functions first)
-- \`test_impact\` — which tests to run for current changes (maps changed symbols → test files)
-- \`annotate\` — store observations/notes about a symbol (persists across sessions)
-- \`recall\` — retrieve annotations (filter by symbol, key, agent, session)
-- \`session_start\` — register agent session for multi-agent coordination
-- \`session_context\` — get session metadata + annotations
-- \`handoff\` — transfer context between agent sessions
-- \`codebase_summary\` — high-level bootstrapping context: domains, key symbols, coverage, annotations
-- \`semantic_search\` — hybrid search: FTS5 + vector cosine similarity (requires --embeddings during analyze)
-- \`find_similar\` — find symbols similar to a given symbol by vector embedding proximity
 - \`explain_relationship\` — shortest path between two symbols
 - \`find_dead_code\` — unused exports
 - \`get_file_symbols\` — all symbols in a file
@@ -401,9 +345,7 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 ## Rules
 - Before editing a symbol: run \`edit_check\` or \`smart_context\` with intent=edit
 - For debugging: run \`smart_context\` with intent=debug or \`trace\` to=symbol
-- For writing tests: run \`test_plan\` for structured test plan, or \`smart_context\` with intent=test
-- For PR review: run \`review_pr\` for overall risk, \`review_symbol\` for single symbol assessment
-- For agent bootstrapping: run \`codebase_summary\` as the first tool call in a new session
+- For writing tests: run \`smart_context\` with intent=test — shows deps to mock + callers to cover
 - \`impact\` only tracks code deps — always pair with \`grep\` for templates/configs
 - Use \`query\` for camelCase/PascalCase identifiers, \`grep\` for display text or multi-word strings
 - impact depth: 1=WILL BREAK, 2=LIKELY AFFECTED, 3=MAY NEED TESTING
@@ -525,7 +467,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const effectiveInclude = scope === 'code' && !include
         ? '**/*.{ts,tsx,js,jsx,mjs,cjs,vue,py,go,rs,java,php,rb}'
         : include;
-      const matches = await grepFiles(root, pattern, {
+      const matches = grepFiles(root, pattern, {
         isRegex, caseSensitive, maxResults: limit, includePattern: effectiveInclude,
       });
 
@@ -784,7 +726,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       }
 
       // Section 4: Grep (text references across all files)
-      const grepMatches = await grepFiles(root, name, { maxResults: 20 });
+      const grepMatches = grepFiles(root, name, { maxResults: 20 });
       if (grepMatches.length > 0) {
         const grouped = new Map<string, { line: number; text: string }[]>();
         for (const m of grepMatches) {
@@ -828,22 +770,18 @@ export function createMcpServer(rootPath?: string): McpServer {
         try {
           const dbPath = registry.findDbPath(entry.rootPath);
           if (dbPath) {
-            const fromPool = pools.has(entry.rootPath);
-            const tempDb = fromPool
+            const tempDb = pools.has(entry.rootPath)
               ? pools.get(entry.rootPath)!.get()
               : new Database(dbPath);
-            try {
-              const summary = tempDb.getRepoSummary();
-              lines.push(`  ${summary.symbols} symbols, ${summary.links} links, ${summary.files} files`);
-              if (summary.domains.length > 0) {
-                lines.push(`  domains: ${summary.domains.join(', ')}`);
-              }
-              if (summary.staleCount > 0) {
-                lines.push(`  ⏳ ${summary.staleCount} stale files`);
-              }
-            } finally {
-              if (!fromPool) tempDb.close();
+            const summary = tempDb.getRepoSummary();
+            lines.push(`  ${summary.symbols} symbols, ${summary.links} links, ${summary.files} files`);
+            if (summary.domains.length > 0) {
+              lines.push(`  domains: ${summary.domains.join(', ')}`);
             }
+            if (summary.staleCount > 0) {
+              lines.push(`  ⏳ ${summary.staleCount} stale files`);
+            }
+            if (!pools.has(entry.rootPath)) tempDb.close();
           }
         } catch {
           lines.push(`  (unable to read index)`);
@@ -870,9 +808,8 @@ export function createMcpServer(rootPath?: string): McpServer {
       }
       let changedFiles: string[];
       try {
-        // Show both staged and unstaged changes against the ref
         const output = execFileSync('git', ['diff', '--name-only', ref], { cwd: root, encoding: 'utf-8' });
-        const staged = execFileSync('git', ['diff', '--cached', '--name-only', ref], { cwd: root, encoding: 'utf-8' });
+        const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: root, encoding: 'utf-8' });
         changedFiles = [...new Set([...output.trim().split('\n'), ...staged.trim().split('\n')])].filter(Boolean);
       } catch {
         return { content: [{ type: 'text' as const, text: 'Not a git repository or git not available.' }] };
@@ -900,435 +837,6 @@ export function createMcpServer(rootPath?: string): McpServer {
         }
       }
       lines.push(`\nTotal direct dependents affected: ${totalAffected}`);
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
-
-  // ── Tool: review_pr ──
-  server.tool(
-    'review_pr',
-    'PR risk assessment: analyzes changed files, scores each symbol by blast radius, test coverage, and role. Returns overall risk level (LOW/MEDIUM/HIGH/CRITICAL) with hotspots and recommendations.',
-    {
-      ref: z.string().optional().default('HEAD').describe('Git ref to diff (default: HEAD)'),
-      base: z.string().optional().describe('Base ref to compare against (e.g. main, develop)'),
-      repo: z.string().optional(),
-    },
-    async ({ ref, repo, base }) => {
-      const { db, root } = getDb(repo);
-      const result = reviewPr(db, root, ref, base);
-
-      if (result.symbols.length === 0) {
-        return { content: [{ type: 'text' as const, text: result.summary }] };
-      }
-
-      const lines: string[] = [
-        `## PR Risk: ${result.risk} (score: ${result.score})`,
-        '',
-        result.summary,
-        '',
-      ];
-
-      if (result.hotspots.length > 0) {
-        lines.push(`### Hotspots (${result.hotspots.length})\n`);
-        for (const h of result.hotspots) {
-          const tested = h.tested ? '✓ tested' : '⚠ untested';
-          lines.push(`${fmtSymbol(h.symbol)} → ${h.dependents} dependents, ${tested} [${h.riskLevel}]`);
-          if (h.reasons.length > 0) lines.push(`  reasons: ${h.reasons.join(', ')}`);
-        }
-        lines.push('');
-      }
-
-      // Show remaining non-hotspot symbols (compact)
-      const nonHotspots = result.symbols.filter(s => s.riskLevel !== 'HIGH' && s.riskLevel !== 'CRITICAL');
-      if (nonHotspots.length > 0) {
-        lines.push(`### Other changed symbols (${nonHotspots.length})\n`);
-        for (const s of nonHotspots.slice(0, 20)) {
-          const tested = s.tested ? '✓' : '⚠';
-          lines.push(`${tested} ${s.symbol.name} [${s.symbol.kind}] ${s.symbol.filePath}:${s.symbol.startLine} → ${s.dependents} deps [${s.riskLevel}]`);
-        }
-        if (nonHotspots.length > 20) lines.push(`  ... and ${nonHotspots.length - 20} more`);
-        lines.push('');
-      }
-
-      if (result.untestedChanges > 0) {
-        lines.push(`⚠ ${result.untestedChanges} exported symbols changed without test coverage`);
-      }
-
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
-
-  // ── Tool: review_symbol ──
-  server.tool(
-    'review_symbol',
-    'Quick risk assessment for a single symbol: role, heat, dependents count, test coverage, risk level.',
-    {
-      name: z.string().describe('Symbol name to assess'),
-      repo: z.string().optional(),
-    },
-    async ({ name, repo }) => {
-      const { db } = getDb(repo);
-      const result = reviewSymbol(db, name);
-
-      if (!result) {
-        return { content: [{ type: 'text' as const, text: `"${name}" not found in index. Try \`grep\`.` }] };
-      }
-
-      const tested = result.tested ? '✓ tested' : '⚠ untested';
-      const lines = [
-        `${fmtSymbol(result.symbol)}${result.symbol.exported ? ' (exported)' : ''}`,
-        `risk: ${result.riskLevel} (score: ${result.riskScore})`,
-        `role: ${result.symbol.role ?? 'unknown'}, heat: ${result.symbol.heat ?? 0}`,
-        `dependents: ${result.dependents}, ${tested}`,
-      ];
-      if (result.reasons.length > 0) {
-        lines.push(`reasons: ${result.reasons.join(', ')}`);
-      }
-
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
-
-  // ── Tool: test_plan ──
-  server.tool(
-    'test_plan',
-    'Generate a structured test plan for a symbol: dependencies to mock, mock strategies (stub/spy/fake), suggested unit/integration/edge-case tests.',
-    {
-      name: z.string().describe('Symbol name to generate test plan for'),
-      repo: z.string().optional(),
-    },
-    async ({ name, repo }) => {
-      const { db } = getDb(repo);
-      const plan = generateTestPlan(db, name);
-
-      if (!plan) {
-        return { content: [{ type: 'text' as const, text: `"${name}" not found in index. Try \`grep\`.` }] };
-      }
-
-      const lines: string[] = [
-        `## Test Plan: ${plan.target.name} [${plan.target.kind}]`,
-        `file: ${plan.target.filePath}${plan.target.role ? `, role: ${plan.target.role}` : ''}`,
-        '',
-      ];
-
-      if (plan.existingTests.length > 0) {
-        lines.push(`### Existing tests`);
-        for (const t of plan.existingTests) lines.push(`  ✓ ${t}`);
-        lines.push('');
-      } else {
-        lines.push(`### Existing tests: none\n`);
-      }
-
-      if (plan.dependencies.length > 0) {
-        lines.push(`### Dependencies (${plan.dependencies.length})`);
-        for (const dep of plan.dependencies) {
-          lines.push(`  ${dep.name} [${dep.kind}] ${dep.filePath} (${dep.linkType})`);
-        }
-        lines.push('');
-      }
-
-      if (plan.mockSuggestions.length > 0) {
-        lines.push(`### Mock Suggestions`);
-        for (const m of plan.mockSuggestions) {
-          lines.push(`  ${m.dependency}: ${m.strategy} — ${m.reason}`);
-        }
-        lines.push('');
-      }
-
-      if (plan.suggestedTests.length > 0) {
-        lines.push(`### Suggested Tests`);
-        for (const t of plan.suggestedTests) {
-          lines.push(`  [${t.type}] ${t.description}`);
-          if (t.mocksNeeded.length > 0) lines.push(`    mocks: ${t.mocksNeeded.join(', ')}`);
-        }
-        lines.push('');
-      }
-
-      if (plan.callers.length > 0) {
-        lines.push(`### Callers (for integration context)`);
-        for (const c of plan.callers.slice(0, 10)) {
-          lines.push(`  ${c.name} [${c.kind}] ${c.filePath}`);
-        }
-        if (plan.callers.length > 10) lines.push(`  ... and ${plan.callers.length - 10} more`);
-      }
-
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
-
-  // ── Tool: test_coverage_gaps ──
-  server.tool(
-    'test_coverage_gaps',
-    'Find exported symbols without test coverage, sorted by risk (hub functions first). Shows what most needs tests.',
-    {
-      file: z.string().optional().describe('Scope to a specific file (relative to repo root)'),
-      limit: z.number().optional().default(30),
-      repo: z.string().optional(),
-    },
-    async ({ file, limit, repo }) => {
-      const { db } = getDb(repo);
-      const gaps = findCoverageGaps(db, file, limit);
-
-      if (gaps.length === 0) {
-        return { content: [{ type: 'text' as const, text: file ? `No coverage gaps in "${file}".` : 'No untested exported symbols found.' }] };
-      }
-
-      const lines: string[] = [`${gaps.length} untested exported symbols:\n`];
-      for (const g of gaps) {
-        lines.push(`[${g.riskIfUntested}] ${fmtSymbol(g.symbol)} → ${g.dependents} dependents`);
-      }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
-
-  // ── Tool: test_impact ──
-  server.tool(
-    'test_impact',
-    'Which tests to run for current changes? Maps changed symbols → test files that reference them (directly or via callers).',
-    {
-      ref: z.string().optional().default('HEAD').describe('Git ref to diff against (default: HEAD)'),
-      repo: z.string().optional(),
-    },
-    async ({ ref, repo }) => {
-      const { db, root } = getDb(repo);
-      const result = analyzeTestImpact(db, root, ref);
-
-      if (result.changedSymbols.length === 0 && result.mustRun.length === 0) {
-        return { content: [{ type: 'text' as const, text: 'No changed symbols detected.' }] };
-      }
-
-      const lines: string[] = [];
-
-      if (result.mustRun.length > 0) {
-        lines.push(`### Must Run (${result.mustRun.length})`);
-        for (const f of result.mustRun) lines.push(`  ✓ ${f}`);
-        lines.push('');
-      }
-
-      if (result.shouldRun.length > 0) {
-        lines.push(`### Should Run (${result.shouldRun.length}) — indirect coverage`);
-        for (const f of result.shouldRun) lines.push(`  ~ ${f}`);
-        lines.push('');
-      }
-
-      if (result.coverageGaps.length > 0) {
-        lines.push(`### Coverage Gaps (${result.coverageGaps.length})`);
-        for (const g of result.coverageGaps) {
-          lines.push(`  ⚠ ${g.name} (${g.filePath}) — ${g.dependents} dependents, no test`);
-        }
-        lines.push('');
-      }
-
-      lines.push(`${result.changedSymbols.length} symbols changed, ${result.mustRun.length} tests must run, ${result.shouldRun.length} tests should run`);
-
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
-
-  // ── Tool: annotate ──
-  server.tool(
-    'annotate',
-    'Store an observation/note about a symbol. Annotations persist across sessions and are visible via context() and recall().',
-    {
-      symbol: z.string().describe('Symbol name to annotate'),
-      key: z.string().describe('Annotation key (e.g. "perf", "todo", "note", "risk")'),
-      value: z.string().describe('Annotation value/note'),
-      agent: z.string().optional().describe('Agent name that created this annotation'),
-      session_id: z.string().optional().describe('Session ID for grouping'),
-      ttl_hours: z.number().optional().describe('Time-to-live in hours (default: permanent)'),
-      repo: z.string().optional(),
-    },
-    async ({ symbol, key, value, agent, session_id, ttl_hours, repo }) => {
-      const { db } = getDb(repo);
-      const syms = db.findSymbolByName(symbol);
-      if (syms.length === 0) {
-        return { content: [{ type: 'text' as const, text: `"${symbol}" not found in index.` }] };
-      }
-      const sym = syms[0];
-      const id = db.addAnnotation(sym.id, key, value, agent, session_id, ttl_hours);
-      return { content: [{ type: 'text' as const, text: `Annotation #${id} stored: ${sym.name}.${key} = "${value}"` }] };
-    },
-  );
-
-  // ── Tool: recall ──
-  server.tool(
-    'recall',
-    'Retrieve annotations/notes about symbols. Filter by symbol, key, agent, or session.',
-    {
-      symbol: z.string().optional().describe('Symbol name to filter by'),
-      key: z.string().optional().describe('Annotation key to filter by'),
-      agent: z.string().optional().describe('Agent name to filter by'),
-      session_id: z.string().optional().describe('Session ID to filter by'),
-      limit: z.number().optional().default(30),
-      repo: z.string().optional(),
-    },
-    async ({ symbol, key, agent, session_id, limit, repo }) => {
-      const { db } = getDb(repo);
-      let symbolId: string | undefined;
-      if (symbol) {
-        const syms = db.findSymbolByName(symbol);
-        if (syms.length > 0) symbolId = syms[0].id;
-      }
-      const annotations = db.getAnnotations({ symbolId, key, agent, sessionId: session_id, limit });
-
-      if (annotations.length === 0) {
-        return { content: [{ type: 'text' as const, text: 'No annotations found.' }] };
-      }
-
-      const lines: string[] = [`${annotations.length} annotations:\n`];
-      for (const a of annotations) {
-        const agentTag = a.agent ? ` [${a.agent}]` : '';
-        lines.push(`#${a.id} ${a.symbolId.split('#')[0]}::${a.key} = "${a.value}"${agentTag} (${a.createdAt})`);
-      }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
-
-  // ── Tool: session_start ──
-  server.tool(
-    'session_start',
-    'Register a new agent session for multi-agent coordination. Returns session ID.',
-    {
-      agent: z.string().describe('Agent name/identifier'),
-      context: z.string().optional().describe('Initial context JSON for the session'),
-      repo: z.string().optional(),
-    },
-    async ({ agent, context, repo }) => {
-      const { db } = getDb(repo);
-      const id = randomUUID();
-      db.startSession(id, agent, context);
-      return { content: [{ type: 'text' as const, text: `Session started: ${id} (agent: ${agent})` }] };
-    },
-  );
-
-  // ── Tool: session_context ──
-  server.tool(
-    'session_context',
-    'Get full context for an agent session: metadata + all annotations created during it.',
-    {
-      session_id: z.string().describe('Session ID'),
-      repo: z.string().optional(),
-    },
-    async ({ session_id, repo }) => {
-      const { db } = getDb(repo);
-      const session = db.getSession(session_id);
-      if (!session) {
-        return { content: [{ type: 'text' as const, text: `Session "${session_id}" not found.` }] };
-      }
-
-      const annotations = db.getAnnotations({ sessionId: session_id, limit: 100 });
-
-      const lines: string[] = [
-        `## Session: ${session.id}`,
-        `agent: ${session.agent}, status: ${session.status}`,
-        `started: ${session.startedAt}${session.endedAt ? `, ended: ${session.endedAt}` : ''}`,
-      ];
-      if (session.context) lines.push(`context: ${session.context}`);
-      if (annotations.length > 0) {
-        lines.push('', `### Annotations (${annotations.length})`);
-        for (const a of annotations) {
-          lines.push(`  ${a.symbolId.split('#')[0]}::${a.key} = "${a.value}"`);
-        }
-      }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
-
-  // ── Tool: handoff ──
-  server.tool(
-    'handoff',
-    'Transfer context from one agent session to another. Ends the source session and creates a new one with carried-over context.',
-    {
-      from_session: z.string().describe('Source session ID to transfer from'),
-      to_agent: z.string().describe('Target agent name'),
-      context: z.string().optional().describe('Additional context to pass'),
-      repo: z.string().optional(),
-    },
-    async ({ from_session, to_agent, context, repo }) => {
-      const { db } = getDb(repo);
-      const fromSession = db.getSession(from_session);
-      if (!fromSession) {
-        return { content: [{ type: 'text' as const, text: `Source session "${from_session}" not found.` }] };
-      }
-
-      // End source session
-      db.endSession(from_session, 'completed');
-
-      // Gather annotations from source
-      const annotations = db.getAnnotations({ sessionId: from_session, limit: 100 });
-
-      // Build handoff context
-      const handoffContext = JSON.stringify({
-        from: { session: from_session, agent: fromSession.agent },
-        original_context: fromSession.context ? (() => { try { return JSON.parse(fromSession.context!); } catch { return fromSession.context; } })() : null,
-        additional_context: context ?? null,
-        annotations_count: annotations.length,
-      });
-
-      // Create new session
-      const newId = randomUUID();
-      db.startSession(newId, to_agent, handoffContext);
-
-      return { content: [{ type: 'text' as const, text: `Handoff complete: ${fromSession.agent} → ${to_agent}\nNew session: ${newId}\nCarried: ${annotations.length} annotations` }] };
-    },
-  );
-
-  // ── Tool: codebase_summary ──
-  server.tool(
-    'codebase_summary',
-    'High-level codebase context for agent bootstrapping: domains, key symbols, recent activity, active annotations. Designed as the first tool call for new agent sessions.',
-    {
-      repo: z.string().optional(),
-    },
-    async ({ repo }) => {
-      const { db, root, lazy } = getDb(repo);
-      const stats = lazy.getCachedStats();
-      const domains = lazy.getCachedDomainStats();
-      const coverage = db.getTestCoverage();
-
-      const lines: string[] = [
-        `## Codebase Summary`,
-        `${stats.symbols} symbols, ${stats.links} links, ${stats.files} files`,
-        '',
-      ];
-
-      // Domains
-      if (domains.length > 0) {
-        lines.push(`### Domains`);
-        for (const d of domains) {
-          lines.push(`  ${d.domain}: ${d.files} files, ${d.symbols} symbols`);
-        }
-        lines.push('');
-      }
-
-      // Top symbols by heat
-      const allSyms = db.getTopSymbolsByHeat(10);
-      if (allSyms.length > 0) {
-        lines.push(`### Key Symbols (top 10 by heat)`);
-        for (const s of allSyms) {
-          lines.push(`  ${fmtSymbol(s, 'L2')}`);
-        }
-        lines.push('');
-      }
-
-      // Test coverage
-      if (coverage.exportedProductionSymbols > 0) {
-        const pct = Math.round((coverage.testedSymbols / coverage.exportedProductionSymbols) * 100);
-        lines.push(`### Test Coverage: ${pct}% (${coverage.testedSymbols}/${coverage.exportedProductionSymbols} exported symbols tested)`);
-        lines.push('');
-      }
-
-      // Active annotations
-      const annotations = db.getAnnotations({ limit: 10 });
-      if (annotations.length > 0) {
-        lines.push(`### Recent Annotations (${annotations.length})`);
-        for (const a of annotations) {
-          const agentTag = a.agent ? ` [${a.agent}]` : '';
-          lines.push(`  ${a.symbolId.split('#')[0]}::${a.key} = "${a.value}"${agentTag}`);
-        }
-        lines.push('');
-      }
-
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },
   );
@@ -1402,14 +910,10 @@ export function createMcpServer(rootPath?: string): McpServer {
         ? [...symbols].sort((a, b) => ((b as any).heat ?? 0) - ((a as any).heat ?? 0))
         : symbols;
 
-      // Batch-fetch link counts to avoid N+1 queries
-      const linkCounts = detail === 'L0'
-        ? new Map<string, { incoming: number; outgoing: number }>()
-        : db.getLinkCountsForSymbols(sorted.map(s => s.id));
-
       const lines: string[] = [`${file}: ${symbols.length} symbols\n`];
       for (const sym of sorted) {
-        const counts = linkCounts.get(sym.id) ?? { incoming: 0, outgoing: 0 };
+        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+        const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
         const exp = sym.exported ? ' (exported)' : '';
         if (detail === 'L0') {
           lines.push(`${sym.name} [${sym.kind}]${exp}`);
@@ -1418,9 +922,9 @@ export function createMcpServer(rootPath?: string): McpServer {
           if (sym.role) meta.push(sym.role);
           if (sym.heat != null && sym.heat > 0) meta.push(`heat:${sym.heat}`);
           const metaStr = meta.length > 0 ? ` {${meta.join(',')}}` : '';
-          lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp}${metaStr} ← ${counts.incoming} refs, → ${counts.outgoing} deps`);
+          lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp}${metaStr} ← ${incoming.length} refs, → ${outgoing.length} deps`);
         } else {
-          lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp} ← ${counts.incoming} refs, → ${counts.outgoing} deps`);
+          lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp} ← ${incoming.length} refs, → ${outgoing.length} deps`);
         }
       }
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
@@ -1506,10 +1010,9 @@ export function createMcpServer(rootPath?: string): McpServer {
         }
 
         // 3. Export chain — is this re-exported from barrel files?
-        const grepMatches = await grepFiles(root, name, { maxResults: 10, includePattern: '{**/index.{ts,js,mjs},**/__init__.py}' });
+        const grepMatches = grepFiles(root, name, { maxResults: 10, includePattern: '**/index.{ts,js,mjs}' });
         const reExportMatches = grepMatches.filter(m =>
-          (/export\s*\{[^}]*/.test(m.text) && m.text.includes('from')) ||
-          /from\s+\./.test(m.text)  // Python re-export: from .module import X
+          /export\s*\{[^}]*/.test(m.text) && m.text.includes('from')
         );
         if (reExportMatches.length > 0) {
           sections.push(`re-exported via:`);
@@ -1526,27 +1029,30 @@ export function createMcpServer(rootPath?: string): McpServer {
             sections.push(`  ${fmtSymbol(d)}`);
           }
         }
-
-        // 5. Test coverage (reuse incoming from step 2)
-        const allIncoming = db.getIncomingLinks(sym.id);
-        const testFiles = new Set<string>();
-        for (const l of allIncoming) {
-          const from = db.findSymbolById(l.fromId);
-          if (from && isTestFile(from.filePath)) {
-            testFiles.add(from.filePath);
-          }
-        }
-        if (testFiles.size > 0) {
-          sections.push(`✓ tested from: ${[...testFiles].join(', ')}`);
-        } else if (sym.exported) {
-          sections.push(`⚠ no test coverage for this exported symbol`);
-        }
       }
 
-      // 6. Unresolved warning (only for internal)
+      // 5. Unresolved warning (only for internal)
       const unresolved = db.getUnresolvedStats();
       if (unresolved.imports > 0 || unresolved.calls > 0) {
         sections.push(`⚠ index has ${unresolved.imports} unresolved internal imports, ${unresolved.calls} unresolved internal calls — callers list may be incomplete`);
+      }
+
+      // 6. Test coverage for this symbol
+      for (const sym of symbols) {
+        const incoming = db.getIncomingLinks(sym.id);
+        const testRefs = incoming.filter(l => {
+          const from = db.findSymbolById(l.fromId);
+          return from && isTestFilePath(from.filePath);
+        });
+        if (testRefs.length > 0) {
+          const testFiles = [...new Set(testRefs.map(l => {
+            const from = db.findSymbolById(l.fromId);
+            return from?.filePath;
+          }).filter(Boolean))];
+          sections.push(`✓ tested from: ${testFiles.join(', ')}`);
+        } else if (sym.exported) {
+          sections.push(`⚠ no test coverage for this exported symbol`);
+        }
       }
 
       return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
@@ -1620,10 +1126,10 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: routes ──
   server.tool(
     'routes',
-    'Detect framework routes/endpoints and map them to handler symbols. Scans for Express, FastAPI, NestJS, Flask, Django, Go HTTP, Gin, PHP, Rails, Sinatra, Spring patterns.',
+    'Detect framework routes/endpoints and map them to handler symbols. Scans for Express, FastAPI, NestJS, Flask, Go HTTP, PHP, Rails patterns.',
     {
       repo: z.string().optional(),
-      framework: z.string().optional().describe('Filter by framework (express, fastapi, nestjs, flask, django, go, gin, php, rails, sinatra, spring). Default: auto-detect all.'),
+      framework: z.string().optional().describe('Filter by framework (express, fastapi, nestjs, flask, go, php, rails). Default: auto-detect all.'),
       limit: z.number().optional().default(50),
     },
     async ({ repo, framework, limit }) => {
@@ -1635,14 +1141,10 @@ export function createMcpServer(rootPath?: string): McpServer {
         { name: 'express', pattern: /\b(?:app|router)\.(get|post|put|patch|delete|use|all)\s*\(\s*['"`]([^'"`]+)['"`]/, fileGlob: '**/*.{ts,js,mjs,cjs}' },
         { name: 'fastapi', pattern: /@(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
         { name: 'flask', pattern: /@(?:app|bp|blueprint)\.(route|get|post|put|delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
-        { name: 'django', pattern: /\b(path|re_path|url)\s*\(\s*r?['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
         { name: 'nestjs', pattern: /@(Get|Post|Put|Patch|Delete)\s*\(\s*['"]?([^'")]*?)['"]?\s*\)/, fileGlob: '**/*.ts' },
         { name: 'go', pattern: /\b(?:mux|router|http)\.(HandleFunc|Handle|Get|Post|Put|Delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.go' },
-        { name: 'gin', pattern: /\b\w+\.(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|Any|Handle)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.go' },
         { name: 'php', pattern: /Route::(get|post|put|patch|delete|any)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.php' },
         { name: 'rails', pattern: /\b(get|post|put|patch|delete|resources?|root)\s+['"]([^'"]+)['"]/, fileGlob: '**/*.rb' },
-        { name: 'sinatra', pattern: /\b(get|post|put|patch|delete)\s+['"]([^'"]+)['"]\s+do/, fileGlob: '**/*.rb' },
-        { name: 'spring', pattern: /@(RequestMapping|GetMapping|PostMapping|PutMapping|PatchMapping|DeleteMapping)\s*\(\s*(?:value\s*=\s*|path\s*=\s*)?['"]([^'"]+)['"]/, fileGlob: '**/*.java' },
       ];
 
       const activePatterns = framework
@@ -1650,14 +1152,14 @@ export function createMcpServer(rootPath?: string): McpServer {
         : routePatterns;
 
       if (activePatterns.length === 0) {
-        return { content: [{ type: 'text' as const, text: `Unknown framework "${framework}". Available: express, fastapi, nestjs, flask, django, go, gin, php, rails, sinatra, spring` }] };
+        return { content: [{ type: 'text' as const, text: `Unknown framework "${framework}". Available: express, fastapi, nestjs, flask, go, php, rails` }] };
       }
 
       interface RouteMatch { framework: string; method: string; path: string; file: string; line: number; handler?: string }
       const routes: RouteMatch[] = [];
 
       for (const rp of activePatterns) {
-        const matches = await grepFiles(root, rp.pattern.source, {
+        const matches = grepFiles(root, rp.pattern.source, {
           isRegex: true, maxResults: limit, includePattern: rp.fileGlob,
         });
 
@@ -1796,8 +1298,8 @@ export function createMcpServer(rootPath?: string): McpServer {
           }
 
           // Re-export detection
-          const reExportMatches = (await grepFiles(root, name, { maxResults: 5, includePattern: '{**/index.{ts,js,mjs},**/__init__.py}' }))
-            .filter(m => (/export\s*\{/.test(m.text) && m.text.includes('from')) || /from\s+\./.test(m.text));
+          const reExportMatches = grepFiles(root, name, { maxResults: 5, includePattern: '**/index.{ts,js,mjs}' })
+            .filter(m => /export\s*\{/.test(m.text) && m.text.includes('from'));
           if (reExportMatches.length > 0) {
             sections.push(`re-exported via: ${reExportMatches.map(m => `${m.file}:${m.line}`).join(', ')}`);
           }
@@ -1805,7 +1307,7 @@ export function createMcpServer(rootPath?: string): McpServer {
           // Test coverage
           const testRefs = incoming.filter(l => {
             const from = db.findSymbolById(l.fromId);
-            return from && isTestFile(from.filePath);
+            return from && isTestFilePath(from.filePath);
           });
           if (testRefs.length > 0) {
             sections.push(`✓ has test coverage`);
@@ -1826,19 +1328,18 @@ export function createMcpServer(rootPath?: string): McpServer {
             sections.push(`no call chains found (may be entrypoint or unreachable)`);
           }
 
-          // Fetch outgoing once, split by type
-          const allOutgoing = db.getOutgoingLinks(sym.id);
-          const callLinks = allOutgoing.filter(l => l.type === 'calls');
-          if (callLinks.length > 0) {
-            sections.push(`calls (${callLinks.length}):`);
-            for (const l of callLinks) {
+          // What does this call? (downstream immediate)
+          const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type === 'calls');
+          if (outgoing.length > 0) {
+            sections.push(`calls (${outgoing.length}):`);
+            for (const l of outgoing) {
               const to = db.findSymbolById(l.toId);
               sections.push(`  ${to ? fmtSymbol(to) : l.toId}`);
             }
           }
 
-          // Data types used (reuse allOutgoing)
-          const dataTypes = allOutgoing
+          // Data types used
+          const dataTypes = db.getOutgoingLinks(sym.id)
             .filter(l => l.type === 'imports')
             .map(l => db.findSymbolById(l.toId))
             .filter(s => s && (s.kind === 'interface' || s.kind === 'type' || s.kind === 'class'))
@@ -1848,35 +1349,47 @@ export function createMcpServer(rootPath?: string): McpServer {
           }
 
         } else if (intent === 'test') {
-          // Test coverage + what to mock — pre-resolve all link symbols
+          // Test coverage + what to mock
           const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-          const incomingResolved = incoming.map(l => ({ link: l, sym: db.findSymbolById(l.fromId) }));
-          const testRefs = incomingResolved.filter(r => r.sym && isTestFile(r.sym.filePath));
+          const testRefs = incoming.filter(l => {
+            const from = db.findSymbolById(l.fromId);
+            return from && isTestFilePath(from.filePath);
+          });
 
           if (testRefs.length > 0) {
-            const testFiles = [...new Set(testRefs.map(r => r.sym!.filePath))];
+            const testFiles = [...new Set(testRefs.map(l => {
+              const from = db.findSymbolById(l.fromId);
+              return from?.filePath;
+            }).filter(Boolean))];
             sections.push(`✓ tested from: ${testFiles.join(', ')}`);
           } else {
             sections.push(`⚠ no existing tests`);
           }
 
-          // Dependencies to mock — pre-resolve outgoing symbols
+          // Dependencies to mock
           const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
-          const outgoingResolved = outgoing.map(l => ({ link: l, sym: db.findSymbolById(l.toId) }));
-          const externalDeps = outgoingResolved.filter(r => r.sym && r.sym.filePath !== sym.filePath);
+          const externalDeps = outgoing.filter(l => {
+            const to = db.findSymbolById(l.toId);
+            return to && to.filePath !== sym.filePath;
+          });
           if (externalDeps.length > 0) {
             sections.push(`dependencies to mock (${externalDeps.length}):`);
-            for (const r of externalDeps) {
-              sections.push(`  ${r.link.type}: ${fmtSymbol(r.sym!)}`);
+            for (const l of externalDeps) {
+              const to = db.findSymbolById(l.toId);
+              if (to) sections.push(`  ${l.type}: ${fmtSymbol(to)}`);
             }
           }
 
           // Inputs — what calls this? (test should cover these call patterns)
-          const nonTestCallers = incomingResolved.filter(r => r.sym && !isTestFile(r.sym.filePath));
+          const nonTestCallers = incoming.filter(l => {
+            const from = db.findSymbolById(l.fromId);
+            return from && !isTestFilePath(from.filePath);
+          });
           if (nonTestCallers.length > 0) {
             sections.push(`callers to cover (${nonTestCallers.length}):`);
-            for (const r of nonTestCallers.slice(0, 5)) {
-              sections.push(`  ${fmtSymbol(r.sym!)}`);
+            for (const l of nonTestCallers.slice(0, 5)) {
+              const from = db.findSymbolById(l.fromId);
+              if (from) sections.push(`  ${fmtSymbol(from)}`);
             }
           }
         }
@@ -1991,140 +1504,322 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
-  // ── Tool: semantic_search ──
+  // ═══ codebase_summary ═══
   server.tool(
-    'semantic_search',
-    'Hybrid search combining FTS5 text matching and vector cosine similarity (Reciprocal Rank Fusion). Requires --embeddings flag during analyze. Falls back to FTS5-only if no embeddings exist.',
-    {
-      query: z.string().describe('Natural language or keyword query'),
-      limit: z.number().optional().describe('Max results (default 15)'),
-      repo: z.string().optional(),
-    },
-    async ({ query, limit, repo }) => {
-      const startMs = Date.now();
-      const maxResults = limit ?? 15;
-      const { db, lazy } = getDb(repo);
-
-      // FTS5 results
-      const ftsResults = db.searchSymbols(query, maxResults * 2);
-
-      // Check for embeddings
-      let hasEmbeddings = false;
-      try {
-        const row = db.getRawDb().prepare('SELECT COUNT(*) as c FROM symbol_embeddings').get() as any;
-        hasEmbeddings = row && row.c > 0;
-      } catch { /* table may not exist in old DBs */ }
-
-      if (!hasEmbeddings) {
-        // FTS-only fallback
-        const lines = ftsResults.slice(0, maxResults).map(s => fmtSymbol(s, 'L2'));
-        const text = lines.length > 0
-          ? `${lines.length} results (FTS only, run \`milens analyze --embeddings\` for hybrid):\n${lines.join('\n')}`
-          : 'No results.';
-        trackToolCall(trackDb, 'semantic_search', startMs, text, repo);
-        return { content: [{ type: 'text' as const, text }] };
+    'codebase_summary',
+    'Compact ~500 token codebase overview: domains, top hubs, test coverage, annotations count. Use at the start of every session.',
+    { repo: z.string().optional() },
+    async ({ repo }) => {
+      const { db } = getDb(repo);
+      const summary = db.getCodebaseSummary();
+      const lines = [
+        'Milens Codebase Summary:',
+        `  Symbols: ${summary.symbols} | Links: ${summary.links} | Files: ${summary.files}`,
+      ];
+      if (summary.exportedSymbols > 0) {
+        lines.push(`  Test coverage: ${summary.coveragePct}% (${summary.testedSymbols}/${summary.exportedSymbols} exported symbols tested)`);
       }
-
-      // Vector results — use cached TF-IDF provider (trained once per DB session)
-      const { provider, store } = lazy.getTfidf();
-      const queryVec = await provider.embed(query);
-      const vectorResults = store.searchSimilar(queryVec, maxResults * 2);
-
-      // Reciprocal Rank Fusion (k=60)
-      const k = 60;
-      const scores = new Map<string, { score: number; symbol: any }>();
-
-      ftsResults.forEach((sym, rank) => {
-        const rrf = 1 / (k + rank + 1);
-        const entry = scores.get(sym.id) ?? { score: 0, symbol: sym };
-        entry.score += rrf;
-        scores.set(sym.id, entry);
-      });
-
-      vectorResults.forEach((vr, rank) => {
-        const rrf = 1 / (k + rank + 1);
-        const entry = scores.get(vr.symbolId);
-        if (entry) {
-          entry.score += rrf;
-        } else {
-          const sym = db.findSymbolById(vr.symbolId);
-          if (sym) scores.set(vr.symbolId, { score: rrf, symbol: sym });
-        }
-      });
-
-      const ranked = [...scores.entries()]
-        .sort((a, b) => b[1].score - a[1].score)
-        .slice(0, maxResults);
-
-      const lines = ranked.map(([, { score, symbol }]) =>
-        `${fmtSymbol(symbol, 'L2')} (score: ${score.toFixed(4)})`
-      );
-      const text = lines.length > 0
-        ? `${lines.length} results (hybrid FTS+vector):\n${lines.join('\n')}`
-        : 'No results.';
-      trackToolCall(trackDb, 'semantic_search', startMs, text, repo);
-      return { content: [{ type: 'text' as const, text }] };
+      if (summary.domains.length > 0) {
+        const domainStr = summary.domains.map(d => `${d.domain}(${d.symbols}s)`).join(', ');
+        lines.push(`  Domains: ${domainStr}`);
+      }
+      if (summary.topHubs.length > 0) {
+        const hubStr = summary.topHubs.map(h => `${h.name}(${h.kind},heat:${h.heat})`).join(', ');
+        lines.push(`  Top hubs: ${hubStr}`);
+      }
+      try {
+        const annCount = db.getAnnotationCount();
+        lines.push(`  Total annotations: ${annCount}`);
+      } catch {
+        lines.push('  Total annotations: 0');
+      }
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },
   );
 
-  // ── Tool: find_similar ──
+  // ═══ review_pr ═══
+  server.tool(
+    'review_pr',
+    'PR risk assessment: git diff -> affected symbols with risk scores (LOW/MEDIUM/HIGH/CRITICAL).',
+    { ref: z.string().optional().default('HEAD'), repo: z.string().optional() },
+    async ({ ref, repo }) => {
+      const { db, root } = getDb(repo);
+      let changedFiles: string[] = [];
+      try {
+        const { execSync } = await import('node:child_process');
+        const diff = execSync(`git diff --name-only ${ref}`, { cwd: root, encoding: 'utf-8' }).trim();
+        changedFiles = diff ? diff.split('\n').filter(Boolean) : [];
+      } catch {}
+      if (changedFiles.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No changed files detected.' }] };
+      }
+      const allAffected: any[] = [];
+      for (const file of changedFiles) {
+        const syms = db.getSymbolsByFile(file);
+        if (syms.length === 0) continue;
+        for (const sym of syms) {
+          const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+          const depsCount = incoming.length;
+          const heat = sym.heat ?? 0;
+          const hasTest = db.getSymbolTestCoverage(sym.id);
+          const score = Math.round((heat / 100) * 40 + Math.min(depsCount / 10, 1) * 35 + (hasTest ? 0 : 25));
+          let level = 'LOW';
+          if (score > 75) level = 'CRITICAL';
+          else if (score > 50) level = 'HIGH';
+          else if (score > 25) level = 'MEDIUM';
+          allAffected.push({ symbol: sym.name, kind: sym.kind, file: sym.filePath, heat, dependents: depsCount, hasTest, riskScore: score, riskLevel: level });
+        }
+      }
+      allAffected.sort((a, b) => b.riskScore - a.riskScore);
+      const summary = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+      for (const a of allAffected) (summary as any)[a.riskLevel]++;
+      const lines = [`PR Risk Assessment (vs ${ref}):\n`];
+      lines.push(`${changedFiles.length} changed files, ${allAffected.length} affected symbols\n`);
+      for (const a of allAffected.slice(0, 30)) {
+        lines.push(`  ${a.symbol} [${a.kind}] ${a.file} — heat:${a.heat} deps:${a.dependents} test:${a.hasTest ? 'yes' : 'no'} → ${a.riskLevel}(${a.riskScore})`);
+      }
+      lines.push(`\nSummary: CRITICAL=${summary.CRITICAL} HIGH=${summary.HIGH} MEDIUM=${summary.MEDIUM} LOW=${summary.LOW}`);
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ═══ review_symbol ═══
+  server.tool(
+    'review_symbol',
+    'Deep-dive single symbol risk: role, heat, dependents, test status, risk level.',
+    { name: z.string(), repo: z.string().optional() },
+    async ({ name, repo }) => {
+      const { db, root } = getDb(repo);
+      const syms = db.findSymbolByName(name);
+      if (syms.length === 0) return { content: [{ type: 'text' as const, text: `"${name}" not found.` }] };
+      const lines: string[] = [];
+      for (const sym of syms) {
+        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+        const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+        const depsCount = incoming.length;
+        const depsTop = incoming.slice(0, 5).map(l => { const s = db.findSymbolById(l.fromId); return s?.name ?? l.fromId; });
+        const outCount = outgoing.length;
+        const outTop = outgoing.slice(0, 5).map(l => { const s = db.findSymbolById(l.toId); return s?.name ?? l.toId; });
+        const hasTest = sym.exported ? db.getSymbolTestCoverage(sym.id) : false;
+        const heat = sym.heat ?? 0;
+        const score = Math.round((heat / 100) * 40 + Math.min(depsCount / 10, 1) * 35 + (hasTest ? 0 : 25));
+        let risk = 'LOW';
+        if (score > 75) risk = 'CRITICAL';
+        else if (score > 50) risk = 'HIGH';
+        else if (score > 25) risk = 'MEDIUM';
+        lines.push(`${sym.name} [${sym.kind}] ${sym.filePath}:${sym.startLine}`);
+        lines.push(`  role: ${sym.role ?? 'unknown'} | heat: ${heat} | exported: ${sym.exported}`);
+        lines.push(`  dependents: ${depsCount} ${depsTop.length ? '(' + depsTop.join(', ') + ')' : ''}`);
+        lines.push(`  dependencies: ${outCount} ${outTop.length ? '(' + outTop.join(', ') + ')' : ''}`);
+        lines.push(`  test coverage: ${hasTest ? 'yes' : 'no'}`);
+        lines.push(`  risk: ${risk} (score: ${score})`);
+        if (risk === 'CRITICAL') lines.push(`  recommendation: High risk — has ${depsCount} dependents with no test coverage. Write tests before modifying.`);
+        else if (risk === 'HIGH') lines.push(`  recommendation: Review dependents carefully before modifying.`);
+        lines.push('');
+      }
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ═══ test_coverage_gaps ═══
+  server.tool(
+    'test_coverage_gaps',
+    'Untested exported symbols sorted by risk. Prioritize writing tests for these.',
+    { limit: z.number().optional().default(20), repo: z.string().optional() },
+    async ({ limit, repo }) => {
+      const { db } = getDb(repo);
+      const coverage = db.getTestCoverage();
+      const gaps = db.getTestCoverageGaps(limit);
+      const lines = [`Test Coverage: ${coverage.testedSymbols}/${coverage.exportedProductionSymbols} (${coverage.exportedProductionSymbols > 0 ? Math.round(coverage.testedSymbols / coverage.exportedProductionSymbols * 100) : 0}%) from ${coverage.testFiles} test files\n`];
+      if (gaps.length === 0) {
+        lines.push('All exported symbols have test coverage!');
+      } else {
+        lines.push(`Top ${gaps.length} untested symbols:\n`);
+        for (const g of gaps) {
+          const incoming = db.getIncomingLinks(g.id).filter(l => l.type !== 'contains');
+          const risk = (g.heat ?? 0) > 80 ? 'CRITICAL' : (g.heat ?? 0) > 50 ? 'HIGH' : (g.heat ?? 0) > 30 ? 'MEDIUM' : 'LOW';
+          lines.push(`  ${g.name} [${g.kind}] ${g.filePath}:${g.startLine} — heat:${g.heat ?? 0} deps:${incoming.length} risk:${risk}`);
+        }
+      }
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ═══ test_impact ═══
+  server.tool(
+    'test_impact',
+    'Map changed code -> which test files to run. Use after making changes.',
+    { ref: z.string().optional().default('HEAD'), repo: z.string().optional() },
+    async ({ ref, repo }) => {
+      const { db, root } = getDb(repo);
+      let changedFiles: string[] = [];
+      try {
+        const { execSync } = await import('node:child_process');
+        const diff = execSync(`git diff --name-only ${ref}`, { cwd: root, encoding: 'utf-8' }).trim();
+        changedFiles = diff ? diff.split('\n').filter(Boolean) : [];
+      } catch {}
+      if (changedFiles.length === 0) return { content: [{ type: 'text' as const, text: 'No changed files.' }] };
+      const changedIds: string[] = [];
+      const changedNames: string[] = [];
+      for (const file of changedFiles) {
+        for (const sym of db.getSymbolsByFile(file)) {
+          changedIds.push(sym.id);
+          changedNames.push(sym.name);
+        }
+      }
+      if (changedIds.length === 0) return { content: [{ type: 'text' as const, text: 'No symbols in changed files.' }] };
+      const impact = db.getTestImpact(changedIds);
+      const lines = [`Changed symbols (${changedNames.length}): ${changedNames.join(', ')}`];
+      lines.push(`\nAffected test files (${impact.testFiles.length}):`);
+      for (const f of impact.testFiles) lines.push(`  ${f}`);
+      if (impact.testFiles.length > 0) {
+        lines.push(`\nSuggested command: npx vitest run ${impact.testFiles.join(' ')}`);
+      }
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ═══ test_plan ═══
+  server.tool(
+    'test_plan',
+    'Generate a test strategy for a symbol: mock plan + >=3 test scenarios.',
+    { name: z.string(), repo: z.string().optional() },
+    async ({ name, repo }) => {
+      const { db } = getDb(repo);
+      const plan = generateTestPlan(db, name);
+      if (!plan) return { content: [{ type: 'text' as const, text: `"${name}" not found.` }] };
+      return { content: [{ type: 'text' as const, text: plan.planText }] };
+    },
+  );
+
+  // ═══ annotate ═══
+  server.tool(
+    'annotate',
+    'Record a note about a symbol for future sessions. Use after discovering bugs, patterns, or important caveats.',
+    {
+      symbol: z.string(),
+      key: z.enum(['note', 'bug', 'security', 'architecture', 'workflow', 'test', 'dependency', 'refactor']),
+      value: z.string(),
+      agent: z.string().optional(),
+      session_id: z.string().optional(),
+      confidence: z.number().optional().default(0.5),
+    },
+    async ({ symbol, key, value, agent, session_id, confidence }) => {
+      const { db } = getDb();
+      const store = new AnnotationStore(db.connection);
+      const ann = store.annotate(symbol, key as any, value, { agent, sessionId: session_id });
+      return { content: [{ type: 'text' as const, text: `Annotation saved: ${ann.id}\n  symbol: ${ann.symbol}\n  key: ${ann.key}\n  confidence: ${ann.confidence}` }] };
+    },
+  );
+
+  // ═══ recall ═══
+  server.tool(
+    'recall',
+    'Retrieve annotations saved in previous sessions. Filter by symbol, key, or agent.',
+    {
+      symbol: z.string().optional(), key: z.enum(['note', 'bug', 'security', 'architecture', 'workflow', 'test', 'dependency', 'refactor']).optional(),
+      agent: z.string().optional(), limit: z.number().optional().default(50),
+    },
+    async ({ symbol, key, agent, limit }) => {
+      const { db } = getDb();
+      const store = new AnnotationStore(db.connection);
+      const results = store.recall({ symbol, key, agent, limit });
+      if (results.length === 0) return { content: [{ type: 'text' as const, text: 'No annotations found.' }] };
+      const lines = [`${results.length} annotation(s):\n`];
+      for (const a of results) {
+        lines.push(`[${a.key}] ${a.symbol} — ${a.value.slice(0, 120)}`);
+        lines.push(`  confidence: ${a.confidence.toFixed(1)} | agent: ${a.agent ?? '?'} | ${a.updatedAt}\n`);
+      }
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ═══ session_start ═══
+  server.tool(
+    'session_start',
+    'Start a new session. Returns a session ID to use with annotate, session_end, and handoff.',
+    { agent: z.string().describe('Agent name (e.g. vibe-coder, reviewer)') },
+    async ({ agent }) => {
+      const { db } = getDb();
+      const store = new AnnotationStore(db.connection);
+      const sessionId = store.sessionStart(agent);
+      return { content: [{ type: 'text' as const, text: `Session started: ${sessionId}\nAgent: ${agent}\nUse this ID with annotate() and session_end().` }] };
+    },
+  );
+
+  // ═══ session_context ═══
+  server.tool(
+    'session_context',
+    'Get metadata about a session: annotations, tool calls, duration.',
+    { session_id: z.string() },
+    async ({ session_id }) => {
+      const { db } = getDb();
+      const store = new AnnotationStore(db.connection);
+      const ctx = store.sessionContext(session_id);
+      if (!ctx.session) return { content: [{ type: 'text' as const, text: `Session "${session_id}" not found.` }] };
+      const s = ctx.session;
+      const lines = [
+        `Session: ${s.id}`,
+        `Agent: ${s.agent} | Status: ${s.status}`,
+        `Started: ${s.startedAt} | Ended: ${s.endedAt ?? 'in progress'}`,
+        `Tool calls: ${s.toolCallsCount} | Annotations: ${s.annotationsCount}`,
+      ];
+      if (s.context) lines.push(`Context: ${s.context}`);
+      if (ctx.annotations.length > 0) {
+        lines.push(`\nAnnotations (${ctx.annotations.length}):`);
+        for (const a of ctx.annotations) {
+          lines.push(`  [${a.key}] ${a.symbol}: ${a.value.slice(0, 80)}`);
+        }
+      }
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ═══ session_end ═══
+  server.tool(
+    'session_end',
+    'End a session and record its stats. Use at the end of every session.',
+    { session_id: z.string(), status: z.enum(['completed', 'failed']).optional().default('completed') },
+    async ({ session_id, status }) => {
+      const { db } = getDb();
+      const store = new AnnotationStore(db.connection);
+      const summary = store.sessionEnd(session_id, status);
+      return { content: [{ type: 'text' as const, text: `Session ended: ${session_id}\nStatus: ${status}\nAnnotations: ${summary.annotationCount}` }] };
+    },
+  );
+
+  // ═══ handoff ═══
+  server.tool(
+    'handoff',
+    'Transfer context from one agent session to another. Ends the source session and creates a new one for the target agent.',
+    {
+      from_session: z.string(), to_agent: z.string(),
+      context: z.string().describe('Summary of what was done, key decisions, and caveats for the next agent'),
+    },
+    async ({ from_session, to_agent, context }) => {
+      const { db } = getDb();
+      const store = new AnnotationStore(db.connection);
+      const result = store.handoff(from_session, to_agent, context);
+      return { content: [{ type: 'text' as const, text: `Handoff complete.\nNew session: ${result.newSessionId}\nAgent: ${to_agent}\nAnnotations copied: ${result.annotationsCopied}` }] };
+    },
+  );
+
+  // ═══ find_similar ═══
   server.tool(
     'find_similar',
-    'Find symbols similar to a given symbol by vector embedding proximity. Requires --embeddings flag during analyze.',
-    {
-      name: z.string().describe('Symbol name to find similar symbols for'),
-      limit: z.number().optional().describe('Max results (default 10)'),
-      repo: z.string().optional(),
-    },
+    'Find symbols topologically similar to a given symbol (shared callers/callees). Useful for finding patterns to copy or refactor together.',
+    { name: z.string(), limit: z.number().optional().default(10), repo: z.string().optional() },
     async ({ name, limit, repo }) => {
-      const startMs = Date.now();
-      const maxResults = limit ?? 10;
-      const { db, lazy } = getDb(repo);
-
+      const { db } = getDb(repo);
       const syms = db.findSymbolByName(name);
-      if (syms.length === 0) {
-        const text = `Symbol "${name}" not found.`;
-        trackToolCall(trackDb, 'find_similar', startMs, text, repo);
-        return { content: [{ type: 'text' as const, text }] };
+      if (syms.length === 0) return { content: [{ type: 'text' as const, text: `"${name}" not found.` }] };
+      const results = db.findTopologicallySimilar(syms[0].id, limit);
+      if (results.length === 0) return { content: [{ type: 'text' as const, text: `No similar symbols found for "${name}".` }] };
+      const lines = [`Symbols similar to "${name}":\n`];
+      for (const r of results) {
+        lines.push(`  ${r.symbol.name} [${r.symbol.kind}] ${r.symbol.filePath}:${r.symbol.startLine} — similarity: ${r.similarity.toFixed(2)}`);
       }
-
-      const targetSym = syms[0];
-
-      // Check for embeddings
-      let hasEmbeddings = false;
-      try {
-        const row = db.getRawDb().prepare('SELECT COUNT(*) as c FROM symbol_embeddings').get() as any;
-        hasEmbeddings = row && row.c > 0;
-      } catch { /* table may not exist */ }
-
-      if (!hasEmbeddings) {
-        const text = 'No embeddings found. Run `milens analyze --embeddings` first.';
-        trackToolCall(trackDb, 'find_similar', startMs, text, repo);
-        return { content: [{ type: 'text' as const, text }] };
-      }
-
-      // Use cached TF-IDF provider (trained once per DB session)
-      const { provider, store } = lazy.getTfidf();
-
-      // Get or compute target embedding
-      let targetVec = store.get(targetSym.id);
-      if (!targetVec) {
-        targetVec = await provider.embed(buildEmbeddingText({
-          name: targetSym.name, kind: targetSym.kind, filePath: targetSym.filePath, signature: targetSym.signature,
-        }));
-      }
-
-      const similar = store.searchSimilar(targetVec, maxResults, targetSym.id);
-
-      const lines = [`Similar to ${fmtSymbol(targetSym, 'L1')}:\n`];
-      for (const { symbolId, score } of similar) {
-        const sym = db.findSymbolById(symbolId);
-        if (sym) lines.push(`  ${(score * 100).toFixed(1)}% ${fmtSymbol(sym, 'L2')}`);
-      }
-
-      const text = lines.join('\n');
-      trackToolCall(trackDb, 'find_similar', startMs, text, repo);
-      return { content: [{ type: 'text' as const, text }] };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },
   );
 
@@ -2181,11 +1876,11 @@ export function createMcpServer(rootPath?: string): McpServer {
         return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: `No symbols in "${filePath}".` }] };
       }
       const lines: string[] = [`${filePath}: ${symbols.length} symbols\n`];
-      const linkCounts = db.getLinkCountsForSymbols(symbols.map(s => s.id));
       for (const sym of symbols) {
-        const counts = linkCounts.get(sym.id) ?? { incoming: 0, outgoing: 0 };
+        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+        const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
         const exp = sym.exported ? ' (exported)' : '';
-        lines.push(`${fmtSymbol(sym, 'L2')}${exp} ← ${counts.incoming} refs, → ${counts.outgoing} deps`);
+        lines.push(`${fmtSymbol(sym, 'L2')}${exp} ← ${incoming.length} refs, → ${outgoing.length} deps`);
       }
       return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: lines.join('\n') }] };
     },

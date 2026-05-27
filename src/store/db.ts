@@ -11,6 +11,11 @@ export class Database {
   private db: BetterSqlite3.Database;
   private stmts!: ReturnType<Database['prepareStatements']>;
 
+  /** Access the raw better-sqlite3 connection (for AnnotationStore etc.) */
+  get connection(): BetterSqlite3.Database {
+    return this.db;
+  }
+
   constructor(dbPath: string) {
     this.db = new BetterSqlite3(dbPath);
     this.db.pragma('journal_mode = WAL');
@@ -79,9 +84,23 @@ export class Database {
       countLinks: this.db.prepare('SELECT COUNT(*) as c FROM links'),
       countFiles: this.db.prepare('SELECT COUNT(*) as c FROM file_hashes'),
       deleteFileLinks: this.db.prepare(
-        'DELETE FROM links WHERE from_id IN (SELECT id FROM symbols WHERE file_path = ?) OR to_id IN (SELECT id FROM symbols WHERE file_path = ?)'
+        'DELETE FROM links WHERE from_id IN (SELECT id FROM symbols WHERE file_path = ?)'
       ),
       deleteFileSymbols: this.db.prepare('DELETE FROM symbols WHERE file_path = ?'),
+      topHubs: this.db.prepare('SELECT * FROM symbols WHERE exported = 1 ORDER BY heat DESC LIMIT ?'),
+      testCoverageGaps: this.db.prepare(`
+        SELECT s.* FROM symbols s
+        WHERE s.exported = 1 AND s.heat > 0
+        AND s.id NOT IN (
+          SELECT DISTINCT l.to_id FROM links l
+          JOIN symbols src ON src.id = l.from_id
+          WHERE (src.file_path LIKE '%/test/%' OR src.file_path LIKE '%\\test\\%'
+                 OR src.file_path LIKE '%.test.%' OR src.file_path LIKE '%.spec.%')
+        )
+        ORDER BY s.heat DESC
+        LIMIT ?
+      `),
+      annotationCount: this.db.prepare('SELECT COUNT(*) as c FROM annotations'),
     };
   }
 
@@ -193,37 +212,6 @@ export class Database {
     return rows.map(rowToLink);
   }
 
-  /** Batch link counts for multiple symbol IDs (avoids N+1 queries) */
-  getLinkCountsForSymbols(symbolIds: string[]): Map<string, { incoming: number; outgoing: number }> {
-    if (symbolIds.length === 0) return new Map();
-    const placeholders = symbolIds.map(() => '?').join(',');
-    const inRows = this.db.prepare(
-      `SELECT to_id as id, COUNT(*) as c FROM links WHERE to_id IN (${placeholders}) AND type != 'contains' GROUP BY to_id`,
-    ).all(...symbolIds) as any[];
-    const outRows = this.db.prepare(
-      `SELECT from_id as id, COUNT(*) as c FROM links WHERE from_id IN (${placeholders}) AND type != 'contains' GROUP BY from_id`,
-    ).all(...symbolIds) as any[];
-    const result = new Map<string, { incoming: number; outgoing: number }>();
-    for (const id of symbolIds) result.set(id, { incoming: 0, outgoing: 0 });
-    for (const r of inRows) result.get(r.id)!.incoming = r.c;
-    for (const r of outRows) result.get(r.id)!.outgoing = r.c;
-    return result;
-  }
-
-  /** Batch: get symbol IDs that have at least one incoming link from a test file. */
-  getTestedSymbolIds(symbolIds: string[], isTestFile: (fp: string) => boolean): Set<string> {
-    if (symbolIds.length === 0) return new Set();
-    const placeholders = symbolIds.map(() => '?').join(',');
-    const rows = this.db.prepare(
-      `SELECT DISTINCT l.to_id, s.file_path FROM links l JOIN symbols s ON s.id = l.from_id WHERE l.to_id IN (${placeholders})`,
-    ).all(...symbolIds) as any[];
-    const tested = new Set<string>();
-    for (const r of rows) {
-      if (isTestFile(r.file_path)) tested.add(r.to_id);
-    }
-    return tested;
-  }
-
   findUpstream(symbolId: string, maxDepth = 3): Array<{ symbol: CodeSymbol; depth: number; via: string }> {
     const rows = this.stmts.upstream.all(symbolId, maxDepth) as any[];
     return rows.map(r => ({ symbol: rowToSymbol(r), depth: r.depth, via: r.via }));
@@ -246,51 +234,20 @@ export class Database {
     return rows.map(rowToSymbol);
   }
 
-  getTopSymbolsByHeat(limit = 10): CodeSymbol[] {
-    const rows = this.db.prepare(
-      `SELECT * FROM symbols WHERE heat > 0 AND kind != 'section' ORDER BY heat DESC LIMIT ?`
-    ).all(limit) as any[];
-    return rows.map(rowToSymbol);
-  }
-
   getAllLinks(): SymbolLink[] {
     const rows = this.db.prepare('SELECT * FROM links').all() as any[];
     return rows.map(rowToLink);
   }
 
   findDeadCode(kind?: string, limit = 50): CodeSymbol[] {
-    // Exclude: section symbols (markdown headings), test fixtures (not real production code),
-    // framework entry-point files (consumed by runtime, not imported by project code),
-    // and config files (consumed by CLI tooling)
-    const excludeClause = `AND s.kind != 'section'
-      AND s.file_path NOT LIKE 'test/fixtures/%'
-      AND s.file_path NOT LIKE '%/page.ts' AND s.file_path NOT LIKE '%/page.tsx'
-      AND s.file_path NOT LIKE '%/page.js' AND s.file_path NOT LIKE '%/page.jsx'
-      AND s.file_path NOT LIKE '%/layout.ts' AND s.file_path NOT LIKE '%/layout.tsx'
-      AND s.file_path NOT LIKE '%/layout.js' AND s.file_path NOT LIKE '%/layout.jsx'
-      AND s.file_path NOT LIKE '%/loading.ts' AND s.file_path NOT LIKE '%/loading.tsx'
-      AND s.file_path NOT LIKE '%/error.ts' AND s.file_path NOT LIKE '%/error.tsx'
-      AND s.file_path NOT LIKE '%/not-found.ts' AND s.file_path NOT LIKE '%/not-found.tsx'
-      AND s.file_path NOT LIKE '%/template.ts' AND s.file_path NOT LIKE '%/template.tsx'
-      AND s.file_path NOT LIKE '%/route.ts' AND s.file_path NOT LIKE '%/route.tsx'
-      AND s.file_path NOT LIKE '%/route.js' AND s.file_path NOT LIKE '%/route.jsx'
-      AND s.file_path NOT LIKE '%/default.ts' AND s.file_path NOT LIKE '%/default.tsx'
-      AND s.file_path NOT LIKE '%/global-error.ts' AND s.file_path NOT LIKE '%/global-error.tsx'
-      AND s.file_path NOT LIKE '%/middleware.ts' AND s.file_path NOT LIKE '%/middleware.js'
-      AND s.file_path NOT LIKE '%.config.ts' AND s.file_path NOT LIKE '%.config.js'
-      AND s.file_path NOT LIKE '%.config.mjs' AND s.file_path NOT LIKE '%.config.cjs'
-      AND s.file_path NOT LIKE '%/+page.svelte' AND s.file_path NOT LIKE '%/+page.ts'
-      AND s.file_path NOT LIKE '%/+page.server.ts' AND s.file_path NOT LIKE '%/+layout.svelte'
-      AND s.file_path NOT LIKE '%/+layout.ts' AND s.file_path NOT LIKE '%/+layout.server.ts'
-      AND s.file_path NOT LIKE '%/+server.ts'`;
     const sql = kind
       ? `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
-         WHERE s.exported = 1 AND s.kind = ? ${excludeClause} AND l.id IS NULL
+         WHERE s.exported = 1 AND s.kind = ? AND l.id IS NULL
          LIMIT ?`
       : `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
-         WHERE s.exported = 1 ${excludeClause} AND l.id IS NULL
+         WHERE s.exported = 1 AND l.id IS NULL
          LIMIT ?`;
     const rows = kind
       ? this.db.prepare(sql).all(kind, limit) as any[]
@@ -335,42 +292,27 @@ export class Database {
     const fromId = fromSyms[0].id;
     const toIds = new Set(toSyms.map(s => s.id));
 
-    // BFS with parent tracking to reconstruct shortest path
+    // BFS outgoing from source
     const rows = this.db.prepare(`
-      WITH RECURSIVE path(id, depth, via, parent_id) AS (
-        SELECT to_id, 1, type, from_id FROM links WHERE from_id = ? AND type != 'contains'
+      WITH RECURSIVE path(id, depth, via) AS (
+        SELECT to_id, 1, type FROM links WHERE from_id = ? AND type != 'contains'
         UNION
-        SELECT l.to_id, p.depth + 1, l.type, l.from_id
+        SELECT l.to_id, p.depth + 1, l.type
         FROM links l JOIN path p ON l.from_id = p.id
         WHERE l.type != 'contains' AND p.depth < ?
       )
-      SELECT s.*, p.depth, p.via, p.parent_id FROM path p JOIN symbols s ON s.id = p.id ORDER BY p.depth
+      SELECT DISTINCT s.*, p.depth, p.via FROM path p JOIN symbols s ON s.id = p.id ORDER BY p.depth
     `).all(fromId, maxDepth) as any[];
 
-    // Find first row matching target
-    const targetRow = rows.find(r => toIds.has(r.id));
-    if (!targetRow) return null;
-
-    // Build lookup: id → { row, parent_id }
-    const byId = new Map<string, { row: any; parentId: string }>();
+    const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
     for (const r of rows) {
-      if (!byId.has(r.id)) {
-        byId.set(r.id, { row: r, parentId: r.parent_id });
-      }
+      result.push({ symbol: rowToSymbol(r), depth: r.depth, via: r.via });
+      if (toIds.has(r.id)) break;
     }
 
-    // Walk backwards from target to source to reconstruct the actual path
-    const chain: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
-    const visited = new Set<string>();
-    let cur = targetRow;
-    while (cur && cur.id !== fromId && !visited.has(cur.id)) {
-      visited.add(cur.id);
-      chain.push({ symbol: rowToSymbol(cur), depth: cur.depth, via: cur.via });
-      const parent = byId.get(cur.parent_id);
-      cur = parent ? parent.row : null;
-    }
-    chain.reverse();
-    return chain;
+    const found = result.find(r => toIds.has(r.symbol.id));
+    if (!found) return null;
+    return result.filter(r => r.depth <= found.depth);
   }
 
   getChangedFiles(): string[] {
@@ -381,7 +323,7 @@ export class Database {
   // ── Maintenance ──
 
   deleteFileData(filePath: string): void {
-    this.stmts.deleteFileLinks.run(filePath, filePath);
+    this.stmts.deleteFileLinks.run(filePath);
     this.stmts.deleteFileSymbols.run(filePath);
   }
 
@@ -446,14 +388,6 @@ export class Database {
     // Walk upstream following only 'calls' links to find paths from entrypoints
     const paths: Array<{ path: Array<{ symbol: CodeSymbol; via: string }> }> = [];
     const visited = new Set<string>();
-    const symCache = new Map<string, CodeSymbol | null>();
-
-    const cachedFindSymbol = (id: string): CodeSymbol | null => {
-      if (symCache.has(id)) return symCache.get(id)!;
-      const sym = this.findSymbolById(id);
-      symCache.set(id, sym);
-      return sym;
-    };
 
     const dfs = (currentId: string, currentPath: Array<{ symbol: CodeSymbol; via: string }>, depth: number) => {
       if (depth > maxDepth) return;
@@ -461,7 +395,7 @@ export class Database {
       visited.add(currentId);
 
       const incoming = this.getIncomingLinks(currentId).filter(l => l.type === 'calls' || l.type === 'imports');
-      const sym = cachedFindSymbol(currentId);
+      const sym = this.findSymbolById(currentId);
 
       if (incoming.length === 0 && sym?.exported) {
         // Reached an entrypoint — save this path
@@ -471,9 +405,15 @@ export class Database {
       }
 
       for (const link of incoming) {
-        const fromSym = cachedFindSymbol(link.fromId);
+        const fromSym = this.findSymbolById(link.fromId);
         if (!fromSym) continue;
-        dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
+        // Skip module-level _top imports — go to their real callers
+        if (fromSym.name === '_top' && fromSym.kind === 'module') {
+          // Recurse from the _top module's incoming callers
+          dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
+        } else {
+          dfs(link.fromId, [{ symbol: fromSym, via: link.type }, ...currentPath], depth + 1);
+        }
       }
 
       visited.delete(currentId);
@@ -620,87 +560,152 @@ export class Database {
     };
   }
 
-  // ── Annotations (agent code memory) ──
+  // ── Test file detection ──
 
-  addAnnotation(symbolId: string, key: string, value: string, agent?: string, sessionId?: string, ttlHours?: number): number {
-    const expiresAt = ttlHours
-      ? new Date(Date.now() + ttlHours * 3600_000).toISOString().replace('T', ' ').slice(0, 19)
-      : null;
-    const result = this.db.prepare(
-      `INSERT INTO annotations (symbol_id, key, value, agent, session_id, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(symbolId, key, value, agent ?? null, sessionId ?? null, expiresAt);
-    return result.lastInsertRowid as number;
+  private isTestFile(filePath: string): boolean {
+    return /[/\\]test[/\\]/.test(filePath) || /\.(test|spec)\./.test(filePath);
   }
 
-  getAnnotations(filters: { symbolId?: string; key?: string; agent?: string; sessionId?: string; limit?: number }): Array<{ id: number; symbolId: string; key: string; value: string; agent: string | null; sessionId: string | null; createdAt: string }> {
-    const clauses: string[] = ["(expires_at IS NULL OR expires_at > datetime('now'))"];
-    const params: any[] = [];
+  // ── Heat / hubs ──
 
-    if (filters.symbolId) { clauses.push('symbol_id = ?'); params.push(filters.symbolId); }
-    if (filters.key) { clauses.push('key = ?'); params.push(filters.key); }
-    if (filters.agent) { clauses.push('agent = ?'); params.push(filters.agent); }
-    if (filters.sessionId) { clauses.push('session_id = ?'); params.push(filters.sessionId); }
-
-    const where = `WHERE ${clauses.join(' AND ')}`;
-    const limit = filters.limit ?? 50;
-
-    const rows = this.db.prepare(
-      `SELECT id, symbol_id, key, value, agent, session_id, created_at
-       FROM annotations ${where}
-       ORDER BY created_at DESC LIMIT ?`
-    ).all(...params, limit) as any[];
-
-    return rows.map(r => ({
-      id: r.id,
-      symbolId: r.symbol_id,
-      key: r.key,
-      value: r.value,
-      agent: r.agent,
-      sessionId: r.session_id,
-      createdAt: r.created_at,
-    }));
+  getTopHubs(limit: number): CodeSymbol[] {
+    const rows = this.stmts.topHubs.all(limit) as any[];
+    return rows.map(rowToSymbol);
   }
 
-  getAnnotationsForSymbol(symbolId: string): Array<{ key: string; value: string; agent: string | null; createdAt: string }> {
-    const rows = this.db.prepare(
-      `SELECT key, value, agent, created_at FROM annotations
-       WHERE symbol_id = ? AND (expires_at IS NULL OR expires_at > datetime('now'))
-       ORDER BY created_at DESC`
-    ).all(symbolId) as any[];
-    return rows.map(r => ({ key: r.key, value: r.value, agent: r.agent, createdAt: r.created_at }));
+  // ── Test coverage ──
+
+  getSymbolTestCoverage(symbolId: string): boolean {
+    const incomingLinks = this.getIncomingLinks(symbolId);
+    for (const link of incomingLinks) {
+      const sourceSymbol = this.findSymbolById(link.fromId);
+      if (sourceSymbol && this.isTestFile(sourceSymbol.filePath)) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  cleanupExpiredAnnotations(): number {
-    const result = this.db.prepare(
-      `DELETE FROM annotations WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')`
-    ).run();
-    return result.changes;
+  getTestCoverageGaps(limit: number): CodeSymbol[] {
+    const rows = this.stmts.testCoverageGaps.all(limit) as any[];
+    return rows.map(rowToSymbol);
   }
 
-  // ── Agent sessions ──
+  getTestImpact(changedSymbolIds: string[]): { testFiles: string[]; changedSymbols: string[] } {
+    if (changedSymbolIds.length === 0) return { testFiles: [], changedSymbols: [] };
 
-  startSession(id: string, agent: string, context?: string): void {
-    this.db.prepare(
-      `INSERT INTO agent_sessions (id, agent, context_json, status) VALUES (?, ?, ?, 'active')`
-    ).run(id, agent, context ?? null);
+    const placeholders = changedSymbolIds.map(() => '?').join(',');
+
+    const testFilesDirect = this.db.prepare(`
+      SELECT DISTINCT src.file_path
+      FROM links l
+      JOIN symbols src ON src.id = l.from_id
+      WHERE l.to_id IN (${placeholders})
+        AND (src.file_path LIKE '%/test/%' OR src.file_path LIKE '%\\test\\%'
+             OR src.file_path LIKE '%.test.%' OR src.file_path LIKE '%.spec.%')
+    `).all(...changedSymbolIds) as any[];
+
+    const testFilesUpstream = this.db.prepare(`
+      WITH RECURSIVE upstream(id, depth) AS (
+        SELECT from_id, 1 FROM links WHERE to_id IN (${placeholders})
+          AND type IN ('calls', 'imports', 'extends', 'implements')
+        UNION
+        SELECT l.from_id, u.depth + 1
+        FROM links l JOIN upstream u ON l.to_id = u.id
+        WHERE l.type IN ('calls', 'imports', 'extends', 'implements') AND u.depth < 5
+      )
+      SELECT DISTINCT s.file_path FROM upstream u
+      JOIN symbols s ON s.id = u.id
+      WHERE (s.file_path LIKE '%/test/%' OR s.file_path LIKE '%\\test\\%'
+             OR s.file_path LIKE '%.test.%' OR s.file_path LIKE '%.spec.%')
+    `).all(...changedSymbolIds) as any[];
+
+    const allTestFiles = [...new Set([
+      ...testFilesDirect.map((r: any) => r.file_path),
+      ...testFilesUpstream.map((r: any) => r.file_path),
+    ])];
+
+    const changedSymbols = changedSymbolIds.filter(id => this.getSymbolTestCoverage(id));
+
+    return { testFiles: allTestFiles, changedSymbols };
   }
 
-  getSession(id: string): { id: string; agent: string; startedAt: string; endedAt: string | null; context: string | null; status: string } | null {
-    const row = this.db.prepare('SELECT * FROM agent_sessions WHERE id = ?').get(id) as any;
-    if (!row) return null;
-    return { id: row.id, agent: row.agent, startedAt: row.started_at, endedAt: row.ended_at, context: row.context_json, status: row.status };
+  // ── Codebase summary ──
+
+  getCodebaseSummary(): {
+    symbols: number;
+    links: number;
+    files: number;
+    coveragePct: number;
+    testedSymbols: number;
+    exportedSymbols: number;
+    domains: Array<{ domain: string; files: number; symbols: number }>;
+    topHubs: CodeSymbol[];
+  } {
+    const stats = this.getStats();
+    const coverage = this.getTestCoverage();
+    const domains = this.getDomainStats();
+    const topHubs = this.getTopHubs(10);
+    const coveragePct = coverage.exportedProductionSymbols > 0
+      ? Math.round((coverage.testedSymbols / coverage.exportedProductionSymbols) * 100)
+      : 0;
+
+    return {
+      symbols: stats.symbols,
+      links: stats.links,
+      files: stats.files,
+      coveragePct,
+      testedSymbols: coverage.testedSymbols,
+      exportedSymbols: coverage.exportedProductionSymbols,
+      domains,
+      topHubs,
+    };
   }
 
-  endSession(id: string, status: 'completed' | 'failed' = 'completed'): void {
-    this.db.prepare(
-      `UPDATE agent_sessions SET ended_at = datetime('now'), status = ? WHERE id = ?`
-    ).run(status, id);
+  // ── Topological similarity ──
+
+  findTopologicallySimilar(symbolId: string, limit = 10): Array<{ symbol: CodeSymbol; similarity: number }> {
+    const target = this.findSymbolById(symbolId);
+    if (!target) return [];
+
+    const incoming = this.getIncomingLinks(symbolId).filter(l => l.type !== 'contains');
+    const outgoing = this.getOutgoingLinks(symbolId).filter(l => l.type !== 'contains');
+
+    const targetLinks = new Set<string>();
+    for (const link of incoming) targetLinks.add(link.fromId);
+    for (const link of outgoing) targetLinks.add(link.toId);
+
+    const siblings = this.getSymbolsByFile(target.filePath).filter(s => s.id !== symbolId);
+
+    const results: Array<{ symbol: CodeSymbol; similarity: number }> = [];
+    for (const sibling of siblings) {
+      const sibIncoming = this.getIncomingLinks(sibling.id).filter(l => l.type !== 'contains');
+      const sibOutgoing = this.getOutgoingLinks(sibling.id).filter(l => l.type !== 'contains');
+
+      const siblingLinks = new Set<string>();
+      for (const link of sibIncoming) siblingLinks.add(link.fromId);
+      for (const link of sibOutgoing) siblingLinks.add(link.toId);
+
+      let intersection = 0;
+      for (const id of targetLinks) {
+        if (siblingLinks.has(id)) intersection++;
+      }
+      const union = new Set([...targetLinks, ...siblingLinks]).size;
+      const similarity = union > 0 ? intersection / union : 0;
+
+      if (similarity >= 0.3) {
+        results.push({ symbol: sibling, similarity: Math.round(similarity * 100) / 100 });
+      }
+    }
+
+    return results.sort((a, b) => b.similarity - a.similarity).slice(0, limit);
   }
 
-  /** Expose raw handle for subsystems (e.g. EmbeddingStore) that need direct access. */
-  getRawDb(): BetterSqlite3.Database {
-    return this.db;
+  // ── Annotations ──
+
+  getAnnotationCount(): number {
+    const row = this.stmts.annotationCount.get() as any;
+    return row.c;
   }
 
   transaction<T>(fn: () => T): T {

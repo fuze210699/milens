@@ -67,7 +67,7 @@
     "tree-sitter-wasms": "^0.1.12",
     "web-tree-sitter": "^0.24.7"
   },
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "MIT",
   "devDependencies": {
     "@types/better-sqlite3": "^7.0.0",
     "@types/node": "^20.0.0",

@@ -373,7 +373,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     provider.trainIdf(texts);
     await provider.init();
 
-    const store = new EmbeddingStore(db.getRawDb(), provider.dimensions);
+    const store = new EmbeddingStore(db.connection, provider.dimensions);
     const EMBED_BATCH = 200;
     let embedded = 0;
     for (let i = 0; i < allSymbols.length; i += EMBED_BATCH) {

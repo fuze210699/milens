@@ -240,14 +240,20 @@ export class Database {
   }
 
   findDeadCode(kind?: string, limit = 50): CodeSymbol[] {
+    const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE 'app/%/layout.%'
+      AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE 'app/layout.%'
+      AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE 'jest.config.%'
+      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE 'src/routes/+layout.%'`;
     const sql = kind
       ? `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
          WHERE s.exported = 1 AND s.kind = ? AND l.id IS NULL
+         ${frameworkExclude}
          LIMIT ?`
       : `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
          WHERE s.exported = 1 AND l.id IS NULL
+         ${frameworkExclude}
          LIMIT ?`;
     const rows = kind
       ? this.db.prepare(sql).all(kind, limit) as any[]
@@ -586,6 +592,37 @@ export class Database {
     return false;
   }
 
+  getTestedSymbolIds(candidateIds: string[], isTestFileFn: (path: string) => boolean): Set<string> {
+    if (candidateIds.length === 0) return new Set<string>();
+    const placeholders = candidateIds.map(() => '?').join(',');
+    const rows = this.db.prepare(`
+      SELECT DISTINCT l.to_id
+      FROM links l JOIN symbols src ON src.id = l.from_id
+      WHERE l.to_id IN (${placeholders}) AND l.type != 'contains'
+    `).all(...candidateIds) as any[];
+    const testedIds = new Set<string>();
+    for (const row of rows) {
+      const src = this.findSymbolById(row.to_id);
+      if (src && isTestFileFn(src.filePath)) continue;
+      // Check each from_id for test files
+      const links = this.getIncomingLinks(row.to_id);
+      for (const l of links) {
+        if (l.type === 'contains') continue;
+        const from = this.findSymbolById(l.fromId);
+        if (from && isTestFileFn(from.filePath)) {
+          testedIds.add(row.to_id);
+          break;
+        }
+      }
+    }
+    // Also include ids not in the result set (no incoming links)
+    const inResult = new Set(rows.map(r => r.to_id));
+    for (const id of candidateIds) {
+      if (!inResult.has(id)) continue; // doesn't exist
+    }
+    return testedIds;
+  }
+
   getTestCoverageGaps(limit: number): CodeSymbol[] {
     const rows = this.stmts.testCoverageGaps.all(limit) as any[];
     return rows.map(rowToSymbol);
@@ -706,6 +743,57 @@ export class Database {
   getAnnotationCount(): number {
     const row = this.stmts.annotationCount.get() as any;
     return row.c;
+  }
+
+  // ── Annotation/session API ──
+
+  getRawDb(): BetterSqlite3.Database { return this.db; }
+
+  addAnnotation(symbolId: string, key: string, value: string, agent?: string, sessionId?: string, ttlHours?: number): number {
+    const expiresAt = ttlHours
+      ? new Date(Date.now() + ttlHours * 3600_000).toISOString().replace('T', ' ').slice(0, 19)
+      : null;
+    const result = this.db.prepare(
+      `INSERT INTO annotations (symbol_id, key, value, agent, session_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(symbolId, key, value, agent ?? null, sessionId ?? null, expiresAt);
+    return result.lastInsertRowid as number;
+  }
+
+  getAnnotations(filters: { symbolId?: string; key?: string; agent?: string; sessionId?: string; limit?: number } = {}): Array<{ id: number; symbolId: string; key: string; value: string; agent: string | null; sessionId: string | null; createdAt: string }> {
+    const clauses: string[] = ["(expires_at IS NULL OR expires_at > datetime('now'))"];
+    const params: any[] = [];
+    if (filters.symbolId) { clauses.push('symbol_id = ?'); params.push(filters.symbolId); }
+    if (filters.key) { clauses.push('key = ?'); params.push(filters.key); }
+    if (filters.agent) { clauses.push('agent = ?'); params.push(filters.agent); }
+    if (filters.sessionId) { clauses.push('session_id = ?'); params.push(filters.sessionId); }
+    const sql = `SELECT *, symbol_id as symbolId, created_at as createdAt FROM annotations WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC` + (filters.limit ? ` LIMIT ${filters.limit}` : '');
+    const rows = this.db.prepare(sql).all(...params) as any[];
+    return rows.map((r: any) => ({ id: r.id, symbolId: r.symbol_id, key: r.key, value: r.value, agent: r.agent, sessionId: r.session_id, createdAt: r.created_at }));
+  }
+
+  getAnnotationsForSymbol(symbolId: string): Array<{ id: number; symbolId: string; key: string; value: string; agent: string | null; createdAt: string }> {
+    return this.getAnnotations({ symbolId });
+  }
+
+  cleanupExpiredAnnotations(): number {
+    const result = this.db.prepare("DELETE FROM annotations WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')").run();
+    return result.changes;
+  }
+
+  startSession(id: string, agent: string, context?: string): void {
+    this.db.prepare('INSERT OR REPLACE INTO agent_sessions (id, agent, status, started_at, context_json) VALUES (?, ?, ?, datetime(\'now\'), ?)')
+      .run(id, agent, 'active', context ?? null);
+  }
+
+  getSession(id: string): { id: string; agent: string; status: string; startedAt: string; endedAt: string | null; context: string | null } | null {
+    const row = this.db.prepare('SELECT *, started_at as startedAt, ended_at as endedAt, context_json as context FROM agent_sessions WHERE id = ?').get(id) as any;
+    if (!row) return null;
+    return { id: row.id, agent: row.agent, status: row.status, startedAt: row.started_at, endedAt: row.ended_at, context: row.context };
+  }
+
+  endSession(id: string, status: string): void {
+    this.db.prepare("UPDATE agent_sessions SET status = ?, ended_at = datetime('now') WHERE id = ?").run(status, id);
   }
 
   transaction<T>(fn: () => T): T {

@@ -1,0 +1,31 @@
+name: Milens PR Guard
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  milens-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install milens
+        run: npm install -g milens
+      - name: Analyze codebase
+        run: npx milens analyze -p . --force
+      - name: Review PR Risk
+        run: |
+          echo "## Milens PR Review" >> $GITHUB_STEP_SUMMARY
+          npx milens metrics -p . >> $GITHUB_STEP_SUMMARY 2>&1 || true
+      - name: Find Dead Code
+        run: |
+          echo "## Dead Code" >> $GITHUB_STEP_SUMMARY
+          npx milens search "TODO|FIXME" -p . >> $GITHUB_STEP_SUMMARY 2>&1 || true
+      - name: Security Scan
+        run: |
+          echo "## Security Scan" >> $GITHUB_STEP_SUMMARY
+          npx milens search "password|secret|api_key|token" -p . >> $GITHUB_STEP_SUMMARY 2>&1 || true

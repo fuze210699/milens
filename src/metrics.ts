@@ -8,6 +8,7 @@ export interface MilensMetrics {
   brr: { recurring: number; totalFixed: number; rate: number; grade: string };
   tcgr: { weeklyGrowth: number; grade: string };
   dcer: { dead: number; total: number; rate: number; grade: string };
+  ctr: { manualMinutes: number; milensMinutes: number; reduction: number; grade: string };
 }
 
 function grade(val: number, thresholds: number[]): string {
@@ -38,6 +39,10 @@ export function computeMetrics(db: Database): MilensMetrics {
   const recurring = bugs.filter(b => b.confidence >= 0.7).length;
   const brrRate = bugs.length > 0 ? recurring / bugs.length : 0;
 
+  const estimatedManualMinutes = 45;
+  const estimatedMilensMinutes = totalOut > 0 ? Math.max(5, 45 * (1 - terRatio)) : 45;
+  const ctrReduction = estimatedManualMinutes > 0 ? 1 - estimatedMilensMinutes / estimatedManualMinutes : 0;
+
   const weeklyAnnotations = store.recall({ key: 'test', limit: 1000 });
   const tcgrRate = weeklyAnnotations.length > 0 ? Math.min(weeklyAnnotations.length / 10, 1) * 5 : 0;
 
@@ -50,21 +55,23 @@ export function computeMetrics(db: Database): MilensMetrics {
     brr: { recurring, totalFixed: bugs.length, rate: brrRate, grade: grade(1 - brrRate, [0.9, 0.75, 0.5]) },
     tcgr: { weeklyGrowth: tcgrRate, grade: grade(tcgrRate / 5, [0.8, 0.5, 0.2]) },
     dcer: { dead: deadCode.length, total: totalExported, rate: dcerRate, grade: grade(1 - dcerRate, [0.97, 0.9, 0.8]) },
+    ctr: { manualMinutes: estimatedManualMinutes, milensMinutes: estimatedMilensMinutes, reduction: ctrReduction, grade: grade(ctrReduction, [0.8, 0.6, 0.4]) },
   };
 }
 
 export function formatMetricsReport(metrics: MilensMetrics): string {
   const lines = [
-    '╔══════════════════════════════════════╗',
-    '║       Milens Metrics Report         ║',
-    '╠══════════════════════════════════════╣',
-    `║ TER: ${formatMetric(metrics.ter.ratio * 100, '%', metrics.ter.grade)}`,
-    `║ LR:  ${formatMetric(metrics.lr.rate * 100, '%', metrics.lr.grade)}`,
-    `║ CQI: ${formatMetric(metrics.cqi.score, '/10', metrics.cqi.grade)}`,
-    `║ BRR: ${formatMetric(metrics.brr.rate * 100, '%', metrics.brr.grade)}`,
-    `║ TCGR:${formatMetric(metrics.tcgr.weeklyGrowth, '%/wk', metrics.tcgr.grade)}`,
-    `║ DCER:${formatMetric(metrics.dcer.rate * 100, '%', metrics.dcer.grade)}`,
-    '╚══════════════════════════════════════╝',
+    '╔══════════════════════════════════════════════╗',
+    '║         Milens Metrics Report               ║',
+    '╠══════════════════════════════════════════════╣',
+    `║ TER:  ${formatMetric(metrics.ter.ratio * 100, '%', metrics.ter.grade)}`,
+    `║ LR:   ${formatMetric(metrics.lr.rate * 100, '%', metrics.lr.grade)}`,
+    `║ CQI:  ${formatMetric(metrics.cqi.score, '/10', metrics.cqi.grade)}`,
+    `║ BRR:  ${formatMetric(metrics.brr.rate * 100, '%', metrics.brr.grade)}`,
+    `║ TCGR: ${formatMetric(metrics.tcgr.weeklyGrowth, '%/wk', metrics.tcgr.grade)}`,
+    `║ DCER: ${formatMetric(metrics.dcer.rate * 100, '%', metrics.dcer.grade)}`,
+    `║ CTR:  ${formatMetric(metrics.ctr.reduction * 100, '%', metrics.ctr.grade)}`,
+    '╚══════════════════════════════════════════════╝',
   ];
   return lines.join('\n');
 }

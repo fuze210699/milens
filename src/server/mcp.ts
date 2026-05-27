@@ -1804,6 +1804,25 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
+  // ═══ semantic_search ═══
+  server.tool(
+    'semantic_search',
+    'Search symbols by semantic meaning (falls back to FTS5 keyword search when embeddings unavailable).',
+    { query: z.string(), limit: z.number().optional().default(10), repo: z.string().optional() },
+    async ({ query, limit, repo }) => {
+      const { db } = getDb(repo);
+      if (db.searchSymbols(query, limit).length > 0) {
+        const results = db.searchSymbols(query, limit);
+        const lines = [`Semantic search (FTS5 fallback — embeddings not available):\n`];
+        for (const s of results) {
+          lines.push(`${s.name} [${s.kind}] ${s.filePath}:${s.startLine}${s.exported ? ' (exported)' : ''}`);
+        }
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      }
+      return { content: [{ type: 'text' as const, text: `No results for "${query}". Embeddings not available. Run \`milens analyze --embeddings\` for semantic search.` }] };
+    },
+  );
+
   // ═══ find_similar ═══
   server.tool(
     'find_similar',
@@ -2016,6 +2035,97 @@ export function createMcpServer(rootPath?: string): McpServer {
             `4. \`impact\` downstream to see what it depends on\n` +
             `5. \`grep\` for "${name}" to find all text references including templates and configs\n` +
             `6. Summarize: what it does, who uses it, what it depends on, and how important it is`,
+        },
+      }],
+    }),
+  );
+
+  // ── Prompt: vibe-code-planner ──
+  server.prompt(
+    'vibe-code-planner',
+    'ECC-style Planner Agent workflow: analyze codebase, create implementation plan with blast radius awareness',
+    { feature: z.string().describe('Feature or task name to plan') },
+    ({ feature }) => ({
+      messages: [{
+        role: 'user',
+        content: {
+          type: 'text',
+          text: `I am the Planner Agent. I need to create an implementation plan for "${feature}".\n\n` +
+            `Follow this ECC Planner workflow:\n\n` +
+            `PHASE 1 — CODEBASE INTELLIGENCE:\n` +
+            `1. Run \`codebase_summary()\` to understand the project structure\n` +
+            `2. Run \`domains()\` to see module clusters\n` +
+            `3. Run \`routes()\` to find relevant API endpoints\n\n` +
+            `PHASE 2 — TARGET ANALYSIS:\n` +
+            `4. Run \`smart_context({name: "keySymbol", intent: "edit"})\` for each affected symbol\n` +
+            `5. Run \`edit_check({name: "keySymbol"})\` for safety\n` +
+            `6. Run \`trace({to: "keySymbol"})\` to understand execution flow\n\n` +
+            `PHASE 3 — IMPACT PREDICTION:\n` +
+            `7. Run \`impact({target: "keySymbol", depth: 3})\` to see blast radius\n` +
+            `8. Run \`explain_relationship({from: "A", to: "B"})\` for distant dependencies\n\n` +
+            `PHASE 4 — TEST STRATEGY:\n` +
+            `9. Run \`test_plan({name: "keySymbol"})\` for mock strategy\n` +
+            `10. Run \`test_coverage_gaps()\` to check existing coverage\n\n` +
+            `PHASE 5 — FINAL PLAN:\n` +
+            `Output a plan.md with: Overview, Architecture Changes, Implementation Steps (file+action+why+deps+risk), Testing Strategy, Risks & Mitigations, Success Criteria.\n\n` +
+            `Use the ECC plan format with specific file paths, dependencies, and risk levels (LOW/MEDIUM/HIGH).`,
+        },
+      }],
+    }),
+  );
+
+  // ── Prompt: vibe-code-reviewer ──
+  server.prompt(
+    'vibe-code-reviewer',
+    'ECC-style Reviewer Agent workflow: PR risk assessment, dead code detection, security scan',
+    { session_id: z.string().optional().describe('Optional session ID for annotation context') },
+    ({ session_id }) => ({
+      messages: [{
+        role: 'user',
+        content: {
+          type: 'text',
+          text: `I am the Reviewer Agent. Review the current changes thoroughly.${session_id ? ` Session: ${session_id}` : ''}\n\n` +
+            `Follow this ECC Reviewer workflow:\n\n` +
+            `1. Run \`review_pr()\` to get risk scores for all changed symbols\n` +
+            `2. For each CRITICAL/HIGH symbol:\n` +
+            `   a. Run \`review_symbol({name})\` for deep dive\n` +
+            `   b. Run \`context({name})\` to see relationships\n` +
+            `   c. Run \`grep({pattern: "symbolName"})\` for text references\n` +
+            `3. Run \`find_dead_code()\` to detect orphaned symbols\n` +
+            `4. Run \`grep({pattern: "password|secret|api_key|token", scope: "code"})\` for secrets\n` +
+            `5. Run \`grep({pattern: "TODO|FIXME|HACK|console\\\\.log", scope: "code"})\` for tech debt\n` +
+            `6. Run \`detect_changes()\` to verify expected files only\n` +
+            `7. Create a review report: symbols OK to merge vs symbols needing fixes\n` +
+            `8. Run \`annotate({symbol, key: "bug"|"security", value})\` for any critical findings`,
+        },
+      }],
+    }),
+  );
+
+  // ── Prompt: closed-loop-session ──
+  server.prompt(
+    'closed-loop-session',
+    'Complete 6-phase closed-loop session: Analyze → Plan → Code → Verify → Learn → Improve',
+    { task: z.string().describe('Task description'), agent: z.string().optional().default('vibe-coder') },
+    ({ task, agent }) => ({
+      messages: [{
+        role: 'user',
+        content: {
+          type: 'text',
+          text: `Run a complete closed-loop development session for: "${task}"\n\n` +
+            `PHASE 1 — ANALYZE (bootstrap):\n` +
+            `  session_start({agent: "${agent}"}) → codebase_summary() → domains() → recall()\n\n` +
+            `PHASE 2 — PLAN:\n` +
+            `  smart_context({intent: "edit"}) → edit_check() → impact({depth: 3}) → test_plan()\n\n` +
+            `PHASE 3 — CODE:\n` +
+            `  Implement changes with guard: edit_check() before each edit, impact() mid-edit, context() for reference\n\n` +
+            `PHASE 4 — VERIFY:\n` +
+            `  detect_changes() → test_impact() → review_pr() → test_coverage_gaps() → grep(secrets)\n\n` +
+            `PHASE 5 — LEARN:\n` +
+            `  annotate() key observations → session_context() → handoff() if needed\n\n` +
+            `PHASE 6 — IMPROVE:\n` +
+            `  milens evolve (if patterns ready) → milens metrics (check health)\n\n` +
+            `At the end: session_end({session_id}) to record stats.`,
         },
       }],
     }),

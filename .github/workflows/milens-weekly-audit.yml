@@ -1,0 +1,32 @@
+name: Milens Weekly Audit
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g milens
+      - name: Full Analysis
+        run: npx milens analyze -p . --force
+      - name: Generate Report
+        run: |
+          echo "# Milens Weekly Audit Report" > report.md
+          echo "## Metrics" >> report.md
+          npx milens metrics -p . >> report.md
+          echo "" >> report.md
+          echo "## Dead Code" >> report.md
+          npx milens search "TODO|FIXME|HACK" -p . >> report.md
+      - name: Run Evolution
+        run: npx milens evolve -p .
+      - name: Upload Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: milens-audit-report
+          path: report.md

@@ -244,6 +244,7 @@ program
   .command('dashboard')
   .description('Open usage analytics dashboard in your browser')
   .option('--port <port>', 'Port for the dashboard server', '3200')
+  .option('-p, --path <path>', 'Repository root path for annotation data')
   .action(async (opts) => {
     const { join: joinPath } = await import('node:path');
     const { homedir: getHomedir } = await import('node:os');
@@ -266,7 +267,34 @@ program
       return;
     }
 
-    const html = generateDashboardHtml(stats);
+    let annotationStats: { total: number; confidenceBands: number[]; recent: { symbol: string; key: string; confidence: number; createdAt: string }[] } | undefined;
+    if (opts.path) {
+      try {
+        const { RepoRegistry } = await import('./store/registry.js');
+        const projDbPath = new RepoRegistry().findDbPath(resolve(opts.path));
+        if (projDbPath) {
+          const projDb = new Database(projDbPath);
+          const { AnnotationStore } = await import('./store/annotations.js');
+          const aStore = new AnnotationStore(projDb.connection);
+          const allAnn = aStore.recall({ limit: 10000 });
+          const bands = [0, 0, 0, 0];
+          for (const a of allAnn) {
+            if (a.confidence < 0.4) bands[0]++;
+            else if (a.confidence < 0.7) bands[1]++;
+            else if (a.confidence < 0.9) bands[2]++;
+            else bands[3]++;
+          }
+          annotationStats = {
+            total: allAnn.length,
+            confidenceBands: bands,
+            recent: allAnn.slice(-10).reverse().map(a => ({ symbol: a.symbol, key: a.key, confidence: a.confidence, createdAt: a.createdAt })),
+          };
+          projDb.close();
+        }
+      } catch { /* annotation data is optional */ }
+    }
+
+    const html = generateDashboardHtml(stats, annotationStats);
     const port = parseInt(opts.port);
 
     const server = createHttpServer((req, res) => {
@@ -419,7 +447,7 @@ function deleteIndex(dbPath: string): void {
   }
 }
 
-function generateDashboardHtml(stats: ReturnType<import('./store/db.js').Database['getToolUsageStats']>): string {
+function generateDashboardHtml(stats: ReturnType<import('./store/db.js').Database['getToolUsageStats']>, annotationStats?: { total: number; confidenceBands: number[]; recent: { symbol: string; key: string; confidence: number; createdAt: string }[] }): string {
   const byToolJson = JSON.stringify(stats.byTool);
   const byDayJson = JSON.stringify(stats.byDay);
   const recentJson = JSON.stringify(stats.recentCalls);
@@ -429,6 +457,27 @@ function generateDashboardHtml(stats: ReturnType<import('./store/db.js').Databas
     : 0;
 
   const fmtNum = (n: number) => n >= 1_000_000 ? (n / 1_000_000).toFixed(1) + 'M' : n >= 1_000 ? (n / 1_000).toFixed(1) + 'K' : String(n);
+
+  const confBars = annotationStats ? renderConfBars(annotationStats.confidenceBands, annotationStats.total) : '';
+  const recentAnnots = annotationStats ? annotationStats.recent.map(a => `
+          <li>
+            <div><span class="annot-sym">${a.symbol}</span><span class="annot-key">${a.key}</span></div>
+            <span class="annot-conf ${a.confidence >= 0.7 ? 'hi' : a.confidence >= 0.4 ? 'md' : 'lo'}">${(a.confidence * 100).toFixed(0)}%</span>
+          </li>`).join('') : '';
+  const learningStats = annotationStats ? `
+    <div class="card learning-section">
+      <div class="card-header">
+        <div><div class="card-title">Confidence Distribution</div><div class="card-subtitle">${annotationStats.total} total annotations</div></div>
+      </div>
+      <div class="tool-bars">${confBars}</div>
+    </div>
+    <div class="card learning-section">
+      <div class="card-header">
+        <div><div class="card-title">Recent Annotations</div><div class="card-subtitle">Last ${annotationStats.recent.length}</div></div>
+      </div>
+      <ul class="annot-list">${recentAnnots}</ul>
+    </div>
+  ` : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -555,6 +604,28 @@ function generateDashboardHtml(stats: ReturnType<import('./store/db.js').Databas
   /* ── Footer ── */
   .footer { text-align: center; padding: 24px 0 0; color: var(--text-muted); font-size: 12px; }
 
+  /* ── Tabs ── */
+  .tab-nav { display: flex; gap: 4px; margin-bottom: 28px; border-bottom: 2px solid var(--border); padding-bottom: 0; }
+  .tab { padding: 10px 24px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; background: none; border-top: none; border-left: none; border-right: none; outline: none; }
+  .tab:hover { color: var(--text-secondary); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Learning ── */
+  .suggestion-box { background: var(--accent-dim); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 20px; text-align: center; margin-bottom: 20px; }
+  .suggestion-box code { background: var(--surface); padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; color: var(--accent); }
+  .learning-section { margin-bottom: 16px; }
+  .annot-list { list-style: none; padding: 0; }
+  .annot-list li { padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .annot-list li:last-child { border-bottom: none; }
+  .annot-sym { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; color: var(--accent); }
+  .annot-key { font-size: 11px; color: var(--text-muted); background: var(--surface); padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+  .annot-conf { font-size: 12px; font-weight: 600; }
+  .annot-conf.hi { color: var(--green); }
+  .annot-conf.md { color: var(--orange); }
+  .annot-conf.lo { color: var(--red); }
+
   /* ── Responsive ── */
   @media (max-width: 1024px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } .grid-2 { grid-template-columns: 1fr; } }
   @media (max-width: 640px) { .kpi-grid { grid-template-columns: 1fr; } .wrapper { padding: 16px 12px 80px; } }
@@ -575,6 +646,14 @@ function generateDashboardHtml(stats: ReturnType<import('./store/db.js').Databas
       <button class="refresh-btn" onclick="refreshData()">&#8635; Refresh</button>
     </div>
   </div>
+
+  <!-- Tab Navigation -->
+  <div class="tab-nav">
+    <button class="tab active" data-tab="usage" onclick="switchTab('usage')">Usage Analytics</button>
+    <button class="tab" data-tab="learning" onclick="switchTab('learning')">Learning</button>
+  </div>
+
+  <div id="tab-usage" class="tab-content active">
 
   <!-- KPIs -->
   <div class="kpi-grid">
@@ -658,7 +737,17 @@ function generateDashboardHtml(stats: ReturnType<import('./store/db.js').Databas
   </div>
 
   <div class="footer">milens &middot; auto-refreshes every 30s</div>
+</div><!-- /tab-usage -->
+
+<div id="tab-learning" class="tab-content">
+  <div class="suggestion-box">
+    <h3 style="margin-bottom:8px;font-weight:600;">Metrics &amp; Insights</h3>
+    <p style="color:var(--text-secondary);font-size:13px;">Run <code>milens metrics</code> for a full code-quality metrics report.</p>
+  </div>
+  ${learningStats}
 </div>
+
+</div><!-- /wrapper -->
 
 <script>
 const COLORS = ['#60a5fa','#34d399','#fbbf24','#a78bfa','#f87171','#2dd4bf','#818cf8','#fb923c','#e879f9','#38bdf8','#4ade80','#facc15','#f472b6','#22d3ee','#a3e635','#c084fc'];
@@ -817,6 +906,12 @@ async function refreshData() {
   btn.innerHTML = '&#8635; Refresh';
 }
 
+/* ── Tab Switching ── */
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + tab));
+}
+
 /* ── Init ── */
 renderToolBars();
 renderDayChart();
@@ -826,4 +921,13 @@ setInterval(refreshData, 30000);
 </script>
 </body>
 </html>`;
+}
+
+function renderConfBars(bands: number[], total: number): string {
+  const labels = ['0.0–0.4', '0.4–0.7', '0.7–0.9', '0.9–1.0'];
+  const colors = ['#f87171', '#fbbf24', '#60a5fa', '#34d399'];
+  return labels.map((label, i) => {
+    const pct = total > 0 ? (bands[i] / total) * 100 : 0;
+    return '<div class="tool-bar-row"><span class="tool-bar-name">' + label + '</span><div class="tool-bar-track"><div class="tool-bar-fill" style="width:' + Math.max(4, pct) + '%;background:' + colors[i] + 'dd">' + bands[i] + '</div></div></div>';
+  }).join('');
 }

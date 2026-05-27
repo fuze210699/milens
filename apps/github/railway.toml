@@ -1,14 +1,7 @@
 # Railway deployment config for Milens GitHub App
 # Docs: https://docs.railway.app
 
-# You can also set these in Railway dashboard
-# APP_ID=123456
-# PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----..."
-# WEBHOOK_SECRET=your-random-secret
-
-[build]
-builder = "nixpacks"
-buildCommand = "npm install -g milens@latest && npm install && npm run verify"
+# Railway auto-detects Dockerfile — no build config needed
 
 [deploy]
 startCommand = "npm start"

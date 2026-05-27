@@ -12,7 +12,7 @@ import { Probot } from 'probot';
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { randomUUID } from 'node:os' ? import('node:crypto') : null;
+
 
 const crypto = await import('node:crypto');
 

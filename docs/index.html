@@ -562,27 +562,27 @@
     <span class="section-label">FAQ</span>
     <h2 class="section-title">Frequently Asked Questions.</h2>
     <div class="faq-item">
-      <button class="faq-q" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">What exactly is Milens / AI-DOS? <span class="arrow">▾</span></button>
+      <button class="faq-q">What exactly is Milens / AI-DOS? <span class="arrow">▾</span></button>
       <div class="faq-a"><p>Milens is <strong>AI-DOS</strong> — the Operating System for AI-Driven Development. It builds a <strong>SQLite knowledge graph</strong> of your entire codebase (every function, class, import, and call chain) and exposes it through <strong>41 MCP tools</strong>. Your AI agent queries the graph instead of reading 15 files blind. Result: <strong>70% fewer tokens</strong> per session, zero broken dependencies, and a system that <strong>learns from every session</strong> via annotations that auto-promote to permanent rules.</p></div>
     </div>
     <div class="faq-item">
-      <button class="faq-q" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">How is Milens different from other AI coding tools? <span class="arrow">▾</span></button>
+      <button class="faq-q">How is Milens different from other AI coding tools? <span class="arrow">▾</span></button>
       <div class="faq-a"><p>Three key differences. <strong>First</strong>: knowledge graph vs grep. Tools like Copilot and Cursor search files blindly; Milens pre-indexes everything into a graph — "who calls this?" is one API call, not 5 greps and 8 file reads. <strong>Second</strong>: blast radius before every edit. Before modifying any function, Milens shows exactly what will break (depth-3 impact analysis). <strong>Third</strong>: memory across sessions. Annotations persist in SQLite. Over time, patterns auto-promote to permanent rules. No other tool has memory.</p></div>
     </div>
     <div class="faq-item">
-      <button class="faq-q" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">Is my source code shared or uploaded anywhere? <span class="arrow">▾</span></button>
+      <button class="faq-q">Is my source code shared or uploaded anywhere? <span class="arrow">▾</span></button>
       <div class="faq-a"><p><strong>No. Zero network. Zero telemetry. Zero data leaving your machine.</strong> The knowledge graph is stored in a local <code>.milens/</code> SQLite database inside your repo (gitignored). The MCP server binds to <code>127.0.0.1</code> only. Optional embeddings are generated locally via Xenova transformers — no API calls. Milens is <strong>MIT-licensed</strong> and fully auditable.</p></div>
     </div>
     <div class="faq-item">
-      <button class="faq-q" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">What security features does Milens have? <span class="arrow">▾</span></button>
+      <button class="faq-q">What security features does Milens have? <span class="arrow">▾</span></button>
       <div class="faq-a"><p><strong>50+ built-in security rules</strong> mapped to OWASP Top 10 across 9 categories: secret detection (AWS keys, tokens, passwords), injection prevention (SQL, XSS, command), hidden Unicode attacks (zero-width chars, bidi override), dangerous patterns, insecure config, data leaks, weak crypto, auth issues, and path traversal. <strong>Offline CVE database</strong> audits dependencies across 5 ecosystems (npm, Python, Rust, Go, Java). One <code style="background:var(--card);padding:1px 6px;border-radius:3px;">security_scan()</code> call replaces 10 manual greps.</p></div>
     </div>
     <div class="faq-item">
-      <button class="faq-q" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">Can Milens really learn and improve over time? <span class="arrow">▾</span></button>
+      <button class="faq-q">Can Milens really learn and improve over time? <span class="arrow">▾</span></button>
       <div class="faq-a"><p><strong>Yes — this is the core innovation.</strong> Every session, your agent calls <code style="background:var(--card);padding:1px 6px;border-radius:3px;">annotate()</code> to record discoveries (bugs, caveats, patterns). Next session, <code style="background:var(--card);padding:1px 6px;border-radius:3px;">recall()</code> retrieves them. Each recall boosts confidence (+0.05). When confidence reaches 0.8, <code style="background:var(--card);padding:1px 6px;border-radius:3px;">milens evolve</code> auto-promotes the annotation to a permanent <code>SKILL.md</code> file that enforces the rule for every future session. It's a <strong>real self-improving system</strong>, not just a prompt wrapper.</p></div>
     </div>
     <div class="faq-item">
-      <button class="faq-q" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">How do I get started? <span class="arrow">▾</span></button>
+      <button class="faq-q">How do I get started? <span class="arrow">▾</span></button>
       <div class="faq-a"><p>One command: <code style="background:var(--card);padding:1px 6px;border-radius:3px;">npx milens init --profile full</code>. This analyzes your codebase, builds a knowledge graph, generates <code>AGENTS.md</code> with full context, installs 13+ skill files, configures 50 security rules, and sets up pre-commit hooks. Then connect your AI agent via MCP (7 editors supported). The built-in file watcher auto-reindexes on every save — no manual steps needed. Open your agent and start coding smarter.</p></div>
     </div>
   </div>

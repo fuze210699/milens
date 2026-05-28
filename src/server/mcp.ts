@@ -21,6 +21,7 @@ import { registerAllPrompts, MILENS_PROMPT_NAMES } from './mcp-prompts.js';
 import { loadRules } from '../security/rules.js';
 import { HookManager, defaultOnSessionStart, defaultOnSessionEnd, defaultOnPreCommit, defaultOnFileChange, defaultOnPreCompact, defaultOnPostCompact } from './hooks.js';
 import { Orchestrator } from '../orchestrator/orchestrator.js';
+import { FileWatcher } from './watcher.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_VERSION: string = process.env.MILENS_VERSION ?? JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8')).version;
@@ -2716,6 +2717,31 @@ function relativeImport(srcFile: string, hasTypescript: boolean): string {
 export async function startStdio(rootPath?: string): Promise<void> {
   const server = createMcpServer(rootPath);
   const transport = new StdioServerTransport();
+
+  // Start file watcher for auto re-index (respects hook config)
+  let watcher: FileWatcher | null = null;
+  if (rootPath) {
+    const { RepoRegistry } = await import('../store/registry.js');
+    const { HookManager } = await import('./hooks.js');
+    const reg = new RepoRegistry();
+    const entry = reg.findByRoot(rootPath);
+    if (entry) {
+      const hookMgr = new HookManager();
+      const hookConfig = hookMgr.loadConfig(rootPath);
+      if (hookConfig.enabled && hookConfig.onFileChange) {
+        watcher = new FileWatcher({ rootPath, dbPath: entry.dbPath });
+        watcher.start();
+      }
+    }
+  }
+
+  // Cleanup on exit
+  const cleanup = () => {
+    if (watcher) watcher.stop();
+  };
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+
   await server.connect(transport);
 }
 
@@ -2724,6 +2750,30 @@ export async function startStdio(rootPath?: string): Promise<void> {
 export async function startHttp(port: number, rootPath?: string): Promise<void> {
   const server = createMcpServer(rootPath);
   const sessions = new Map<string, { transport: StreamableHTTPServerTransport; lastActive: number }>();
+
+  // Start file watcher for auto re-index (respects hook config)
+  let watcher: FileWatcher | null = null;
+  if (rootPath) {
+    const { RepoRegistry } = await import('../store/registry.js');
+    const { HookManager } = await import('./hooks.js');
+    const reg = new RepoRegistry();
+    const entry = reg.findByRoot(rootPath);
+    if (entry) {
+      const hookMgr = new HookManager();
+      const hookConfig = hookMgr.loadConfig(rootPath);
+      if (hookConfig.enabled && hookConfig.onFileChange) {
+        watcher = new FileWatcher({ rootPath, dbPath: entry.dbPath });
+        watcher.start();
+      }
+    }
+  }
+
+  // Cleanup on exit
+  const cleanup = () => {
+    if (watcher) watcher.stop();
+  };
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
 
   // Evict idle sessions every 5 minutes
   const SESSION_TTL = 30 * 60_000; // 30 minutes

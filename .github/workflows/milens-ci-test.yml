@@ -18,5 +18,6 @@ jobs:
 
       - name: Coverage threshold
         run: |
-          COV=$(node -e "process.stdout.write(process.env.COVERAGE || '0')")
+          COV=$(node -e "const j=require('./coverage/coverage-summary.json'); process.stdout.write(String(Math.round(j.total.lines.pct)))")
+          echo "Coverage: ${COV}%"
           if [ "$COV" -lt 50 ]; then echo "Coverage below 50%"; exit 1; fi

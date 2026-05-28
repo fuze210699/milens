@@ -5,14 +5,8 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    {
-      "source": "/",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/:page",
-      "destination": "/:page.html"
-    }
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/((?!.*\\.html$).*)", "destination": "/$1.html" }
   ],
   "headers": [
     {
@@ -20,12 +14,6 @@
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Cache-Control", "value": "public, max-age=3600" }
-      ]
-    },
-    {
-      "source": "/index.html",
-      "headers": [
         { "key": "Cache-Control", "value": "public, max-age=3600" }
       ]
     }

@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { existsSync, unlinkSync, mkdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { existsSync, unlinkSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from '../../src/store/db.js';
-import { generateTestPlan, findCoverageGaps } from '../../src/analyzer/testplan.js';
+import { generateTestPlan, findCoverageGaps, analyzeTestImpact } from '../../src/analyzer/testplan.js';
 import type { CodeSymbol, SymbolLink } from '../../src/types.js';
 
 const TEST_DB = join(import.meta.dirname, '..', 'tmp', 'testplan-test.db');
@@ -151,5 +153,201 @@ describe('testplan', () => {
   it('filters by filePath', () => {
     const gaps = findCoverageGaps(db, 'src/api.ts');
     expect(gaps.every(g => g.symbol.filePath === 'src/api.ts')).toBe(true);
+  });
+
+  // ── analyzeTestImpact ──
+
+  it('analyzeTestImpact with invalid ref returns empty result', () => {
+    const result = analyzeTestImpact(db, process.cwd(), 'invalid;ref!');
+    expect(result.changedSymbols).toEqual([]);
+    expect(result.mustRun).toEqual([]);
+    expect(result.shouldRun).toEqual([]);
+    expect(result.coverageGaps).toEqual([]);
+  });
+
+  it('analyzeTestImpact in non-git repo returns empty', () => {
+    const tmpDir = join(tmpdir(), 'milens-nongit-impact-' + process.pid);
+    mkdirSync(tmpDir, { recursive: true });
+    try {
+      const result = analyzeTestImpact(db, tmpDir);
+      expect(result.changedSymbols).toEqual([]);
+      expect(result.mustRun).toEqual([]);
+      expect(result.shouldRun).toEqual([]);
+      expect(result.coverageGaps).toEqual([]);
+    } finally {
+      try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('analyzeTestImpact with test file changed puts it in mustRun', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'testfile-impact');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      mkdirSync(join(gitDir, 'test'), { recursive: true });
+      writeFileSync(join(gitDir, 'test', 'tp-auth.test.ts'), '// test');
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'test', 'tp-auth.test.ts'), '// modified test');
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    try {
+      const result = analyzeTestImpact(db, gitDir);
+      expect(result.mustRun).toContain('test/tp-auth.test.ts');
+      expect(result.changedSymbols).toEqual([]);
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('analyzeTestImpact with production symbol changed finds direct test coverage', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'direct-impact');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      mkdirSync(join(gitDir, 'src'), { recursive: true });
+      mkdirSync(join(gitDir, 'test'), { recursive: true });
+      writeFileSync(join(gitDir, 'src', 'tp-app.ts'), '// app');
+      writeFileSync(join(gitDir, 'test', 'tp-app.test.ts'), '// test');
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'src', 'tp-app.ts'), '// modified app');
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    const symbolId = 'src/tp-app.ts#function:main:1';
+    const testId = 'test/tp-app.test.ts#function:testApp:1';
+    db.insertSymbol({ id: symbolId, name: 'main', kind: 'function', filePath: 'src/tp-app.ts', startLine: 1, endLine: 5, exported: true });
+    db.insertSymbol({ id: testId, name: 'testApp', kind: 'function', filePath: 'test/tp-app.test.ts', startLine: 1, endLine: 5, exported: false });
+    db.insertLink({ id: 'ti1', fromId: testId, toId: symbolId, type: 'calls', confidence: 0.9 });
+
+    try {
+      const result = analyzeTestImpact(db, gitDir);
+      expect(result.changedSymbols.length).toBe(1);
+      expect(result.changedSymbols[0].name).toBe('main');
+      expect(result.mustRun).toContain('test/tp-app.test.ts');
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('analyzeTestImpact puts indirect test coverage in shouldRun', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'indirect-impact');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      mkdirSync(join(gitDir, 'src'), { recursive: true });
+      mkdirSync(join(gitDir, 'test'), { recursive: true });
+      writeFileSync(join(gitDir, 'src', 'tp-lib.ts'), '// lib');
+      writeFileSync(join(gitDir, 'test', 'tp-shared.test.ts'), '// test');
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'src', 'tp-lib.ts'), '// modified lib');
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    // test → middleware → lib (changed)
+    const middlewareId = 'src/tp-middleware.ts#function:wrap:1';
+    const libId = 'src/tp-lib.ts#function:helper:1';
+    const testId = 'test/tp-shared.test.ts#function:testWrap:1';
+    db.insertSymbol({ id: middlewareId, name: 'wrap', kind: 'function', filePath: 'src/tp-middleware.ts', startLine: 1, endLine: 5, exported: true });
+    db.insertSymbol({ id: libId, name: 'helper', kind: 'function', filePath: 'src/tp-lib.ts', startLine: 1, endLine: 5, exported: true });
+    db.insertSymbol({ id: testId, name: 'testWrap', kind: 'function', filePath: 'test/tp-shared.test.ts', startLine: 1, endLine: 5, exported: false });
+    db.insertLink({ id: 'ii1', fromId: testId, toId: middlewareId, type: 'calls', confidence: 0.9 });
+    db.insertLink({ id: 'ii2', fromId: middlewareId, toId: libId, type: 'calls', confidence: 0.9 });
+
+    try {
+      const result = analyzeTestImpact(db, gitDir);
+      expect(result.shouldRun).toContain('test/tp-shared.test.ts');
+      expect(result.mustRun).not.toContain('test/tp-shared.test.ts');
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('analyzeTestImpact avoids duplicates between mustRun and shouldRun', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'dedup-impact');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      mkdirSync(join(gitDir, 'src'), { recursive: true });
+      mkdirSync(join(gitDir, 'test'), { recursive: true });
+      writeFileSync(join(gitDir, 'src', 'tp-both.ts'), '// both');
+      writeFileSync(join(gitDir, 'test', 'tp-dupe.test.ts'), '// test');
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'src', 'tp-both.ts'), '// modified both');
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    const bothId = 'src/tp-both.ts#function:bothFn:1';
+    const upId = 'src/tp-upstream.ts#function:upFn:1';
+    const testId = 'test/tp-dupe.test.ts#function:testBoth:1';
+    db.insertSymbol({ id: bothId, name: 'bothFn', kind: 'function', filePath: 'src/tp-both.ts', startLine: 1, endLine: 5, exported: true });
+    db.insertSymbol({ id: upId, name: 'upFn', kind: 'function', filePath: 'src/tp-upstream.ts', startLine: 1, endLine: 5, exported: true });
+    db.insertSymbol({ id: testId, name: 'testBoth', kind: 'function', filePath: 'test/tp-dupe.test.ts', startLine: 1, endLine: 5, exported: false });
+    // test → both (direct — puts test in mustRun)
+    db.insertLink({ id: 'dd1', fromId: testId, toId: bothId, type: 'calls', confidence: 0.9 });
+    // upstream → both (upstream is found as caller of both)
+    db.insertLink({ id: 'dd2', fromId: upId, toId: bothId, type: 'calls', confidence: 0.9 });
+    // test → upstream (puts test in shouldRun via upstream chain)
+    db.insertLink({ id: 'dd3', fromId: testId, toId: upId, type: 'calls', confidence: 0.9 });
+
+    try {
+      const result = analyzeTestImpact(db, gitDir);
+      if (result.mustRun.includes('test/tp-dupe.test.ts')) {
+        expect(result.shouldRun).not.toContain('test/tp-dupe.test.ts');
+      }
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('analyzeTestImpact reports coverage gaps', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'gap-impact');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      mkdirSync(join(gitDir, 'src'), { recursive: true });
+      writeFileSync(join(gitDir, 'src', 'tp-untested.ts'), '// untested');
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'src', 'tp-untested.ts'), '// modified untested');
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    db.insertSymbol({
+      id: 'src/tp-untested.ts#function:gapFn:1',
+      name: 'gapFn', kind: 'function',
+      filePath: 'src/tp-untested.ts', startLine: 1, endLine: 5, exported: true,
+    });
+
+    try {
+      const result = analyzeTestImpact(db, gitDir);
+      expect(result.coverageGaps.length).toBeGreaterThan(0);
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
   });
 });

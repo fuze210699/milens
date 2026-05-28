@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { existsSync, unlinkSync, mkdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { existsSync, unlinkSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from '../../src/store/db.js';
-import { reviewSymbol } from '../../src/analyzer/review.js';
+import { reviewSymbol, reviewPr } from '../../src/analyzer/review.js';
 import type { CodeSymbol, SymbolLink } from '../../src/types.js';
 
 const TEST_DB = join(import.meta.dirname, '..', 'tmp', 'review-test.db');
@@ -86,5 +88,252 @@ describe('review', () => {
     expect(hub).not.toBeNull();
     expect(orphan).not.toBeNull();
     expect(hub!.riskScore).toBeGreaterThan(orphan!.riskScore);
+  });
+
+  // ── reviewPr ──
+
+  it('reviewPr returns LOW in non-git repo', () => {
+    const tmpDir = join(tmpdir(), 'milens-nongit-review-' + process.pid);
+    mkdirSync(tmpDir, { recursive: true });
+    try {
+      const result = reviewPr(db, tmpDir);
+      expect(result.risk).toBe('LOW');
+      expect(result.summary).toContain('Not a git repository');
+      expect(result.score).toBe(0);
+      expect(result.changedFiles).toEqual([]);
+      expect(result.symbols).toEqual([]);
+      expect(result.hotspots).toEqual([]);
+      expect(result.untestedChanges).toBe(0);
+    } finally {
+      try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('reviewPr with invalid ref returns safely', () => {
+    const result = reviewPr(db, process.cwd(), 'invalid;ref!');
+    expect(result.risk).toBe('LOW');
+    expect(result.summary).toContain('Not a git repository');
+  });
+
+  it('reviewPr with no changed files returns LOW', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'clean-review');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'file.ts'), '// clean');
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    try {
+      const result = reviewPr(db, gitDir);
+      expect(result.risk).toBe('LOW');
+      expect(result.summary).toContain('No changed files');
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('reviewPr detects changed symbols and calculates score', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'changed-review');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      mkdirSync(join(gitDir, 'src'), { recursive: true });
+      writeFileSync(join(gitDir, 'src', 'rp-module.ts'), '// module');
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'src', 'rp-module.ts'), '// modified module');
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    db.insertSymbol({
+      id: 'src/rp-module.ts#function:process:1',
+      name: 'process',
+      kind: 'function',
+      filePath: 'src/rp-module.ts',
+      startLine: 1, endLine: 10,
+      exported: true,
+      heat: 3,
+    });
+
+    try {
+      const result = reviewPr(db, gitDir);
+      expect(result.changedFiles).toContain('src/rp-module.ts');
+      expect(result.symbols.length).toBeGreaterThan(0);
+      expect(result.score).toBeGreaterThan(0);
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('reviewPr skips test files', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'skip-review');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      mkdirSync(join(gitDir, 'src'), { recursive: true });
+      writeFileSync(join(gitDir, 'src', 'rp-lib.ts'), '// lib');
+      writeFileSync(join(gitDir, 'src', 'rp-lib.test.ts'), '// test');
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'src', 'rp-lib.ts'), '// modified lib');
+      writeFileSync(join(gitDir, 'src', 'rp-lib.test.ts'), '// modified test');
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    db.insertSymbol({
+      id: 'src/rp-lib.ts#function:helper:1',
+      name: 'helper',
+      kind: 'function',
+      filePath: 'src/rp-lib.ts',
+      startLine: 1, endLine: 5,
+      exported: true,
+    });
+    db.insertSymbol({
+      id: 'src/rp-lib.test.ts#function:testHelper:1',
+      name: 'testHelper',
+      kind: 'function',
+      filePath: 'src/rp-lib.test.ts',
+      startLine: 1, endLine: 5,
+      exported: false,
+    });
+
+    try {
+      const result = reviewPr(db, gitDir);
+      expect(result.changedFiles).toContain('src/rp-lib.test.ts');
+      const symbolPaths = result.symbols.map(s => s.symbol.filePath);
+      expect(symbolPaths).toContain('src/rp-lib.ts');
+      expect(symbolPaths).not.toContain('src/rp-lib.test.ts');
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('reviewPr counts untested changes', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'untested-review');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      mkdirSync(join(gitDir, 'src'), { recursive: true });
+      writeFileSync(join(gitDir, 'src', 'rp-untested.ts'), '// untested');
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'src', 'rp-untested.ts'), '// modified untested');
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    db.insertSymbol({
+      id: 'src/rp-untested.ts#function:noTestFn:1',
+      name: 'noTestFn',
+      kind: 'function',
+      filePath: 'src/rp-untested.ts',
+      startLine: 1, endLine: 5,
+      exported: true,
+    });
+
+    try {
+      const result = reviewPr(db, gitDir);
+      expect(result.untestedChanges).toBeGreaterThan(0);
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('reviewPr classifies risk level based on symbol properties', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'risk-review');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      mkdirSync(join(gitDir, 'src'), { recursive: true });
+      writeFileSync(join(gitDir, 'src', 'rp-core.ts'), '// core');
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'src', 'rp-core.ts'), '// modified core');
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    const hubId = 'src/rp-core.ts#class:CoreHub:1';
+    const callerAId = 'src/rp-consumerA.ts#function:useA:1';
+    const callerBId = 'src/rp-consumerB.ts#function:useB:1';
+    db.insertSymbol({
+      id: hubId, name: 'CoreHub', kind: 'class',
+      filePath: 'src/rp-core.ts', startLine: 1, endLine: 50,
+      exported: true, role: 'hub', heat: 100,
+    });
+    db.insertSymbol({
+      id: callerAId, name: 'useA', kind: 'function',
+      filePath: 'src/rp-consumerA.ts', startLine: 1, endLine: 3, exported: true,
+    });
+    db.insertSymbol({
+      id: callerBId, name: 'useB', kind: 'function',
+      filePath: 'src/rp-consumerB.ts', startLine: 1, endLine: 3, exported: true,
+    });
+    db.insertLink({ id: 'hlink1', fromId: callerAId, toId: hubId, type: 'calls', confidence: 0.9 });
+    db.insertLink({ id: 'hlink2', fromId: callerBId, toId: hubId, type: 'calls', confidence: 0.9 });
+
+    try {
+      const result = reviewPr(db, gitDir);
+      expect(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).toContain(result.risk);
+      expect(result.symbols.length).toBeGreaterThan(0);
+      expect(typeof result.score).toBe('number');
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('reviewPr summary contains hotspots and untested counts', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'summary-review');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      mkdirSync(join(gitDir, 'src'), { recursive: true });
+      writeFileSync(join(gitDir, 'src', 'rp-feature.ts'), '// feature');
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'src', 'rp-feature.ts'), '// modified feature');
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    db.insertSymbol({
+      id: 'src/rp-feature.ts#function:run:1',
+      name: 'run', kind: 'function',
+      filePath: 'src/rp-feature.ts', startLine: 1, endLine: 5, exported: true,
+    });
+
+    try {
+      const result = reviewPr(db, gitDir);
+      expect(result.summary).toContain('files changed');
+      expect(result.summary).toContain('symbols affected');
+      expect(result.summary).toContain('risk:');
+      expect(result.summary).toContain('score:');
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
   });
 });

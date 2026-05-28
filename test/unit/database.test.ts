@@ -266,4 +266,269 @@ describe('Database', () => {
     // Normal unused symbol SHOULD appear
     expect(deadNames).toContain('unusedHelper');
   });
+
+  it('getCodebaseSummary returns correct structure', () => {
+    const summary = db.getCodebaseSummary();
+    expect(summary.symbols).toBeGreaterThanOrEqual(2);
+    expect(summary.links).toBeGreaterThanOrEqual(1);
+    expect(summary.files).toBeGreaterThanOrEqual(3);
+    expect(typeof summary.coveragePct).toBe('number');
+    expect(typeof summary.testedSymbols).toBe('number');
+    expect(typeof summary.exportedSymbols).toBe('number');
+    expect(Array.isArray(summary.domains)).toBe(true);
+    expect(Array.isArray(summary.topHubs)).toBe(true);
+  });
+
+  it('getTestImpact returns test files for changed symbols', () => {
+    const testSym: CodeSymbol = {
+      id: 'src/__tests__/auth.test.ts#function:testAuth:5',
+      name: 'testAuth',
+      kind: 'function',
+      filePath: 'src/__tests__/auth.test.ts',
+      startLine: 5,
+      endLine: 10,
+      exported: false,
+    };
+    db.insertSymbol(testSym);
+
+    const testLink: SymbolLink = {
+      id: 'src/__tests__/auth.test.ts#function:testAuth:5->calls->src/auth.ts#class:AuthService:3',
+      fromId: testSym.id,
+      toId: 'src/auth.ts#class:AuthService:3',
+      type: 'calls',
+      confidence: 0.8,
+    };
+    db.insertLink(testLink);
+
+    const impact = db.getTestImpact(['src/auth.ts#class:AuthService:3']);
+    expect(impact.testFiles).toContain('src/__tests__/auth.test.ts');
+    expect(Array.isArray(impact.changedSymbols)).toBe(true);
+  });
+
+  it('getTestImpact returns empty for unknown symbols', () => {
+    const impact = db.getTestImpact(['nonexistent:id:1']);
+    expect(impact.testFiles).toEqual([]);
+  });
+
+  it('getTestCoverageGaps finds untested exported symbols with heat', () => {
+    db.updateSymbolMetadata('src/unused.ts#function:unusedHelper:1', 'utility', 10);
+
+    const gaps = db.getTestCoverageGaps(10);
+    expect(gaps.length).toBeGreaterThan(0);
+    const hasUnused = gaps.some(s => s.name === 'unusedHelper');
+    expect(hasUnused).toBe(true);
+  });
+
+  it('findTopologicallySimilar returns similar symbols from same file', () => {
+    const symA: CodeSymbol = {
+      id: 'src/services/shared.ts#function:helperA:1',
+      name: 'helperA',
+      kind: 'function',
+      filePath: 'src/services/shared.ts',
+      startLine: 1,
+      endLine: 5,
+      exported: true,
+    };
+    const symB: CodeSymbol = {
+      id: 'src/services/shared.ts#function:helperB:10',
+      name: 'helperB',
+      kind: 'function',
+      filePath: 'src/services/shared.ts',
+      startLine: 10,
+      endLine: 15,
+      exported: true,
+    };
+    db.insertSymbol(symA);
+    db.insertSymbol(symB);
+
+    const linkA: SymbolLink = {
+      id: 'shared-helperA-calls-createUser',
+      fromId: symA.id,
+      toId: 'src/models.ts#function:createUser:10',
+      type: 'calls',
+      confidence: 0.8,
+    };
+    const linkB: SymbolLink = {
+      id: 'shared-helperB-calls-createUser',
+      fromId: symB.id,
+      toId: 'src/models.ts#function:createUser:10',
+      type: 'calls',
+      confidence: 0.8,
+    };
+    const linkB2: SymbolLink = {
+      id: 'shared-helperB-calls-auth',
+      fromId: symB.id,
+      toId: 'src/auth.ts#class:AuthService:3',
+      type: 'calls',
+      confidence: 0.8,
+    };
+    db.insertLink(linkA);
+    db.insertLink(linkB);
+    db.insertLink(linkB2);
+
+    const similar = db.findTopologicallySimilar(symA.id, 10);
+    expect(similar.length).toBeGreaterThan(0);
+    expect(similar[0].symbol.name).toBe('helperB');
+    expect(similar[0].similarity).toBeGreaterThan(0);
+  });
+
+  it('findTopologicallySimilar returns empty for unknown symbol', () => {
+    const similar = db.findTopologicallySimilar('nonexistent:id:1', 10);
+    expect(similar).toEqual([]);
+  });
+
+  it('getConfidenceDistribution returns distribution', () => {
+    const dist = db.getConfidenceDistribution();
+    expect(typeof dist.high).toBe('number');
+    expect(typeof dist.medium).toBe('number');
+    expect(typeof dist.low).toBe('number');
+    expect(typeof dist.total).toBe('number');
+    expect(dist.total).toBe(dist.high + dist.medium + dist.low);
+  });
+
+  it('getChangedFiles returns distinct file paths', () => {
+    const files = db.getChangedFiles();
+    expect(Array.isArray(files)).toBe(true);
+    expect(files.length).toBeGreaterThan(0);
+    expect(files).toContain('src/auth.ts');
+    expect(new Set(files).size).toBe(files.length);
+  });
+
+  it('logToolUsage and getToolUsageStats', () => {
+    db.logToolUsage('test_query', 100, 500, 200);
+    db.logToolUsage('test_grep', 200, 300, 150);
+
+    const stats = db.getToolUsageStats();
+    expect(stats.totalCalls).toBeGreaterThanOrEqual(2);
+    expect(stats.totalTokensSaved).toBeGreaterThanOrEqual(350);
+    expect(stats.totalTokensOut).toBeGreaterThanOrEqual(800);
+    expect(stats.byTool.length).toBeGreaterThanOrEqual(2);
+    expect(stats.byTool[0].tool).toBeDefined();
+    expect(stats.byTool[0].calls).toBeGreaterThan(0);
+    expect(Array.isArray(stats.byDay)).toBe(true);
+    expect(Array.isArray(stats.recentCalls)).toBe(true);
+  });
+
+  it('getToolUsageStats with repo filter', () => {
+    db.logToolUsage('repo_specific', 50, 100, 50, 'my-repo');
+
+    const all = db.getToolUsageStats();
+    const filtered = db.getToolUsageStats('my-repo');
+    expect(filtered.totalCalls).toBeLessThan(all.totalCalls);
+    expect(filtered.totalCalls).toBeGreaterThanOrEqual(1);
+  });
+
+  it('recordMetric, getMetricHistory, getMetricTrend', () => {
+    db.recordMetric('loc', 5000);
+    db.recordMetric('loc', 5200);
+
+    const history = db.getMetricHistory('loc', 30);
+    expect(history.length).toBeGreaterThanOrEqual(2);
+    const values = history.map(h => h.value);
+    expect(values).toContain(5000);
+    expect(values).toContain(5200);
+
+    const trend = db.getMetricTrend('loc');
+    expect(typeof trend.current).toBe('number');
+    expect(typeof trend.previous).toBe('number');
+    expect(typeof trend.change).toBe('number');
+    expect([5000, 5200]).toContain(trend.current);
+    expect(trend.current).not.toBe(trend.previous);
+  });
+
+  it('getMetricTrend with single entry', () => {
+    db.recordMetric('single_metric', 100);
+    const trend = db.getMetricTrend('single_metric');
+    expect(trend.current).toBe(100);
+    expect(trend.previous).toBeNull();
+    expect(trend.change).toBeNull();
+  });
+
+  it('getMetricTrend with no entries', () => {
+    const trend = db.getMetricTrend('nonexistent_metric');
+    expect(trend.current).toBe(0);
+    expect(trend.previous).toBeNull();
+    expect(trend.change).toBeNull();
+  });
+
+  it('getMetricHistory with no entries returns empty', () => {
+    const history = db.getMetricHistory('nonexistent_metric', 30);
+    expect(history).toEqual([]);
+  });
+
+  it('snapshotMetrics records current state', () => {
+    db.snapshotMetrics();
+
+    const symbolsHistory = db.getMetricHistory('symbols', 1);
+    expect(symbolsHistory.length).toBeGreaterThan(0);
+
+    const linksHistory = db.getMetricHistory('links', 1);
+    expect(linksHistory.length).toBeGreaterThan(0);
+
+    const coverageHistory = db.getMetricHistory('test_coverage_pct', 1);
+    expect(coverageHistory.length).toBeGreaterThan(0);
+
+    const deadCodeHistory = db.getMetricHistory('dead_code_count', 1);
+    expect(deadCodeHistory.length).toBeGreaterThan(0);
+  });
+
+  it('isFileUpToDate detects unchanged/changed content', () => {
+    const filePath = 'src/check.ts';
+    const content = 'export const x = 1;';
+    db.upsertFileHash(filePath, content);
+
+    expect(db.isFileUpToDate(filePath, content)).toBe(true);
+    expect(db.isFileUpToDate(filePath, 'export const x = 2;')).toBe(false);
+    expect(db.isFileUpToDate('nonexistent/file.ts', content)).toBe(false);
+  });
+
+  it('rebuildSearch should not throw', () => {
+    expect(() => db.rebuildSearch()).not.toThrow();
+  });
+
+  it('clearSymbolsAndLinks removes symbols and links', () => {
+    const tempSym: CodeSymbol = {
+      id: 'temp/file.ts#function:tempFn:1',
+      name: 'tempFn',
+      kind: 'function',
+      filePath: 'temp/file.ts',
+      startLine: 1,
+      endLine: 5,
+      exported: false,
+    };
+    db.insertSymbol(tempSym);
+
+    const statsBefore = db.getStats();
+    expect(statsBefore.symbols).toBeGreaterThanOrEqual(1);
+
+    db.clearSymbolsAndLinks();
+
+    const statsAfter = db.getStats();
+    expect(statsAfter.symbols).toBe(0);
+    expect(statsAfter.links).toBe(0);
+  });
+
+  it('clear removes all data including file hashes', () => {
+    const sym: CodeSymbol = {
+      id: 'clear/test.ts#function:clearTest:1',
+      name: 'clearTest',
+      kind: 'function',
+      filePath: 'clear/test.ts',
+      startLine: 1,
+      endLine: 5,
+      exported: true,
+    };
+    db.insertSymbol(sym);
+    db.upsertFileHash('clear/test.ts', 'hash-clear');
+
+    const statsBefore = db.getStats();
+    expect(statsBefore.symbols).toBeGreaterThan(0);
+
+    db.clear();
+
+    const statsAfter = db.getStats();
+    expect(statsAfter.symbols).toBe(0);
+    expect(statsAfter.links).toBe(0);
+    expect(statsAfter.files).toBe(0);
+  });
 });

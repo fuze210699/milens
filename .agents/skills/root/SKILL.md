@@ -6,15 +6,16 @@ description: Code intelligence for the root area — symbols, dependencies, and 
 # Root
 
 ## Overview
-Contains 257 symbols (206 exported) across 14 files.
+Contains 262 symbols (211 exported) across 14 files.
 
 ## Key Symbols
-- **`CodeSymbol`** [interface] (src/types.ts:8) — 30 refs
+- **`CodeSymbol`** [interface] (src/types.ts:8) — 32 refs
 - **`SymbolLink`** [interface] (src/types.ts:26) — 13 refs
 - **`isTestFile`** [function] (src/utils.ts:2) — 9 refs
 - **`RawCall`** [interface] (src/types.ts:44) — 7 refs
 - **`RawImport`** [interface] (src/types.ts:35) — 6 refs
 - **`ExtractionResult`** [interface] (src/types.ts:60) — 6 refs
+- **`generateAgentsMd`** [function] (src/agents-md.ts:43) — 4 refs
 - **`RawHeritage`** [interface] (src/types.ts:52) — 4 refs
 - **`RawTypeBinding`** [interface] (src/types.ts:80) — 4 refs
 - **`RawAssignmentBinding`** [interface] (src/types.ts:88) — 4 refs
@@ -22,12 +23,11 @@ Contains 257 symbols (206 exported) across 14 files.
 - **`RawCallResultBinding`** [interface] (src/types.ts:104) — 4 refs
 - **`RawReExport`** [interface] (src/types.ts:73) — 3 refs
 - **`Annotation`** [interface] (src/types.ts:138) — 3 refs
-- **`generateAgentsMd`** [function] (src/agents-md.ts:43) — 2 refs
 - **`computeMetrics`** [function] (src/metrics.ts:21) — 2 refs
 
 ## Entry Points
-- **`CodeSymbol`** [interface] — 30 incoming references
-- **`has`** [function] — 26 incoming references
+- **`CodeSymbol`** [interface] — 32 incoming references
+- **`has`** [function] — 28 incoming references
 - **`SymbolLink`** [interface] — 13 incoming references
 - **`isTestFile`** [function] — 9 incoming references
 - **`RawCall`** [interface] — 7 incoming references
@@ -37,13 +37,16 @@ Contains 257 symbols (206 exported) across 14 files.
 - **analyzer**: `loadAliases`, `analyze`, `resolve`, `clear`
 - **server**: `startHttp`, `startStdio`, `HookManager`, `get`, `enableHook`, `loadConfig`, `saveConfig`, `disableHook`
 - **security**: `loadRules`, `auditDependencies`
+- **orchestrator**: `Orchestrator`, `subscribe`, `runAndFormat`
 - **scripts**: `outDir`
+- **test**: `dbPath`
 
 ## Used By
 - **analyzer**: `isTestFile`, `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding` (+8 more)
+- **orchestrator**: `CodeSymbol`, `has`
 - **parser**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+4 more)
 - **store**: `Annotation`, `AnnotationKey`, `Session`, `EvolutionEvent`, `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has` (+1 more)
-- **test**: `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+2 more)
+- **test**: `generateAgentsMd`, `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `RawTypeBinding`, `RawAssignmentBinding` (+3 more)
 - **security**: `has`
 - **server**: `has`
 
@@ -53,12 +56,12 @@ Contains 257 symbols (206 exported) across 14 files.
 - CONTRIBUTING.md
 - DEPLOY.md
 - README.md
-- TODO.md
-- TODO2.md
+- report.md
 - src/agents-md.ts
 - src/cli.ts
 - src/metrics.ts
 - src/skills.ts
 - src/types.ts
 - src/utils.ts
+- todo_v1.md
 - vitest.config.ts

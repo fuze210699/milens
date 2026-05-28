@@ -309,3 +309,78 @@ export async function defaultOnPreCommit(rootPath: string): Promise<string> {
     return `**ERROR**: Pre-commit analysis failed: ${err.message ?? err}`;
   }
 }
+
+export async function defaultOnFileChange(files: string[], rootPath: string): Promise<string> {
+  const dbPath = join(rootPath, '.milens', 'milens.db');
+  try {
+    const { Database } = await import('../store/db.js');
+    const db = new Database(dbPath);
+    try {
+      const lines: string[] = [];
+      lines.push(`## File Change Detected`);
+      lines.push('');
+      lines.push(`${files.length} file(s) changed:\n`);
+      for (const f of files) {
+        const syms = db.getSymbolsByFile(f);
+        lines.push(`- ${f}: ${syms.length} symbols`);
+      }
+      lines.push('');
+      lines.push('Run `orchestrate()` or `detect_changes()` for detailed impact analysis.');
+      db.close();
+      return lines.join('\n');
+    } catch (err: any) {
+      db.close();
+      return `**ERROR**: ${err.message ?? err}`;
+    }
+  } catch {
+    return 'No milens database found.';
+  }
+}
+
+export async function defaultOnPreCompact(rootPath: string, dbPath: string): Promise<string> {
+  try {
+    const { Database } = await import('../store/db.js');
+    const db = new Database(dbPath);
+    try {
+      db.snapshotMetrics();
+      const stats = db.getStats();
+      db.close();
+      return `Pre-compact snapshot saved. Codebase: ${stats.files} files, ${stats.symbols} symbols, ${stats.links} links.`;
+    } catch {
+      db.close();
+      return 'Pre-compact snapshot failed.';
+    }
+  } catch {
+    return 'No milens database found.';
+  }
+}
+
+export async function defaultOnPostCompact(rootPath: string): Promise<string> {
+  const dbPath = join(rootPath, '.milens', 'milens.db');
+  try {
+    const { Database } = await import('../store/db.js');
+    const db = new Database(dbPath);
+    try {
+      const { AnnotationStore } = await import('../store/annotations.js');
+      const store = new AnnotationStore(db.connection);
+      const anns = store.recall({ limit: 20 });
+      const lines: string[] = ['## Context Restored (Post-Compaction)'];
+      lines.push('');
+      if (anns.length > 0) {
+        lines.push(`Recalled ${anns.length} key annotations:`);
+        for (const a of anns) {
+          lines.push(`- [${a.key}] ${a.symbol}: ${a.value.slice(0, 80)}`);
+        }
+      } else {
+        lines.push('No annotations to restore context.');
+      }
+      db.close();
+      return lines.join('\n');
+    } catch {
+      db.close();
+      return 'Context restore failed.';
+    }
+  } catch {
+    return 'No milens database found.';
+  }
+}

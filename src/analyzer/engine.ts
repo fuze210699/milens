@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { scanFiles } from './scanner.js';
-import { langForFile } from '../parser/languages.js';
+import { scanFiles, type ScannedFile } from './scanner.js';
+import { langForFile, supportedExtensions } from '../parser/languages.js';
 import { getParser, loadLanguage } from '../parser/loader.js';
 import { extractFromTree, clearQueryCache } from '../parser/extract.js';
 import { extractVueScript, extractVueTemplateRefs } from '../parser/lang-vue.js';
@@ -84,6 +84,7 @@ interface EngineOptions {
   force?: boolean;
   aliases?: Record<string, string>;
   embeddings?: boolean;
+  files?: string[];
 }
 
 function buildChunks(files: FileWithSpec[]): FileWithSpec[][] {
@@ -103,16 +104,42 @@ function buildChunks(files: FileWithSpec[]): FileWithSpec[][] {
   return chunks;
 }
 
+function scanFilesWithFilter(rootPath: string, filePaths: string[], verbose = false): ScannedFile[] {
+  const exts = new Set(supportedExtensions());
+  const results: ScannedFile[] = [];
+  for (const relPath of filePaths) {
+    const abs = resolve(rootPath, relPath);
+    try {
+      const stat = statSync(abs);
+      if (!stat.isFile()) continue;
+    } catch { continue; }
+    const ext = '.' + relPath.split('.').pop()?.toLowerCase();
+    if (exts.has(ext)) {
+      results.push({ relativePath: relPath.replace(/\\/g, '/'), absolutePath: abs });
+    }
+  }
+  if (verbose) console.log(`[scan] Filtered to ${results.length} of ${filePaths.length} specified files`);
+  return results;
+}
+
 export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const t0 = Date.now();
   const rootPath = resolve(opts.rootPath);
   const db = new Database(opts.dbPath);
   const aliases = opts.aliases ?? {};
 
-  if (opts.force) db.clear();
+  if (opts.force) {
+    if (opts.files && opts.files.length > 0) {
+      db.clearFiles(opts.files);
+    } else {
+      db.clear();
+    }
+  }
 
-  // Phase 1: Scan files
-  const files = scanFiles(rootPath, opts.verbose);
+  // Phase 1: Scan files (or use explicit file list for incremental)
+  const files = opts.files && opts.files.length > 0
+    ? scanFilesWithFilter(rootPath, opts.files, opts.verbose)
+    : scanFiles(rootPath, opts.verbose);
   if (opts.verbose) console.log(`[scan] Found ${files.length} source files`);
 
   // Phase 2: Group files by language for cache-friendly processing

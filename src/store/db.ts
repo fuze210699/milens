@@ -127,6 +127,60 @@ export class Database {
     const fhCols = this.db.prepare(`PRAGMA table_info(file_hashes)`).all() as any[];
     const fhNames = new Set(fhCols.map((c: any) => c.name));
     if (!fhNames.has('zone')) this.db.exec(`ALTER TABLE file_hashes ADD COLUMN zone TEXT`);
+
+    // ── Migrate annotations table (symbol_id → symbol, missing columns) ──
+    try {
+      const annCols = this.db.prepare(`PRAGMA table_info(annotations)`).all() as any[];
+      const annNames = new Set(annCols.map((c: any) => c.name));
+      if (annNames.has('symbol_id') && !annNames.has('symbol')) {
+        this.db.exec(`ALTER TABLE annotations RENAME COLUMN symbol_id TO symbol`);
+      }
+      if (!annNames.has('confidence') && !annNames.has('symbol_id')) {
+        this.db.exec(`ALTER TABLE annotations ADD COLUMN confidence REAL DEFAULT 0.5`);
+      }
+      if (!annNames.has('updated_at')) {
+        this.db.exec(`ALTER TABLE annotations ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`);
+      }
+      // Rebuild index if column was renamed
+      if (annNames.has('symbol_id')) {
+        this.db.exec(`DROP INDEX IF EXISTS idx_annotations_symbol`);
+        this.db.exec(`CREATE INDEX IF NOT EXISTS idx_annotations_symbol ON annotations(symbol, key)`);
+      }
+    } catch { /* table may not exist yet */ }
+
+    // ── Migrate agent_sessions → sessions ──
+    try {
+      const hasOld = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='agent_sessions'").get() as any;
+      const hasNew = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'").get() as any;
+      if (hasOld && !hasNew) {
+        this.db.exec(`ALTER TABLE agent_sessions RENAME TO sessions`);
+        const sessCols = this.db.prepare(`PRAGMA table_info(sessions)`).all() as any[];
+        const sessNames = new Set(sessCols.map((c: any) => c.name));
+        if (sessNames.has('context_json') && !sessNames.has('context')) {
+          this.db.exec(`ALTER TABLE sessions RENAME COLUMN context_json TO context`);
+        }
+        if (!sessNames.has('tool_calls_count')) {
+          this.db.exec(`ALTER TABLE sessions ADD COLUMN tool_calls_count INTEGER DEFAULT 0`);
+        }
+        if (!sessNames.has('annotations_count')) {
+          this.db.exec(`ALTER TABLE sessions ADD COLUMN annotations_count INTEGER DEFAULT 0`);
+        }
+      }
+      // If sessions exists but has old columns from agent_sessions
+      if (hasNew || hasOld) {
+        const sessCols = this.db.prepare(`PRAGMA table_info(sessions)`).all() as any[];
+        const sessNames = new Set(sessCols.map((c: any) => c.name));
+        if (sessNames.has('context_json') && !sessNames.has('context')) {
+          this.db.exec(`ALTER TABLE sessions RENAME COLUMN context_json TO context`);
+        }
+        if (!sessNames.has('tool_calls_count') && !sessNames.has('context_json')) {
+          this.db.exec(`ALTER TABLE sessions ADD COLUMN tool_calls_count INTEGER DEFAULT 0`);
+        }
+        if (!sessNames.has('annotations_count')) {
+          this.db.exec(`ALTER TABLE sessions ADD COLUMN annotations_count INTEGER DEFAULT 0`);
+        }
+      }
+    } catch { /* fine if neither table exists */ }
   }
 
   // ── File hash tracking ──
@@ -498,6 +552,25 @@ export class Database {
     this.db.exec('DELETE FROM file_hashes');
   }
 
+  /** Clear only symbols, links, and file hashes for specific files (incremental re-index) */
+  clearFiles(filePaths: string[]): void {
+    if (filePaths.length === 0) return;
+    const placeholders = filePaths.map(() => '?').join(',');
+    // Delete links where either end references a symbol in the changed files
+    this.db.prepare(`
+      DELETE FROM links WHERE from_id IN (SELECT id FROM symbols WHERE file_path IN (${placeholders}))
+    `).run(...filePaths);
+    this.db.prepare(`
+      DELETE FROM links WHERE to_id IN (SELECT id FROM symbols WHERE file_path IN (${placeholders}))
+    `).run(...filePaths);
+    this.db.prepare(`
+      DELETE FROM symbols WHERE file_path IN (${placeholders})
+    `).run(...filePaths);
+    this.db.prepare(`
+      DELETE FROM file_hashes WHERE path IN (${placeholders})
+    `).run(...filePaths);
+  }
+
   // ── Tool usage tracking ──
 
   logToolUsage(tool: string, durationMs: number, tokensOut: number, tokensSaved: number, repo?: string): void {
@@ -761,7 +834,7 @@ export class Database {
       ? new Date(Date.now() + ttlHours * 3600_000).toISOString().replace('T', ' ').slice(0, 19)
       : null;
     const result = this.db.prepare(
-      `INSERT INTO annotations (symbol_id, key, value, agent, session_id, expires_at)
+      `INSERT INTO annotations (symbol, key, value, agent, session_id, expires_at)
        VALUES (?, ?, ?, ?, ?, ?)`
     ).run(symbolId, key, value, agent ?? null, sessionId ?? null, expiresAt);
     return result.lastInsertRowid as number;
@@ -770,13 +843,13 @@ export class Database {
   getAnnotations(filters: { symbolId?: string; key?: string; agent?: string; sessionId?: string; limit?: number } = {}): Array<{ id: number; symbolId: string; key: string; value: string; agent: string | null; sessionId: string | null; createdAt: string }> {
     const clauses: string[] = ["(expires_at IS NULL OR expires_at > datetime('now'))"];
     const params: any[] = [];
-    if (filters.symbolId) { clauses.push('symbol_id = ?'); params.push(filters.symbolId); }
+    if (filters.symbolId) { clauses.push('symbol = ?'); params.push(filters.symbolId); }
     if (filters.key) { clauses.push('key = ?'); params.push(filters.key); }
     if (filters.agent) { clauses.push('agent = ?'); params.push(filters.agent); }
     if (filters.sessionId) { clauses.push('session_id = ?'); params.push(filters.sessionId); }
-    const sql = `SELECT *, symbol_id as symbolId, created_at as createdAt FROM annotations WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC` + (filters.limit ? ` LIMIT ${filters.limit}` : '');
+    const sql = `SELECT *, symbol as symbolId, created_at as createdAt FROM annotations WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC` + (filters.limit ? ` LIMIT ${filters.limit}` : '');
     const rows = this.db.prepare(sql).all(...params) as any[];
-    return rows.map((r: any) => ({ id: r.id, symbolId: r.symbol_id, key: r.key, value: r.value, agent: r.agent, sessionId: r.session_id, createdAt: r.created_at }));
+    return rows.map((r: any) => ({ id: r.id, symbolId: r.symbol, key: r.key, value: r.value, agent: r.agent, sessionId: r.session_id, createdAt: r.created_at }));
   }
 
   getAnnotationsForSymbol(symbolId: string): Array<{ id: number; symbolId: string; key: string; value: string; agent: string | null; createdAt: string }> {
@@ -789,22 +862,65 @@ export class Database {
   }
 
   startSession(id: string, agent: string, context?: string): void {
-    this.db.prepare('INSERT OR REPLACE INTO agent_sessions (id, agent, status, started_at, context_json) VALUES (?, ?, ?, datetime(\'now\'), ?)')
+    this.db.prepare('INSERT OR REPLACE INTO sessions (id, agent, status, started_at, context) VALUES (?, ?, ?, datetime(\'now\'), ?)')
       .run(id, agent, 'active', context ?? null);
   }
 
   getSession(id: string): { id: string; agent: string; status: string; startedAt: string; endedAt: string | null; context: string | null } | null {
-    const row = this.db.prepare('SELECT *, started_at as startedAt, ended_at as endedAt, context_json as context FROM agent_sessions WHERE id = ?').get(id) as any;
+    const row = this.db.prepare('SELECT *, started_at as startedAt, ended_at as endedAt FROM sessions WHERE id = ?').get(id) as any;
     if (!row) return null;
     return { id: row.id, agent: row.agent, status: row.status, startedAt: row.started_at, endedAt: row.ended_at, context: row.context };
   }
 
   endSession(id: string, status: string): void {
-    this.db.prepare("UPDATE agent_sessions SET status = ?, ended_at = datetime('now') WHERE id = ?").run(status, id);
+    this.db.prepare("UPDATE sessions SET status = ?, ended_at = datetime('now') WHERE id = ?").run(status, id);
   }
 
   transaction<T>(fn: () => T): T {
     return this.db.transaction(fn)();
+  }
+
+  // ── Metric history ──
+
+  recordMetric(name: string, value: number): void {
+    this.db.prepare(
+      'INSERT INTO metric_history (metric_name, value) VALUES (?, ?)'
+    ).run(name, value);
+  }
+
+  getMetricHistory(name: string, daysBack: number = 30): Array<{ value: number; recordedAt: string }> {
+    return this.db.prepare(
+      `SELECT value, recorded_at as recordedAt FROM metric_history
+       WHERE metric_name = ? AND recorded_at >= datetime('now', ?)
+       ORDER BY recorded_at DESC`
+    ).all(name, `-${daysBack} days`) as any[];
+  }
+
+  getMetricTrend(name: string): { current: number; previous: number | null; change: number | null } {
+    const rows = this.db.prepare(
+      `SELECT value FROM metric_history
+       WHERE metric_name = ? ORDER BY recorded_at DESC LIMIT 2`
+    ).all(name) as any[];
+    if (rows.length === 0) return { current: 0, previous: null, change: null };
+    if (rows.length === 1) return { current: rows[0].value, previous: null, change: null };
+    return { current: rows[0].value, previous: rows[1].value, change: rows[0].value - rows[1].value };
+  }
+
+  /** Snapshot all metrics at once */
+  snapshotMetrics(): void {
+    const stats = this.getStats();
+    const coverage = this.getTestCoverage();
+    const deadCode = this.findDeadCode(undefined, 10000);
+
+    const coveragePct = coverage.exportedProductionSymbols > 0
+      ? Math.round((coverage.testedSymbols / coverage.exportedProductionSymbols) * 100)
+      : 0;
+
+    this.recordMetric('symbols', stats.symbols);
+    this.recordMetric('links', stats.links);
+    this.recordMetric('files', stats.files);
+    this.recordMetric('test_coverage_pct', coveragePct);
+    this.recordMetric('dead_code_count', deadCode.length);
   }
 
   close(): void {

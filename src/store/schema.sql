@@ -82,26 +82,30 @@ CREATE TABLE IF NOT EXISTS tool_usage (
 -- Agent annotations: observations about symbols stored by agents
 CREATE TABLE IF NOT EXISTS annotations (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  symbol_id   TEXT NOT NULL,
+  symbol      TEXT NOT NULL,
   key         TEXT NOT NULL,
   value       TEXT NOT NULL,
   agent       TEXT,
   session_id  TEXT,
+  confidence  REAL DEFAULT 0.5,
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
   expires_at  TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_annotations_symbol ON annotations(symbol_id, key);
+CREATE INDEX IF NOT EXISTS idx_annotations_symbol ON annotations(symbol, key);
 CREATE INDEX IF NOT EXISTS idx_annotations_session ON annotations(session_id);
 
 -- Agent sessions: multi-agent session management
-CREATE TABLE IF NOT EXISTS agent_sessions (
-  id          TEXT PRIMARY KEY,
-  agent       TEXT NOT NULL,
-  started_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  ended_at    TEXT,
-  context_json TEXT,
-  status      TEXT NOT NULL DEFAULT 'active'
+CREATE TABLE IF NOT EXISTS sessions (
+  id                TEXT PRIMARY KEY,
+  agent             TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'active',
+  started_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at          TEXT,
+  context           TEXT,
+  tool_calls_count  INTEGER DEFAULT 0,
+  annotations_count INTEGER DEFAULT 0
 );
 
 -- Vector embeddings for semantic code search
@@ -126,3 +130,14 @@ CREATE TABLE IF NOT EXISTS evolution_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_evolution_annotation ON evolution_log(annotation_id);
+
+-- Metric history: snapshots for trend tracking over time
+CREATE TABLE IF NOT EXISTS metric_history (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  metric_name TEXT NOT NULL,
+  value       REAL NOT NULL,
+  recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_metric_name ON metric_history(metric_name);
+CREATE INDEX IF NOT EXISTS idx_metric_at ON metric_history(recorded_at);

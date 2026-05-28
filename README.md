@@ -61,7 +61,7 @@ After 10-20 AI sessions, the codebase accumulates dead code, untested hubs, and 
 
 Milens gives AI coding agents **instant code intelligence**. Instead of reading 15 files to understand a codebase, your agent calls one tool and gets the full picture in 500 tokens.
 
-It builds a **knowledge graph** of your entire project — every function, class, import, call, and inheritance chain — then exposes it through 33 MCP tools. Agents query the graph instead of searching files. The result: **70% fewer tokens** per session, **zero broken dependencies**, and a system that **learns from every session**.
+It builds a **knowledge graph** of your entire project — every function, class, import, call, and inheritance chain — then exposes it through 41 MCP tools. Agents query the graph instead of searching files. The result: **70% fewer tokens** per session, **zero broken dependencies**, and a system that **learns from every session**.
 
 - **Analyze once.** Tree-sitter parses 12 languages into a SQLite knowledge graph.
 - **Query instantly.** FTS5 search, recursive CTE traversal, vector similarity — all in-database.
@@ -135,10 +135,10 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
                                │
               ┌────────────────┼────────────────┐
               ▼                ▼                ▼
-         33 MCP TOOLS    6 SUB-AGENT     50+ SECURITY
-       query, impact,     PROMPTS            RULES
-       context, trace,   planner,         secrets, injection,
-       review_pr, ...    reviewer, ...    unicode, crypto, ...
+         41 MCP TOOLS    7 SUB-AGENT     50+ SECURITY
+        query, impact,     PROMPTS            RULES
+        context, trace,   planner,         secrets, injection,
+        review_pr, ...    reviewer, ...    unicode, crypto, ...
                                │
                                ▼
                         AI CODING AGENT
@@ -163,12 +163,12 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 │  Scheduled evolve (cron/schtasks) · Pre-commit hooks    │
 ├─────────────────────────────────────────────────────────┤
 │  WORKFLOW LAYER                                         │
-│  6 Sub-agent Prompts (planner, reviewer, tester, ...)   │
+│  7 Sub-agent Prompts (planner, reviewer, tester, ...)   │
 │  6 Skill files · AGENTS.md auto-generator               │
 │  Selective profiles (minimal/standard/full)             │
 ├─────────────────────────────────────────────────────────┤
 │  INTELLIGENCE LAYER                                     │
-│  Knowledge Graph (SQLite+FTS5) · 33 MCP Tools            │
+│  Knowledge Graph (SQLite+FTS5) · 41 MCP Tools            │
 │  Memory (annotations+sessions) · Learning (confidence)  │
 │  50+ Security Rules (OWASP) · 7 Metrics (TER, CQI, ...) │
 └─────────────────────────────────────────────────────────┘
@@ -201,7 +201,7 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 
 ---
 
-## MCP Tools (33)
+## MCP Tools (41)
 
 ### Search & Navigation
 
@@ -219,9 +219,17 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 |---|---|
 | `impact` | Blast radius: depth 1-3 traversal showing what breaks |
 | `edit_check` | Pre-edit safety: callers, re-exports, test coverage, warnings |
-| `detect_changes` | Git diff → which symbols changed + their dependents |
+| `detect_changes` | Git diff → only actually-changed symbols + their dependents |
 | `find_dead_code` | Exported symbols with zero incoming references |
 | `overview` | context + impact + grep combined in one call |
+| `pre_commit_check` | Pre-commit risk: review_pr + dead code + coverage gaps |
+| `compare_impact` | Snapshot & diff impact graph before/after edits |
+
+### Orchestration
+
+| Tool | Does |
+|---|---|
+| `orchestrate` | Full autonomous cycle: detect → review → impact → dead code → action plan |
 
 ### Understanding Code
 
@@ -241,8 +249,15 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 | `review_symbol` | Deep-dive: role, heat, dependents, test status, recommendation |
 | `codebase_summary` | ~500 token overview for session bootstrap |
 | `test_plan` | Mock strategy + 3+ test scenarios based on dependencies |
+| `test_generate` | Auto-generates test file with framework detection (vitest/jest/mocha/pytest) |
 | `test_coverage_gaps` | Untested symbols sorted by risk |
 | `test_impact` | Maps changed code → which test files to run |
+
+### Automation
+
+| Tool | Does |
+|---|---|
+| `fix_apply` | Apply security fix to file + creates backup in .milens/backups/ |
 
 ### Memory & Sessions
 
@@ -250,9 +265,9 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 |---|---|
 | `annotate` | Save observation about a symbol (persists forever) |
 | `recall` | Retrieve past annotations by symbol, key, agent, or session |
-| `session_start` | Begin new session with agent identity |
+| `session_start` | Begin new session with codebase context (hooks-enabled) |
 | `session_context` | Session metadata + tool calls + annotations |
-| `session_end` | Close session, record stats |
+| `session_end` | Close session with end-report (hooks-enabled) |
 | `handoff` | Transfer all context from one agent session to another |
 
 ### Security
@@ -260,6 +275,14 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 | Tool | Does |
 |---|---|
 | `security_scan` | **50+ rules in one call.** Scopes: secrets, injection, unicode, dangerous, config, data-leak, crypto, auth, file-access |
+
+### Hooks
+
+| Tool | Does |
+|---|---|
+| `hook_onFileChange` | React to file changes — shows affected symbols per file |
+| `hook_preCompact` | Save metrics snapshot before context window compaction |
+| `hook_postCompact` | Restore context by recalling annotations after compaction |
 
 ### Overview & Similarity
 
@@ -377,7 +400,7 @@ security_scan({scope: "all", severity: "HIGH"})
 
 ---
 
-## Sub-agent Prompts (6)
+## Sub-agent Prompts (7)
 
 Instead of chaining 5-10 tools manually, your agent calls one prompt:
 
@@ -389,6 +412,7 @@ Instead of chaining 5-10 tools manually, your agent calls one prompt:
 | `milens-architect` | (none) | Overview → Domains → Routes → Hierarchy → Connections → **Architecture Analysis** |
 | `milens-security` | (none) | Scan PR → Secrets → Unicode → Dangerous → Data Leak → **Security Audit** |
 | `milens-debugger` | Target + error | Context → Trace Execution → Impact → Find Relationship → **Root Cause Analysis** |
+| `dead_code_remove` | (none) | Detect → Context → Grep → Impact → Edit Check → Remove → Test |
 
 ---
 
@@ -396,8 +420,9 @@ Instead of chaining 5-10 tools manually, your agent calls one prompt:
 
 ```
 milens init [--profile minimal|standard|full] [--interactive]    Bootstrap a project
-milens analyze [-p .] [--force] [--skills] [--embeddings]        Index a codebase
+milens analyze [-p .] [--force] [--files ...] [--skills] [--embeddings]  Index a codebase
 milens serve [-p .] [--http] [--port 3100] [--profile minimal]   Start MCP server
+milens orchestrate [-p .] [--emoji]                               Full review cycle
 milens workflow <name>                                            Run predefined pipeline
 milens security scan [--scope secrets] [--severity HIGH]          Security audit
 milens security deps                                              Dependency CVE check
@@ -617,6 +642,21 @@ OSS stays free forever. [Full pricing details →](docs/pricing.md)
 
 ---
 
+## What's New in v0.8.0
+
+- **Orchestration Engine** — Autonomous review cycle: `orchestrate()` and `milens orchestrate` CLI. Debounced file-change detection → review → impact → coverage gaps → dead code → structured action plan.
+- **Symbol-Level Diff Detection** — `detect_changes` now uses `git diff -U0` line ranges to report only actually-changed symbols, ignoring unchanged ones in the same file.
+- **Incremental Re-indexing** — `milens analyze --files <paths>` re-indexes only specified files. Watch mode uses incremental re-index for 10x faster updates.
+- **Auto-Fix Engine** — `fix_apply({ruleId, file, line})` applies security fixes and creates backups in `.milens/backups/`.
+- **Auto-Test Generation** — `test_generate({symbol})` detects framework (vitest/jest/mocha/pytest) and generates a test file with 3 scenarios + mock strategy.
+- **Compare Impact** — `compare_impact({name, action: "snapshot"|"compare"})` snapshots & diffs impact graphs to detect regressions.
+- **Real-Time Confidence Decay** — Background decay tick runs every 5 minutes during MCP sessions instead of requiring scheduled cron.
+- **Auto-Promote** — Annotations reaching confidence >= 0.8 are auto-promoted to `.agents/skills/` skill files.
+- **Metric History** — `metric_history` table tracks symbols, links, coverage %, and dead code count over time with trend analysis.
+- **4 New Hooks** — `hook_onFileChange`, `hook_preCompact`, `hook_postCompact`, and `pre_commit_check` MCP tools with default actions.
+- **`dead_code_remove` Prompt** — 7-step safe removal workflow: detect → context → grep → impact → edit_check → remove → test.
+- **Profile Expansion** — Now 41 tools in full profile, up from 33.
+
 ## What's New in v0.7.0
 
 - **6 Sub-agent MCP Prompts** — planner, reviewer, tester, architect, security-auditor, debugger. One prompt replaces 5-10 chained tool calls.
@@ -640,7 +680,7 @@ OSS stays free forever. [Full pricing details →](docs/pricing.md)
 
 | Variable | Default | Effect |
 |---|---|---|
-| `MILENS_PROFILE` | (unset = full) | Tool set: `minimal` (10 tools), `standard` (25), `full` (33) |
+| `MILENS_PROFILE` | (unset = full) | Tool set: `minimal` (10 tools), `standard` (27), `full` (41) |
 | `MILENS_VERSION` | (from package.json) | Override version reported in MCP server metadata |
 
 Use in MCP config:

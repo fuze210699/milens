@@ -5,7 +5,7 @@ applyTo: "**"
 <!-- milens:start -->
 # Milens — Code Intelligence (MCP)
 
-This project is indexed by milens (1137 symbols, 1592 links, 104 files).
+This project is indexed by milens (1045 symbols, 1580 links, 109 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
@@ -76,6 +76,13 @@ When the user says... → do this FIRST:
 | "start new session" | `mcp_milens_session_start({agent: "...", repo: "<workspaceRoot>"})` |
 | "find code like `X`" | `mcp_milens_find_similar({name: "X", repo: "<workspaceRoot>"})` |
 | "search for `concept`" | `mcp_milens_semantic_search({query: "concept", repo: "<workspaceRoot>"})` |
+| "generate tests for `X`" | `mcp_milens_test_generate({symbol: "X", repo: "<workspaceRoot>"})` |
+| "fix security issue in `X`" | `mcp_milens_fix_apply({ruleId, file, line, repo: "<workspaceRoot>"})` |
+| "remove dead code" | `mcp_milens_find_dead_code()` then `dead_code_remove` prompt |
+| "orchestrate/check changes" | `mcp_milens_orchestrate({repo: "<workspaceRoot>"})` |
+| "compare impact of `X`" | `mcp_milens_compare_impact({name: "X", action: "snapshot"|"compare", repo: "<workspaceRoot>"})` |
+| "check pre-commit" | `mcp_milens_pre_commit_check({repo: "<workspaceRoot>"})` |
+| "save/restore context" | `mcp_milens_hook_preCompact()` / `mcp_milens_hook_postCompact()` |
 
 ## Documentation Workflows
 
@@ -142,6 +149,13 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symb
 | `mcp_milens_codebase_summary` | High-level bootstrapping context: domains, key symbols, coverage |
 | `mcp_milens_semantic_search` | Hybrid FTS5 + vector search (requires --embeddings) |
 | `mcp_milens_find_similar` | Find symbols similar by embedding proximity |
+| `mcp_milens_compare_impact` | Compare impact graph before/after edit — detects regressions |
+| `mcp_milens_orchestrate` | Full autonomous review cycle: changes → risk → gaps → dead code → plan |
+| `mcp_milens_fix_apply` | Apply a security fix to a file (creates backup) |
+| `mcp_milens_test_generate` | Auto-generate test file with framework detection + mock strategy |
+| `mcp_milens_pre_commit_check` | Pre-commit risk scan: review_pr + dead code + coverage gaps |
+| `mcp_milens_hook_preCompact` | Save metrics snapshot before context compaction |
+| `mcp_milens_hook_postCompact` | Restore context by recalling annotations after compaction |
 
 ### Keeping the Index Fresh
 
@@ -159,6 +173,7 @@ After significant code changes: `npx milens analyze -p . --force`
 | Work in the Test area | `.github/instructions/test.instructions.md` |
 | Work in the Scripts area | `.github/instructions/scripts.instructions.md` |
 | Work in the Analyzer area | `.github/instructions/analyzer.instructions.md` |
+| Work in the Orchestrator area | `.github/instructions/orchestrator.instructions.md` |
 | Work in the Parser area | `.github/instructions/parser.instructions.md` |
 | Work in the Security area | `.github/instructions/security.instructions.md` |
 | Work in the Server area | `.github/instructions/server.instructions.md` |

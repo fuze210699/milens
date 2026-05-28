@@ -347,6 +347,13 @@ When the user says... → do this FIRST:
 | "start new session" | \`${t('session_start')}({agent: "...", repo: "<workspaceRoot>"})\` |
 | "find code like \`X\`" | \`${t('find_similar')}({name: "X", repo: "<workspaceRoot>"})\` |
 | "search for \`concept\`" | \`${t('semantic_search')}({query: "concept", repo: "<workspaceRoot>"})\` |
+| "generate tests for \`X\`" | \`${t('test_generate')}({symbol: "X", repo: "<workspaceRoot>"})\` |
+| "fix security issue in \`X\`" | \`${t('fix_apply')}({ruleId, file, line, repo: "<workspaceRoot>"})\` |
+| "remove dead code" | \`${t('find_dead_code')}()\` then \`dead_code_remove\` prompt |
+| "orchestrate/check changes" | \`${t('orchestrate')}({repo: "<workspaceRoot>"})\` |
+| "compare impact of \`X\`" | \`${t('compare_impact')}({name: "X", action: "snapshot"|"compare", repo: "<workspaceRoot>"})\` |
+| "check pre-commit" | \`${t('pre_commit_check')}({repo: "<workspaceRoot>"})\` |
+| "save/restore context" | \`${t('hook_preCompact')}()\` / \`${t('hook_postCompact')}()\` |
 
 ## Documentation Workflows
 
@@ -413,6 +420,13 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` sy
 | \`${t('codebase_summary')}\` | High-level bootstrapping context: domains, key symbols, coverage |
 | \`${t('semantic_search')}\` | Hybrid FTS5 + vector search (requires --embeddings) |
 | \`${t('find_similar')}\` | Find symbols similar by embedding proximity |
+| \`${t('compare_impact')}\` | Compare impact graph before/after edit — detects regressions |
+| \`${t('orchestrate')}\` | Full autonomous review cycle: changes → risk → gaps → dead code → plan |
+| \`${t('fix_apply')}\` | Apply a security fix to a file (creates backup) |
+| \`${t('test_generate')}\` | Auto-generate test file with framework detection + mock strategy |
+| \`${t('pre_commit_check')}\` | Pre-commit risk scan: review_pr + dead code + coverage gaps |
+| \`${t('hook_preCompact')}\` | Save metrics snapshot before context compaction |
+| \`${t('hook_postCompact')}\` | Restore context by recalling annotations after compaction |
 
 ### Keeping the Index Fresh
 

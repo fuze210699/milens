@@ -22,7 +22,7 @@
 
 | Feature | Included |
 |---|---|
-| All 33 MCP tools | ✓ Forever |
+| All 41 MCP tools | ✓ Forever |
 | 6 sub-agent prompts | ✓ |
 | 50+ security rules | ✓ |
 | CLI tools (init, workflow, hooks, security, watch) | ✓ |

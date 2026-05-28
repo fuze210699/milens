@@ -10,7 +10,7 @@ Comprehensive guides and reference for the Milens AI-DOS platform.
 
 ## Reference
 
-- [MCP Tools](tools.md) — Complete reference of all 33 MCP tools
+- [MCP Tools](tools.md) — Complete reference of all 41 MCP tools
 - [Security Presets](security-presets.md) — 50+ security rules with OWASP mapping
 - [CLI Commands](#) — Full CLI reference (see README)
 

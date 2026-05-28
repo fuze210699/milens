@@ -6,7 +6,7 @@ paths:
 # Test
 
 ## Overview
-Contains 129 symbols (43 exported) across 31 files.
+Contains 136 symbols (43 exported) across 35 files.
 
 ## Key Symbols
 - **`User`** [interface] (test/fixtures/ts-project/src/models.ts:1) — 5 refs
@@ -26,18 +26,26 @@ Contains 129 symbols (43 exported) across 31 files.
 - **`UserController`** [class] (test/fixtures/ts-project/src/nest-sample.ts:18) — 1 refs
 
 ## Entry Points
+- **`dbPath`** [function] — 9 incoming references
 - **`User`** [interface] — 5 incoming references
 - **`createUser`** [function] — 2 incoming references
 - **`UserRole`** [type] — 2 incoming references
 - **`create_user`** [function] — 2 incoming references
-- **`User`** [class] — 2 incoming references
 
 ## Dependencies
+- **root**: `generateAgentsMd`, `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `RawTypeBinding`, `RawAssignmentBinding` (+3 more)
 - **store**: `Database`, `RepoRegistry`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `close`, `insertSymbol`, `findSymbolByName` (+44 more)
-- **root**: `CodeSymbol`, `SymbolLink`, `RawImport`, `RawCall`, `RawHeritage`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+2 more)
 - **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `spec`, `extractHtmlScripts`, `extractHtmlRefs` (+2 more)
+- **server**: `HookManager`, `HookConfig`, `loadConfig`, `saveConfig`, `enableHook`, `disableHook`, `getProjectConfigPath`
+- **orchestrator**: `Orchestrator`, `formatReport`, `OrchestratorReport`, `subscribe`, `run`, `snapshot`, `compare`, `cancel` (+2 more)
 - **analyzer**: `resolveLinks`, `resolveLinksWithStats`, `reviewSymbol`, `scanFiles`, `generateTestPlan`, `findCoverageGaps`, `analyze`, `loadAliases` (+1 more)
-- **scripts**: `run`
+- **security**: `loadRules`, `getRulesByCategory`, `getRulesBySeverity`
+
+## Used By
+- **apps**: `dbPath`
+- **root**: `dbPath`
+- **server**: `dbPath`
+- **store**: `dbPath`
 
 ## Files
 - test/fixtures/go-project/models/user.go
@@ -59,15 +67,19 @@ Contains 129 symbols (43 exported) across 31 files.
 - test/fixtures/vue-project-refs/src/views/TestView.vue
 - test/fixtures/vue-project/src/composables/useClipboard.js
 - test/fixtures/vue-project/src/views/TestView.vue
+- test/unit/agents-md.test.ts
 - test/unit/database.test.ts
 - test/unit/db-extended.test.ts
 - test/unit/extractor.test.ts
+- test/unit/hooks.test.ts
 - test/unit/html-css.test.ts
 - test/unit/markdown.test.ts
+- test/unit/orchestrator.test.ts
 - test/unit/registry.test.ts
 - test/unit/resolver.test.ts
 - test/unit/review.test.ts
 - test/unit/scanner.test.ts
+- test/unit/security-rules.test.ts
 - test/unit/testplan.test.ts
 - test/unit/vectors.test.ts
 - test/unit/vue-import.test.ts

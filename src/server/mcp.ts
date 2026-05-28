@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { resolve, relative, join, dirname } from 'node:path';
+import { resolve, relative, join, dirname, basename } from 'node:path';
 import { execSync, execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -19,6 +19,8 @@ import { AnnotationStore } from '../store/annotations.js';
 import { join as pathJoin } from 'node:path';
 import { registerAllPrompts, MILENS_PROMPT_NAMES } from './mcp-prompts.js';
 import { loadRules } from '../security/rules.js';
+import { HookManager, defaultOnSessionStart, defaultOnSessionEnd, defaultOnPreCommit, defaultOnFileChange, defaultOnPreCompact, defaultOnPostCompact } from './hooks.js';
+import { Orchestrator } from '../orchestrator/orchestrator.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_VERSION: string = process.env.MILENS_VERSION ?? JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8')).version;
@@ -397,14 +399,14 @@ export function createMcpServer(rootPath?: string): McpServer {
     throw new Error(`Multiple repos indexed (${all.length}). Specify \`repo\` parameter.`);
   }
 
-  function getDb(repoPath?: string): { db: Database; root: string; lazy: LazyDb } {
+  function getDb(repoPath?: string): { db: Database; root: string; dbPath: string; lazy: LazyDb } {
     const root = resolveRoot(repoPath);
     const dbPath = registry.findDbPath(root);
     if (!dbPath) throw new Error(`No index for ${root}. Run \`milens analyze\` first.`);
 
     if (!pools.has(root)) pools.set(root, new LazyDb(dbPath));
     const lazy = pools.get(root)!;
-    return { db: lazy.get(), root, lazy };
+    return { db: lazy.get(), root, dbPath, lazy };
   }
 
   const server = new McpServer(
@@ -412,8 +414,10 @@ export function createMcpServer(rootPath?: string): McpServer {
     { instructions: MILENS_INSTRUCTIONS },
   );
 
-  // Auto-wrap every tool handler with usage tracking
+  // Auto-wrap every tool handler with usage tracking + background decay tick
   const origTool = server.tool.bind(server);
+  let lastDecayTick = 0;
+  const DECAY_INTERVAL = 5 * 60_000; // 5 minutes between decay ticks
   server.tool = ((...args: any[]) => {
     const toolName = args[0] as string;
     const handler = args[args.length - 1];
@@ -424,6 +428,22 @@ export function createMcpServer(rootPath?: string): McpServer {
         const responseText = result?.content?.map((c: any) => c.text).join('\n') ?? '';
         const repo = handlerArgs[0]?.repo;
         trackToolCall(trackDb, toolName, start, responseText, repo);
+
+        // Background confidence decay tick (real-time, every 5 min)
+        if (Date.now() - lastDecayTick > DECAY_INTERVAL) {
+          lastDecayTick = Date.now();
+          try {
+            for (const [, pool] of pools) {
+              const db = pool.get();
+              const store = new AnnotationStore(db.connection);
+              if (store.getAnnotationCount() >= 100) {
+                const { runDecayPass } = await import('../store/confidence.js');
+                runDecayPass(store);
+              }
+            }
+          } catch { /* decay is best-effort */ }
+        }
+
         return result;
       };
     }
@@ -824,14 +844,13 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: detect_changes ──
   server.tool(
     'detect_changes',
-    'Git diff → affected symbols + direct dependents.',
+    'Git diff → affected symbols + direct dependents. Uses line-level diff to report only actually-changed symbols.',
     {
       ref: z.string().optional().default('HEAD').describe('Git ref to diff against (default: HEAD)'),
       repo: z.string().optional(),
     },
     async ({ ref, repo }) => {
       const { db, root } = getDb(repo);
-      // Validate ref: only allow safe git ref characters (alphanumeric, /, ., -, _, ~, ^)
       if (!/^[a-zA-Z0-9\/._~^\-]+$/.test(ref)) {
         return { content: [{ type: 'text' as const, text: 'Invalid git ref.' }] };
       }
@@ -848,24 +867,71 @@ export function createMcpServer(rootPath?: string): McpServer {
         return { content: [{ type: 'text' as const, text: 'No changed files detected.' }] };
       }
 
+      // Get changed line ranges per file (git diff -U0 gives hunk headers with @@ -old,new +old,new @@)
+      const changedLinesByFile = new Map<string, Set<number>>();
+      for (const file of changedFiles) {
+        try {
+          const diffOut = execFileSync('git', ['diff', '-U0', ref, '--', file], { cwd: root, encoding: 'utf-8' });
+          const changedLines = new Set<number>();
+          for (const line of diffOut.split('\n')) {
+            const m = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+            if (m) {
+              const start = parseInt(m[1], 10);
+              const count = m[2] ? parseInt(m[2], 10) : 1;
+              for (let i = start; i < start + count; i++) {
+                changedLines.add(i);
+              }
+            }
+          }
+          if (changedLines.size > 0) changedLinesByFile.set(file, changedLines);
+        } catch { /* file may not exist at ref */ }
+      }
+
       const lines: string[] = [`${changedFiles.length} changed files:\n`];
       let totalAffected = 0;
+      let totalChanged = 0;
+
       for (const file of changedFiles) {
         const syms = db.getSymbolsByFile(file);
         if (syms.length === 0) {
           lines.push(`${file}: (not indexed)`);
           continue;
         }
-        lines.push(`${file}: ${syms.length} symbols`);
-        for (const sym of syms) {
+
+        const changedLines = changedLinesByFile.get(file);
+        // Filter to only symbols whose line range overlaps with changed lines
+        const changedSyms = changedLines
+          ? syms.filter(s => {
+              for (let line = s.startLine; line <= s.endLine; line++) {
+                if (changedLines.has(line)) return true;
+              }
+              return false;
+            })
+          : syms; // fallback: no line-level diff available, report all
+
+        if (changedSyms.length === 0 && changedLines) {
+          // File changed but no symbols affected (e.g. whitespace, imports only)
+          lines.push(`${file}: (symbols unchanged)`);
+          continue;
+        }
+
+        const displaySyms = changedSyms.length > 0 ? changedSyms : syms;
+        const unchangedCount = changedSyms.length > 0 ? syms.length - changedSyms.length : 0;
+        const unchangedNote = unchangedCount > 0 ? ` (${unchangedCount} unchanged not shown)` : '';
+        lines.push(`${file}: ${displaySyms.length} changed symbols${unchangedNote}`);
+        for (const sym of displaySyms) {
           const upstream = db.findUpstream(sym.id, 1);
+          totalChanged++;
           if (upstream.length > 0) {
-            lines.push(`  ${sym.name} [${sym.kind}] → ${upstream.length} direct dependents`);
+            lines.push(`  ${sym.name} [${sym.kind}] :${sym.startLine} → ${upstream.length} direct dependents`);
             totalAffected += upstream.length;
+          } else {
+            lines.push(`  ${sym.name} [${sym.kind}] :${sym.startLine}`);
           }
         }
       }
-      lines.push(`\nTotal direct dependents affected: ${totalAffected}`);
+      lines.push(`\nTotal changed symbols: ${totalChanged}`);
+      lines.push(`Total direct dependents affected: ${totalAffected}`);
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },
   );
@@ -1769,10 +1835,21 @@ export function createMcpServer(rootPath?: string): McpServer {
     'Start a new session. Returns a session ID to use with annotate, session_end, and handoff.',
     { agent: z.string().describe('Agent name (e.g. vibe-coder, reviewer)') },
     async ({ agent }) => {
-      const { db } = getDb();
+      const { db, root, dbPath } = getDb();
       const store = new AnnotationStore(db.connection);
       const sessionId = store.sessionStart(agent);
-      return { content: [{ type: 'text' as const, text: `Session started: ${sessionId}\nAgent: ${agent}\nUse this ID with annotate() and session_end().` }] };
+
+      let hookOutput = '';
+      try {
+        const manager = new HookManager();
+        const config = manager.loadConfig(root);
+        if (config.enabled && config.onSessionStart) {
+          hookOutput = await defaultOnSessionStart({ agent, sessionId, rootPath: root }, dbPath);
+        }
+      } catch { /* hooks are best-effort */ }
+
+      const text = `Session started: ${sessionId}\nAgent: ${agent}\nUse this ID with annotate() and session_end().`;
+      return { content: [{ type: 'text' as const, text: hookOutput ? `${hookOutput}\n\n${text}` : text }] };
     },
   );
 
@@ -1810,10 +1887,22 @@ export function createMcpServer(rootPath?: string): McpServer {
     'End a session and record its stats. Use at the end of every session.',
     { session_id: z.string(), status: z.enum(['completed', 'failed']).optional().default('completed') },
     async ({ session_id, status }) => {
-      const { db } = getDb();
+      const { db, root, dbPath } = getDb();
       const store = new AnnotationStore(db.connection);
       const summary = store.sessionEnd(session_id, status);
-      return { content: [{ type: 'text' as const, text: `Session ended: ${session_id}\nStatus: ${status}\nAnnotations: ${summary.annotationCount}` }] };
+
+      let hookOutput = '';
+      try {
+        const ctx = store.sessionContext(session_id);
+        const manager = new HookManager();
+        const config = manager.loadConfig(root);
+        if (config.enabled && config.onSessionEnd) {
+          hookOutput = await defaultOnSessionEnd({ agent: ctx.session.agent, sessionId: session_id, rootPath: root }, dbPath);
+        }
+      } catch { /* hooks are best-effort */ }
+
+      const text = `Session ended: ${session_id}\nStatus: ${status}\nAnnotations: ${summary.annotationCount}`;
+      return { content: [{ type: 'text' as const, text: hookOutput ? `${text}\n\n${hookOutput}` : text }] };
     },
   );
 
@@ -1830,6 +1919,57 @@ export function createMcpServer(rootPath?: string): McpServer {
       const store = new AnnotationStore(db.connection);
       const result = store.handoff(from_session, to_agent, context);
       return { content: [{ type: 'text' as const, text: `Handoff complete.\nNew session: ${result.newSessionId}\nAgent: ${to_agent}\nAnnotations copied: ${result.annotationsCopied}` }] };
+    },
+  );
+
+  // ═══ pre_commit_check ═══
+  server.tool(
+    'pre_commit_check',
+    'Run pre-commit risk analysis: detect_changes + review_pr + dead code + coverage gaps. Use before committing.',
+    { repo: z.string().optional().describe('Repository root path') },
+    async ({ repo }) => {
+      const { root } = getDb(repo);
+      const report = await defaultOnPreCommit(root);
+      return { content: [{ type: 'text' as const, text: report }] };
+    },
+  );
+
+  // ═══ hook_onFileChange ═══
+  server.tool(
+    'hook_onFileChange',
+    'Trigger the onFileChange hook. Call this when files are modified to get impact summary.',
+    {
+      files: z.array(z.string()).describe('List of changed file paths'),
+      repo: z.string().optional(),
+    },
+    async ({ files, repo }) => {
+      const { root } = getDb(repo);
+      const report = await defaultOnFileChange(files, root);
+      return { content: [{ type: 'text' as const, text: report }] };
+    },
+  );
+
+  // ═══ hook_preCompact ═══
+  server.tool(
+    'hook_preCompact',
+    'Trigger pre-compaction hook. Saves a metrics snapshot before context window compaction.',
+    { repo: z.string().optional() },
+    async ({ repo }) => {
+      const { root, dbPath } = getDb(repo);
+      const report = await defaultOnPreCompact(root, dbPath);
+      return { content: [{ type: 'text' as const, text: report }] };
+    },
+  );
+
+  // ═══ hook_postCompact ═══
+  server.tool(
+    'hook_postCompact',
+    'Trigger post-compaction hook. Recalls annotations to restore context after compaction.',
+    { repo: z.string().optional() },
+    async ({ repo }) => {
+      const { root } = getDb(repo);
+      const report = await defaultOnPostCompact(root);
+      return { content: [{ type: 'text' as const, text: report }] };
     },
   );
 
@@ -2281,7 +2421,294 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
+  // ═══ compare_impact ═══
+  server.tool(
+    'compare_impact',
+    'Compare impact graph before/after an edit. Takes a snapshot first, then call again to see the diff. Returns new/removed dependents and heat changes.',
+    {
+      name: z.string().describe('Symbol name to compare'),
+      action: z.enum(['snapshot', 'compare']).describe("'snapshot' to save current state, 'compare' to diff against last snapshot"),
+      repo: z.string().optional(),
+    },
+    async ({ name, action, repo }) => {
+      const { db, root, dbPath } = getDb(repo);
+      const orchestrator = new Orchestrator({ rootPath: root, dbPath });
+
+      try {
+        if (action === 'snapshot') {
+          const snap = orchestrator.snapshot(name, db);
+          return { content: [{ type: 'text' as const, text: `Snapshot saved for "${name}":\n  Heat: ${snap.heatScore}\n  Dependents: ${snap.dependents.length}\n  Timestamp: ${snap.timestamp}` }] };
+        }
+
+        const diff = orchestrator.compare(name, db);
+        if (!diff.before) {
+          return { content: [{ type: 'text' as const, text: `No snapshot found for "${name}". Call compare_impact with action: 'snapshot' first.` }] };
+        }
+
+        const lines: string[] = [];
+        lines.push(`Impact diff for "${name}"\n`);
+        lines.push(`Before: ${diff.before.dependents.length} dependents, heat ${diff.heatBefore}`);
+        lines.push(`After:  ${diff.after.dependents.length} dependents, heat ${diff.heatAfter}`);
+
+        if (diff.newDependents.length > 0) {
+          lines.push(`\n+ ${diff.newDependents.length} new dependents:`);
+          for (const d of diff.newDependents) lines.push(`  + ${d.name} in ${d.filePath}`);
+        }
+        if (diff.removedDependents.length > 0) {
+          lines.push(`\n- ${diff.removedDependents.length} removed dependents:`);
+          for (const d of diff.removedDependents) lines.push(`  - ${d.name} in ${d.filePath}`);
+        }
+        if (diff.heatChanged) {
+          lines.push(`\nHeat changed: ${diff.heatBefore} → ${diff.heatAfter} (${diff.heatAfter > diff.heatBefore! ? 'increased' : 'decreased'})`);
+        }
+        if (diff.newDependents.length === 0 && diff.removedDependents.length === 0 && !diff.heatChanged) {
+          lines.push(`\nNo changes detected in impact graph.`);
+        }
+
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      } finally {
+        db.close();
+      }
+    },
+  );
+
+  // ═══ orchestrate ═══
+  server.tool(
+    'orchestrate',
+    'Run full orchestration cycle: detect_changes → review_pr → impact → coverage gaps → dead code. Returns structured action plan.',
+    { repo: z.string().optional() },
+    async ({ repo }) => {
+      const { root, dbPath } = getDb(repo);
+      const orchestrator = new Orchestrator({ rootPath: root, dbPath, useEmoji: false });
+      const report = await orchestrator.runAndFormat();
+      return { content: [{ type: 'text' as const, text: report }] };
+    },
+  );
+
+  // ═══ fix_apply ═══
+  server.tool(
+    'fix_apply',
+    'Apply a security fix suggestion to a file. Creates a backup before modifying. CRITICAL rules require confirm: true.',
+    {
+      ruleId: z.string().describe('Security rule ID (e.g. "hardcoded_secret")'),
+      file: z.string().describe('File path relative to repo root'),
+      line: z.number().describe('Line number where the issue was found'),
+      confirm: z.boolean().optional().default(false).describe('Confirmation required for CRITICAL rules'),
+      repo: z.string().optional(),
+    },
+    async ({ ruleId, file, line, confirm, repo }) => {
+      const { root } = getDb(repo);
+      const rules = loadRules();
+      const rule = rules.find(r => r.id === ruleId);
+      if (!rule) return { content: [{ type: 'text' as const, text: `Rule not found: "${ruleId}"` }] };
+      if (rule.severity === 'CRITICAL' && !confirm) {
+        return { content: [{ type: 'text' as const, text: `CRITICAL rule "${ruleId}" requires confirmation. Set confirm: true to proceed.` }] };
+      }
+
+      const fullPath = resolve(root, file);
+      if (!existsSync(fullPath)) return { content: [{ type: 'text' as const, text: `File not found: ${file}` }] };
+
+      const content = readFileSync(fullPath, 'utf-8');
+      const lines = content.split('\n');
+      if (line < 1 || line > lines.length) return { content: [{ type: 'text' as const, text: `Line ${line} out of range (file has ${lines.length} lines).` }] };
+
+      // Backup original
+      const backupDir = join(root, '.milens', 'backups');
+      mkdirSync(backupDir, { recursive: true });
+      const backupPath = join(backupDir, `${file.replace(/[\\/]/g, '_')}_${Date.now()}.bak`);
+      writeFileSync(backupPath, content, 'utf-8');
+
+      // Apply fix: add comment above the affected line with the fix suggestion
+      const targetLine = lines[line - 1];
+      const indent = targetLine.match(/^(\s*)/)?.[1] ?? '';
+      const fixComment = `${indent}// milens(fix): rule=${rule.id} — ${rule.fix ?? 'Review manually'}`;
+      lines.splice(line - 1, 0, fixComment);
+      const newContent = lines.join('\n');
+      writeFileSync(fullPath, newContent, 'utf-8');
+
+      return { content: [{ type: 'text' as const, text: `Fix applied for rule "${ruleId}" at ${file}:${line}\nSeverity: ${rule.severity}\nBackup: ${relative(root, backupPath)}\nFix: ${rule.fix ?? 'Manual review needed'}\n\nAdded fix comment above line ${line}.` }] };
+    },
+  );
+
+  // ═══ test_generate ═══
+  server.tool(
+    'test_generate',
+    'Generate a test file for a symbol using its test plan. Detects test framework and follows project conventions.',
+    {
+      symbol: z.string().describe('Symbol name to generate tests for'),
+      repo: z.string().optional(),
+    },
+    async ({ symbol, repo }) => {
+      const { db, root } = getDb(repo);
+      const plan = generateTestPlan(db, symbol);
+      if (!plan) return { content: [{ type: 'text' as const, text: `Symbol not found: "${symbol}"` }] };
+
+      // Detect test framework
+      const framework = detectTestFramework(root);
+      const testExt = framework === 'pytest' ? '.py' : '.test.ts';
+
+      // Determine test file path
+      const srcFile = plan.file;
+      const srcDir = dirname(srcFile);
+      const srcName = basename(srcFile, srcFile.includes('.') ? '.' + srcFile.split('.').pop()! : '');
+      const testFileName = `${srcName}${testExt}`;
+      const testDir = join(srcDir, '__tests__');
+      const testPath = join(testDir, testFileName);
+
+      // Don't overwrite existing test files
+      if (existsSync(join(root, testPath))) {
+        return { content: [{ type: 'text' as const, text: `Test file already exists at ${testPath}. Skipping to avoid overwrite.` }] };
+      }
+
+      // Check if a sister test file exists alongside the source
+      const altTestPath = join(srcDir, testFileName);
+      const existingTestDir = existsSync(join(root, testDir));
+      const altExists = existsSync(join(root, altTestPath));
+      if (altExists) {
+        return { content: [{ type: 'text' as const, text: `Test file exists at ${altTestPath}. Skipping to avoid overwrite.` }] };
+      }
+
+      // Generate test code
+      const testCode = generateTestCode(plan, framework, srcFile);
+
+      // Write the test file
+      const writePath = existingTestDir ? testPath : altTestPath;
+      mkdirSync(dirname(join(root, writePath)), { recursive: true });
+      writeFileSync(join(root, writePath), testCode, 'utf-8');
+
+      return { content: [{ type: 'text' as const, text: `Test file generated: ${writePath}\nFramework: ${framework}\nScenarios: ${plan.testScenarios.length}\nMock deps: ${plan.mockStrategy.length}` }] };
+    },
+  );
+
+  // ── Prompt: dead_code_remove ──
+  server.prompt(
+    'dead_code_remove',
+    'Safe dead code removal workflow: detect → verify → remove → test.',
+    { repo: z.string().optional().describe('Repository root path') },
+    ({ repo }) => ({
+      messages: [{
+        role: 'user',
+        content: {
+          type: 'text',
+          text: `I need to safely remove dead code. Follow this workflow:\n\n` +
+            `1. Run \`find_dead_code()\` to list symbols with zero incoming references\n` +
+            `2. For each candidate symbol, verify it's truly unused:\n` +
+            `   a. Run \`context({name: "symbolName"})\` to check for hidden callers\n` +
+            `   b. Run \`grep({pattern: "symbolName"})\` to find all text references (templates, configs, docs, routes)\n` +
+            `   c. Run \`impact({target: "symbolName", direction: "downstream"})\` to confirm no downstream impact\n` +
+            `3. If neither context nor grep finds references → safe to remove\n` +
+            `4. Before removal: \`edit_check({name: "symbolName"})\` for final safety check\n` +
+            `5. Remove the symbol and its definition\n` +
+            `6. Run test suite to verify no regressions\n` +
+            `7. Report: which symbols removed, which skipped (and why)\n\n` +
+            `IMPORTANT: Never auto-remove. Always ask for confirmation before deleting each symbol.` +
+            (repo ? `\nRepo: ${repo}` : ''),
+        },
+      }],
+    }),
+  );
+
   return server;
+}
+
+// ── Helpers ──
+
+function detectTestFramework(rootPath: string): 'jest' | 'vitest' | 'mocha' | 'pytest' {
+  try {
+    const pkgPath = resolve(rootPath, 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    const deps = { ...pkg.devDependencies, ...pkg.dependencies };
+    if (deps.vitest) return 'vitest';
+    if (deps.jest) return 'jest';
+    if (deps.mocha) return 'mocha';
+  } catch {}
+  // Check for Python
+  try {
+    const cfg = readFileSync(resolve(rootPath, 'pytest.ini'), 'utf-8');
+    return 'pytest';
+  } catch {}
+  try {
+    const cfg = readFileSync(resolve(rootPath, 'setup.cfg'), 'utf-8');
+    if (cfg.includes('[tool:pytest]')) return 'pytest';
+  } catch {}
+  return 'vitest'; // default (Vitest is most common for TS projects)
+}
+
+function generateTestCode(plan: import('./test-plan.js').TestPlan, framework: string, srcFile: string): string {
+  const lines: string[] = [];
+
+  if (framework === 'pytest') {
+    lines.push(`# Generated by milens — test plan for ${plan.symbol}`);
+    lines.push(`import pytest`);
+    lines.push(`from ${srcFile.replace(/[/\\]/g, '.').replace(/\.(ts|tsx|js|jsx|py)$/, '')} import ${plan.symbol}`);
+    lines.push('');
+    lines.push(`class Test${capitalize(plan.symbol)}:`);
+    for (const s of plan.testScenarios) {
+      lines.push(`    def test_${s.name.toLowerCase().replace(/\s+/g, '_')}(self):`);
+      lines.push(`        """${s.description}"""`);
+      lines.push(`        pass  # TODO: implement`);
+      lines.push('');
+    }
+  } else {
+    const hasTypescript = srcFile.endsWith('.ts') || srcFile.endsWith('.tsx');
+    const ext = hasTypescript ? '.ts' : '.js';
+
+    lines.push(`// Generated by milens — test plan for ${plan.symbol}`);
+    if (framework === 'vitest') {
+      lines.push(`import { describe, it, expect${plan.mockStrategy.length > 0 ? ', vi' : ''} } from 'vitest';`);
+      lines.push(`import { ${plan.symbol} } from '${relativeImport(srcFile, hasTypescript)}';`);
+    } else if (framework === 'mocha') {
+      lines.push(`import { expect } from 'chai';`);
+      lines.push(`import { ${plan.symbol} } from '${relativeImport(srcFile, hasTypescript)}';`);
+    } else {
+      lines.push(`import { ${plan.symbol} } from '${relativeImport(srcFile, hasTypescript)}';`);
+    }
+
+    // Mock imports
+    for (const m of plan.mockStrategy) {
+      if (framework === 'vitest') {
+        lines.push(`vi.mock('${m.dependency}');`);
+      } else if (framework === 'jest') {
+        lines.push(`jest.mock('${m.dependency}');`);
+      }
+    }
+
+    lines.push('');
+
+    const describeFn = framework === 'mocha' ? `describe('${plan.symbol}'` : framework === 'vitest' ? `describe('${plan.symbol}', () =>` : `describe('${plan.symbol}', () =>`;
+    const beforeEachHook = framework === 'mocha' ? `  beforeEach(() => {` : `  beforeEach(() => {`;
+    const endBrace = framework === 'mocha' ? `});` : `});`;
+
+    lines.push(`${describeFn} {`);
+    lines.push(`${beforeEachHook}`);
+    lines.push(`    // Setup mocks`);
+    lines.push(`  });`);
+    lines.push('');
+
+    for (const s of plan.testScenarios) {
+      const testFn = framework === 'mocha' ? `  it('${s.name}'` : `  it('${s.name}', () =>`;
+      lines.push(`  ${testFn} => {`);
+      lines.push(`    // ${s.description}`);
+      lines.push(`    const result = ${plan.symbol}();`);
+      lines.push(`    expect(result).toBeDefined();`);
+      lines.push(`  });`);
+      lines.push('');
+    }
+
+    lines.push(`});`);
+  }
+
+  return lines.join('\n');
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function relativeImport(srcFile: string, hasTypescript: boolean): string {
+  // Convert src/foo/bar.ts → ../foo/bar (relative import for __tests__/bar.test.ts)
+  const withoutExt = srcFile.replace(/\.(ts|tsx|js|jsx)$/, '');
+  return `.${hasTypescript ? '' : '.js'}/${withoutExt.split('/').pop()!}`;
 }
 
 // ── Transport: stdio ──

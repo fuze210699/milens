@@ -7,7 +7,7 @@ alwaysApply: false
 # Apps
 
 ## Overview
-Contains 34 symbols (12 exported) across 10 files.
+Contains 38 symbols (12 exported) across 10 files.
 
 ## Key Symbols
 - **`Milens Desktop Dashboard`** [section] (apps/dashboard/README.md:1) — 0 refs
@@ -26,9 +26,13 @@ Contains 34 symbols (12 exported) across 10 files.
 ## Entry Points
 - **`createWindow`** [function] — 1 incoming references
 - **`__dirname`** [variable] — 1 incoming references
+- **`checkRateLimit`** [function] — 1 incoming references
+- **`getTier`** [function] — 1 incoming references
+- **`runMilensAnalyze`** [function] — 1 incoming references
 
 ## Dependencies
 - **store**: `remove`, `Database`, `getCodebaseSummary`, `close`
+- **test**: `dbPath`
 
 ## Files
 - apps/dashboard/README.md

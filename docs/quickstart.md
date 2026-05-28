@@ -122,7 +122,7 @@ For other editors (Codex, Gemini, Zed), see `adapters/` in the repository.
 
 ## What's Next?
 
-- [All 33 MCP Tools](tools.md) — Complete tool reference
+- [All 41 MCP Tools](tools.md) — Complete tool reference
 - [Skills & Prompts](../.agents/skills/) — Pre-built agent workflows
 - [Security Rules](security-presets.md) — 50+ rules with OWASP mapping
 - [Adapters](adapters.md) — Connect your harness

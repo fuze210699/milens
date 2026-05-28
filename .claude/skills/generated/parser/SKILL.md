@@ -13,12 +13,12 @@ Contains 76 symbols (26 exported) across 15 files.
 - **`extractVueScript`** [function] (src/parser/lang-vue.ts:18) — 5 refs
 - **`extractHtmlRefs`** [function] (src/parser/lang-html.ts:52) — 4 refs
 - **`extractVueTemplateRefs`** [function] (src/parser/lang-vue.ts:37) — 4 refs
+- **`supportedExtensions`** [function] (src/parser/languages.ts:29) — 4 refs
 - **`spec`** [variable] (src/parser/lang-js.ts:5) — 3 refs
 - **`spec`** [variable] (src/parser/lang-ts.ts:5) — 3 refs
 - **`clearQueryCache`** [function] (src/parser/extract.ts:67) — 2 refs
 - **`spec`** [variable] (src/parser/lang-css.ts:5) — 2 refs
 - **`spec`** [variable] (src/parser/lang-go.ts:5) — 2 refs
-- **`spec`** [variable] (src/parser/lang-py.ts:5) — 2 refs
 
 ## Entry Points
 - **`LangSpec`** [interface] — 30 incoming references
@@ -33,7 +33,7 @@ Contains 76 symbols (26 exported) across 15 files.
 - **store**: `load`
 
 ## Used By
-- **analyzer**: `langForFile`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `extractVueScript`, `extractVueTemplateRefs`, `extractHtmlScripts` (+6 more)
+- **analyzer**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `extractVueScript`, `extractVueTemplateRefs` (+6 more)
 - **server**: `getParser`, `loadLanguage`, `ALL_LANGS`
 - **test**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `spec`, `extractHtmlScripts`, `extractHtmlRefs` (+2 more)
 

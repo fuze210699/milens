@@ -202,7 +202,7 @@ describe('Database — annotations, sessions, graph methods', () => {
       // Add with TTL of 0 hours (already expired)
       const rawDb = db.getRawDb();
       rawDb.prepare(
-        `INSERT INTO annotations (symbol_id, key, value, agent, expires_at) VALUES (?, ?, ?, ?, datetime('now', '-1 hour'))`
+        `INSERT INTO annotations (symbol, key, value, agent, expires_at) VALUES (?, ?, ?, ?, datetime('now', '-1 hour'))`
       ).run('src/animals.ts#class:Dog:10', 'temp', 'expired value', 'test');
 
       const removed = db.cleanupExpiredAnnotations();
@@ -213,7 +213,7 @@ describe('Database — annotations, sessions, graph methods', () => {
       const rawDb = db.getRawDb();
       // Insert an expired annotation
       rawDb.prepare(
-        `INSERT INTO annotations (symbol_id, key, value, agent, expires_at) VALUES (?, ?, ?, ?, datetime('now', '-2 hours'))`
+        `INSERT INTO annotations (symbol, key, value, agent, expires_at) VALUES (?, ?, ?, ?, datetime('now', '-2 hours'))`
       ).run('src/animals.ts#class:Cat:40', 'expired-key', 'should not appear', 'test');
 
       const results = db.getAnnotations({ key: 'expired-key' });

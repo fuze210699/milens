@@ -65,6 +65,10 @@ export class AnnotationStore {
         "UPDATE annotations SET confidence = 0, updated_at = datetime('now') WHERE id = ?"
       ),
       deleteAnnotation: this.db.prepare('DELETE FROM annotations WHERE id = ?'),
+
+      boostRecallConfidence: this.db.prepare(
+        "UPDATE annotations SET confidence = MIN(confidence + 0.05, 0.95), updated_at = datetime('now') WHERE id = ? AND confidence < 0.9"
+      ),
     };
   }
 
@@ -122,29 +126,27 @@ export class AnnotationStore {
 
   recall(filters?: { symbol?: string; key?: AnnotationKey; agent?: string; sessionId?: string; limit?: number }): Annotation[] {
     const limit = filters?.limit ?? 50;
+    let rows: any[];
 
     if (filters?.symbol && filters?.key) {
-      const rows = this.stmts.findBySymbolKey.all(filters.symbol, filters.key) as any[];
-      return rows.map(rowToAnnotation);
-    }
-    if (filters?.symbol) {
-      const rows = this.stmts.queryBySymbol.all(filters.symbol, limit) as any[];
-      return rows.map(rowToAnnotation);
-    }
-    if (filters?.key) {
-      const rows = this.stmts.queryByKey.all(filters.key, limit) as any[];
-      return rows.map(rowToAnnotation);
-    }
-    if (filters?.agent) {
-      const rows = this.stmts.queryByAgent.all(filters.agent, limit) as any[];
-      return rows.map(rowToAnnotation);
-    }
-    if (filters?.sessionId) {
-      const rows = this.stmts.queryBySession.all(filters.sessionId) as any[];
-      return rows.map(rowToAnnotation);
+      rows = this.stmts.findBySymbolKey.all(filters.symbol, filters.key) as any[];
+    } else if (filters?.symbol) {
+      rows = this.stmts.queryBySymbol.all(filters.symbol, limit) as any[];
+    } else if (filters?.key) {
+      rows = this.stmts.queryByKey.all(filters.key, limit) as any[];
+    } else if (filters?.agent) {
+      rows = this.stmts.queryByAgent.all(filters.agent, limit) as any[];
+    } else if (filters?.sessionId) {
+      rows = this.stmts.queryBySession.all(filters.sessionId) as any[];
+    } else {
+      rows = this.stmts.queryAll.all(limit) as any[];
     }
 
-    const rows = this.stmts.queryAll.all(limit) as any[];
+    // Boost confidence on recall (real-time learning)
+    for (const row of rows) {
+      this.stmts.boostRecallConfidence.run(row.id);
+    }
+
     return rows.map(rowToAnnotation);
   }
 

@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-Milens exposes **33 MCP tools** for AI coding agents. All tools accept an optional `repo` parameter when multiple repositories are indexed.
+Milens exposes **41 MCP tools** for AI coding agents. All tools accept an optional `repo` parameter when multiple repositories are indexed.
 
 ## Search & Navigation
 
@@ -17,10 +17,18 @@ Milens exposes **33 MCP tools** for AI coding agents. All tools accept an option
 | Tool | Input | Output |
 |---|---|---|
 | `impact` | `{target: "createUser", depth: 3}` | `[depth 1] WILL BREAK: A,B,C` / `[2] LIKELY: D,E` / `[3] MAY: F,G` |
-| `edit_check` | `{name: "resolveLinks"}` | `callers (N) + export status + re-exports + ⚠ warnings` |
-| `detect_changes` | `{ref: "HEAD"}` | `[modified files] → affected symbols + dependents` |
+| `edit_check` | `{name: "resolveLinks"}` | `callers (N) + export status + re-exports + warnings` |
+| `detect_changes` | `{ref: "HEAD"}` | `[modified files] → only actually-changed symbols + dependents` |
 | `find_dead_code` | `{limit: 30}` | `[symbol] [kind] file:line — 0 references` |
 | `overview` | `{name: "Database"}` | `context + impact + grep — all in one call` |
+| `pre_commit_check` | `{repo}` | `Pre-commit risk: review_pr + dead code + coverage gaps` |
+| `compare_impact` | `{name, action: "snapshot" | "compare"}` | `Before/after: new/removed dependents, heat changes` |
+
+## Orchestration
+
+| Tool | Input | Output |
+|---|---|---|
+| `orchestrate` | `{repo}` | `Full cycle: detect_changes → review_pr → impact → dead code → structured action plan` |
 
 ## Understanding
 
@@ -45,8 +53,15 @@ Milens exposes **33 MCP tools** for AI coding agents. All tools accept an option
 | Tool | Input | Output |
 |---|---|---|
 | `test_plan` | `{name: "createUser"}` | `mock strategy (stub/spy/fake) + suggested tests (3+ scenarios)` |
+| `test_generate` | `{symbol: "createUser"}` | `Generates test file with framework detection (vitest/jest/mocha/pytest)` |
 | `test_coverage_gaps` | `{limit: 20}` | `[untested symbol] [risk: CRITICAL/HIGH/MEDIUM/LOW]` |
 | `test_impact` | `{ref: "HEAD"}` | `[changed symbol] → [test files to run]` |
+
+## Automation
+
+| Tool | Input | Output |
+|---|---|---|
+| `fix_apply` | `{ruleId, file, line, confirm}` | `Applies security fix + creates backup in .milens/backups/` |
 
 ## Memory & Sessions
 
@@ -54,10 +69,18 @@ Milens exposes **33 MCP tools** for AI coding agents. All tools accept an option
 |---|---|---|
 | `annotate` | `{symbol: "X", key: "note", value: "..."}` | Confirmation + confidence score |
 | `recall` | `{symbol: "X", limit: 50}` | `[{key, value, agent, session, timestamp}]` |
-| `session_start` | `{agent: "vibe-coder"}` | Session ID |
+| `session_start` | `{agent: "vibe-coder"}` | Session ID + codebase context (hooks-enabled) |
 | `session_context` | `{session_id: "..."}` | `metadata + tool calls + annotations` |
-| `session_end` | `{session_id: "..."}` | Summary stats |
+| `session_end` | `{session_id: "..."}` | Summary stats + session-end report (hooks-enabled) |
 | `handoff` | `{from_session, to_agent, context}` | New session ID + summary |
+
+## Hooks
+
+| Tool | Input | Output |
+|---|---|---|
+| `hook_onFileChange` | `{files: ["src/auth.ts"]}` | `File change summary: symbols count per file` |
+| `hook_preCompact` | `{repo}` | `Saves metrics snapshot before context compaction` |
+| `hook_postCompact` | `{repo}` | `Recalls annotations to restore context after compaction` |
 
 ## Security
 
@@ -94,7 +117,7 @@ Milens exposes **33 MCP tools** for AI coding agents. All tools accept an option
 
 ## Sub-agent Prompts
 
-6 pre-built MCP prompts for common workflows:
+7 pre-built MCP prompts for common workflows:
 
 | Prompt | Args | Workflow |
 |---|---|---|
@@ -104,3 +127,4 @@ Milens exposes **33 MCP tools** for AI coding agents. All tools accept an option
 | `milens-architect` | (none) | Overview → Domains → Routes → Hierarchy → Connections |
 | `milens-security` | (none) | PR Scan → Secrets → Unicode → Dangerous → Data Leak → Report |
 | `milens-debugger` | `target (required)`, `error_description (optional)` | Context → Trace → Impact → Relationship → Root Cause |
+| `dead_code_remove` | `repo (optional)` | Detect → Context → Grep → Impact → Edit Check → Remove → Test |

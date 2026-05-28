@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { resolve, join, dirname, basename } from 'node:path';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadAliases } from './analyzer/config.js';
@@ -23,6 +23,7 @@ program
   .option('-o, --output <dir>', 'Output directory for database')
   .option('-v, --verbose', 'Show detailed progress')
   .option('-f, --force', 'Force full re-index')
+  .option('--files <paths...>', 'Only re-index specific files (relative to root)')
   .option('-s, --skills', 'Generate skill files for all supported editors')
   .option('--skills-copilot', 'Generate skill files for GitHub Copilot only')
   .option('--skills-cursor', 'Generate skill files for Cursor only')
@@ -47,6 +48,7 @@ program
       force: opts.force,
       aliases,
       embeddings: opts.embeddings,
+      files: opts.files,
     });
 
     // Register in global registry
@@ -991,7 +993,11 @@ program
       console.log(`\nRe-indexing ${files.length} changed file(s)...`);
       const { execSync } = await import('node:child_process');
       try {
-        execSync(`npx milens analyze -p "${root}" --force`, { stdio: 'pipe', cwd: root });
+        const fileArgs = files.map(f => `"${f}"`).join(' ');
+        const cmd = process.argv[1]
+          ? `node ${process.argv[1]} analyze -p "${root}" --force --files ${fileArgs}`
+          : `npx milens analyze -p "${root}" --force --files ${fileArgs}`;
+        execSync(cmd, { stdio: 'pipe', cwd: root });
         console.log(`✓ Index updated`);
       } catch {
         console.log(`⚠ Re-index failed — run manually: milens analyze -p . --force`);
@@ -1015,6 +1021,39 @@ program
     } catch {
       console.error('File watching failed. Use `milens analyze -p . --force` to manually re-index.');
     }
+  });
+
+program
+  .command('orchestrate')
+  .description('Run full review cycle: detect changes → risk → coverage gaps → dead code')
+  .option('-p, --path <path>', 'Repository root path', '.')
+  .option('--emoji', 'Use emoji in output')
+  .action(async (opts) => {
+    const root = resolve(opts.path);
+    const dbPath = join(root, '.milens', 'milens.db');
+
+    if (!existsSync(dbPath)) {
+      console.error(`No milens database found. Run \`milens analyze\` first.`);
+      process.exit(1);
+    }
+
+    const { Orchestrator } = await import('./orchestrator/orchestrator.js');
+    const orchestrator = new Orchestrator({ rootPath: root, dbPath, useEmoji: opts.emoji });
+
+    // Mark changed files from git diff
+    try {
+      const { execFileSync } = await import('node:child_process');
+      const diffOut = execFileSync('git', ['diff', '--name-only', 'HEAD'], { cwd: root, encoding: 'utf-8' });
+      const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: root, encoding: 'utf-8' });
+      const changed = [...new Set([...diffOut.trim().split('\n'), ...staged.trim().split('\n')])].filter(Boolean);
+      for (const f of changed) orchestrator.subscribe(f);
+    } catch {
+      console.error('Not a git repository or git not available.');
+      process.exit(1);
+    }
+
+    const report = await orchestrator.runAndFormat();
+    console.log(report);
   });
 
 program.parse();

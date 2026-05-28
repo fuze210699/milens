@@ -1,4 +1,6 @@
 import type { AnnotationStore } from './annotations.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 /** Boost confidence for an annotation, logging the evolution event */
 export function boostConfidence(
@@ -6,7 +8,6 @@ export function boostConfidence(
   annotationId: string,
   increment: number = 0.1,
 ): void {
-  // Get current annotation
   const results = store.recall({ limit: 1000 });
   const ann = results.find(a => a.id === annotationId);
   if (!ann) return;
@@ -99,4 +100,36 @@ export function runDecayPass(store: AnnotationStore): { decayed: number; archive
     }
   }
   return { decayed, archived };
+}
+
+/** Auto-promote annotations with confidence >= 0.8 to skill files */
+export function autoPromote(
+  annot: { symbol: string; key: string; value: string; confidence: number; agent?: string; createdAt: string; updatedAt: string },
+  rootPath: string,
+): string | null {
+  if (annot.confidence < 0.8) return null;
+
+  const dir = join(rootPath, '.agents', 'skills', `milens-${annot.key}`);
+  mkdirSync(dir, { recursive: true });
+
+  const content = [
+    `# ${annot.key.toUpperCase()}: ${annot.symbol}`,
+    `> Auto-promoted by milens | Confidence: ${(annot.confidence * 100).toFixed(0)}% | Agent: ${annot.agent || 'unknown'}`,
+    '',
+    `## Rule`,
+    '',
+    annot.value,
+    '',
+    `## Metadata`,
+    '',
+    `- **Symbol:** \`${annot.symbol}\``,
+    `- **Key:** \`${annot.key}\``,
+    `- **Confidence:** ${annot.confidence}`,
+    `- **Created:** ${annot.createdAt}`,
+    `- **Updated:** ${annot.updatedAt}`,
+    '',
+  ].join('\n');
+
+  writeFileSync(join(dir, 'SKILL.md'), content, 'utf-8');
+  return dir;
 }

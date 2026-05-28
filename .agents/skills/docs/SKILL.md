@@ -6,7 +6,7 @@ description: Code intelligence for the docs area — symbols, dependencies, and 
 # Docs
 
 ## Overview
-Contains 266 symbols (253 exported) across 12 files.
+Contains 122 symbols (110 exported) across 11 files.
 
 ## Key Symbols
 - **`Adapter Packs`** [section] (docs/adapters.md:1) — 0 refs
@@ -22,8 +22,8 @@ Contains 266 symbols (253 exported) across 12 files.
 - **`Automated Install`** [section] (docs/adapters.md:66) — 0 refs
 - **`Profile Selection`** [section] (docs/adapters.md:74) — 0 refs
 - **`MCP Config Reference`** [section] (docs/adapters.md:86) — 0 refs
-- **`Hệ thống Khép kín Tuần hoàn cho AI-Driven Development`** [section] (docs/closed-loop-ai-development.md:1) — 0 refs
-- **`Mục lục`** [section] (docs/closed-loop-ai-development.md:9) — 0 refs
+- **`Milens Pricing`** [section] (docs/pricing.md:1) — 0 refs
+- **`Why Pay?`** [section] (docs/pricing.md:7) — 0 refs
 
 ## Entry Points
 - **`applyFilters`** [function] — 1 incoming references
@@ -34,8 +34,6 @@ Contains 266 symbols (253 exported) across 12 files.
 ## Files
 - docs/README.md
 - docs/adapters.md
-- docs/closed-loop-ai-development.md
-- docs/ecc-milens-vibe-code.md
 - docs/index.html
 - docs/pricing.html
 - docs/pricing.md
@@ -44,3 +42,4 @@ Contains 266 symbols (253 exported) across 12 files.
 - docs/security.html
 - docs/skills.html
 - docs/tools.md
+- docs/vi-VN/README.md

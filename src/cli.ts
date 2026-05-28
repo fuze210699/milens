@@ -574,9 +574,35 @@ program
     switch (name) {
       case 'tdd': {
         const coverage = db.getTestCoverage();
-        console.log(`Test Coverage Gaps:`);
-        console.log(`  Exported: ${coverage.exportedProductionSymbols} | Tested: ${coverage.testedSymbols} | Coverage: ${Math.round(coverage.testedSymbols/Math.max(1,coverage.exportedProductionSymbols)*100)}%`);
-        console.log(`\nRun test_coverage_gaps() via MCP for prioritized list.`);
+        const coveragePct = Math.round(coverage.testedSymbols / Math.max(1, coverage.exportedProductionSymbols) * 100);
+        console.log('╔══════════════════════════════════╗');
+        console.log('║     TDD Workflow — Coverage     ║');
+        console.log('╠══════════════════════════════════╣');
+        console.log(`║ Exported: ${String(coverage.exportedProductionSymbols).padEnd(5)} | Tested: ${String(coverage.testedSymbols).padEnd(5)}  ║`);
+        console.log(`║ Coverage:  ${String(coveragePct).padStart(3)}%${''.padEnd(20)}║`);
+        console.log('╚══════════════════════════════════╝');
+
+        const gaps = db.getTestCoverageGaps(15);
+        if (gaps.length > 0) {
+          console.log(`\n🧪 Top ${gaps.length} Untested Symbols (by risk):`);
+          for (let i = 0; i < gaps.length; i++) {
+            const s = gaps[i];
+            const incoming = db.getIncomingLinks(s.id).filter((l: any) => l.type !== 'contains');
+            const risk = s.heat && s.heat > 80 ? '🔴 CRITICAL' : s.heat && s.heat > 50 ? '🟠 HIGH' : s.heat && s.heat > 30 ? '🟡 MEDIUM' : '🟢 LOW';
+            console.log(`  ${i + 1}. ${s.name} [${s.kind}] ${s.filePath}:${s.startLine} — heat:${s.heat ?? 0}, deps:${incoming.length} → ${risk}`);
+          }
+        } else {
+          console.log(`\n✅ All exported symbols have test coverage.`);
+        }
+
+        const testFiles = coverage.testFiles > 0
+          ? `  Test files found: ${coverage.testFiles}`
+          : `  ⚠ No test files detected in index.`;
+        console.log(`\n${testFiles}`);
+        console.log(`\n📋 Next steps:`);
+        console.log(`  1. Run \`milens workflow tdd\` after each change to track gaps`);
+        console.log(`  2. Use \`milens serve\` + MCP \`test_plan({name: "symbol"})\` for per-symbol test strategy`);
+        console.log(`  3. Use MCP \`test_generate({symbol: "symbol"})\` to auto-generate test file`);
         break;
       }
       case 'review': {
@@ -625,17 +651,136 @@ program
       }
       case 'onboard': {
         const summary = db.getCodebaseSummary();
-        console.log(`Milens Onboarding Report:`);
-        console.log(`  Symbols: ${summary.symbols} | Links: ${summary.links} | Files: ${summary.files}`);
-        console.log(`  Coverage: ${summary.coveragePct}%`);
-        console.log(`\nSession startup — call:`);
-        console.log(`  1. session_start() → codebase_summary() → recall()`);
+        const coverage = db.getTestCoverage();
+        console.log('╔══════════════════════════════════╗');
+        console.log('║   Milens Onboarding Report      ║');
+        console.log('╚══════════════════════════════════╝\n');
+
+        console.log(`📊 Codebase: ${summary.symbols} symbols, ${summary.links} links, ${summary.files} files`);
+        console.log(`🧪 Test coverage: ${summary.coveragePct}% (${summary.testedSymbols}/${summary.exportedSymbols} exported)\n`);
+
+        if (summary.domains.length > 0) {
+          console.log('🗂️  Domain clusters:');
+          for (const d of summary.domains.slice(0, 8)) {
+            const pct = summary.symbols > 0 ? Math.round(d.symbols / summary.symbols * 100) : 0;
+            console.log(`  ${d.domain}: ${d.files}f, ${d.symbols}s (${pct}%)`);
+          }
+          console.log();
+        }
+
+        if (summary.topHubs.length > 0) {
+          console.log('⭐ Key entry points:');
+          for (const h of summary.topHubs.slice(0, 8)) {
+            const incoming = db.getIncomingLinks(h.id).filter((l: any) => l.type !== 'contains');
+            console.log(`  ${h.name} [${h.kind}] ${h.filePath}:${h.startLine} — heat:${h.heat ?? 0}, deps:${incoming.length}`);
+          }
+          console.log();
+        }
+
+        const deadCode = db.findDeadCode(undefined, 5);
+        if (deadCode.length > 0) {
+          console.log(`⚠ Dead code candidates: ${deadCode.length}`);
+          for (const s of deadCode.slice(0, 3)) {
+            console.log(`  ${s.name} [${s.kind}] ${s.filePath}:${s.startLine}`);
+          }
+          console.log();
+        }
+
+        console.log('📋 Getting started:');
+        console.log('  1. Run `milens workflow tdd` to see coverage gaps');
+        console.log('  2. Run `milens workflow review` before committing changes');
+        console.log('  3. Run `milens serve` for MCP integration with your AI agent');
         break;
       }
       case 'security-scan': {
-        console.log('Security Scan Workflow:');
-        console.log(`  Run 'milens security scan --scope all' for a full security audit.`);
-        console.log(`  Or call security_scan() via MCP for automated scanning.`);
+        console.log('╔══════════════════════════════════╗');
+        console.log('║   Security Scan Workflow        ║');
+        console.log('╚══════════════════════════════════╝\n');
+
+        try {
+          const { loadRules } = await import('./security/rules.js');
+          const { readFileSync, readdirSync, statSync } = await import('node:fs');
+          const { join: pathJoin, relative: pathRel } = await import('node:path');
+
+          const rules = loadRules().filter(r => r.enabled);
+          console.log(`Loaded ${rules.length} active security rules\n`);
+
+          const findings: Array<{ severity: string; rule: string; file: string; line: number; match: string; category: string; fix?: string }> = [];
+          const MAX_FILE_SIZE = 200 * 1024;
+
+          function scanDir(dir: string): void {
+            try {
+              for (const entry of readdirSync(dir, { withFileTypes: true })) {
+                const fullPath = pathJoin(dir, entry.name);
+                if (entry.isDirectory()) {
+                  if (['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.venv', 'vendor', 'coverage'].includes(entry.name)) continue;
+                  scanDir(fullPath);
+                } else if (entry.isFile()) {
+                  const ext = entry.name.split('.').pop()?.toLowerCase() || '';
+                  if (!['ts', 'js', 'tsx', 'jsx', 'py', 'go', 'rs', 'java', 'rb', 'php', 'sql', 'sh', 'yaml', 'yml', 'json', 'html', 'css', 'vue'].includes(ext)) continue;
+                  try {
+                    const stat = statSync(fullPath);
+                    if (stat.size > MAX_FILE_SIZE) return;
+                    const content = readFileSync(fullPath, 'utf-8');
+                    for (const rule of rules) {
+                      for (const pattern of rule.patterns) {
+                        pattern.lastIndex = 0;
+                        let match;
+                        while ((match = pattern.exec(content)) !== null) {
+                          const lineNum = content.substring(0, match.index).split('\n').length;
+                          findings.push({
+                            severity: rule.severity,
+                            rule: rule.id,
+                            file: pathRel(root, fullPath).replace(/\\/g, '/'),
+                            line: lineNum,
+                            match: match[0].length > 80 ? match[0].slice(0, 77) + '...' : match[0],
+                            category: rule.category,
+                            fix: rule.fix,
+                          });
+                        }
+                      }
+                    }
+                  } catch { /* skip unreadable */ }
+                }
+              }
+            } catch { /* skip unreadable dir */ }
+          }
+
+          scanDir(root);
+
+          const bySeverity: Record<string, number> = {};
+          const byCategory: Record<string, number> = {};
+          for (const f of findings) {
+            bySeverity[f.severity] = (bySeverity[f.severity] || 0) + 1;
+            byCategory[f.category] = (byCategory[f.category] || 0) + 1;
+          }
+
+          console.log(`📊 Summary: ${findings.length} findings`);
+          if (findings.length > 0) {
+            for (const s of ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']) {
+              if (bySeverity[s]) console.log(`  ${s}: ${bySeverity[s]}`);
+            }
+            console.log();
+            // Show top findings by severity
+            const sorted = [...findings].sort((a, b) => {
+              const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+              return (order[a.severity] ?? 4) - (order[b.severity] ?? 4);
+            });
+            for (const f of sorted.slice(0, 20)) {
+              const sevIcon = f.severity === 'CRITICAL' ? '🔴' : f.severity === 'HIGH' ? '🟠' : f.severity === 'MEDIUM' ? '🟡' : '🟢';
+              console.log(`${sevIcon} [${f.severity}] ${f.rule} — ${f.file}:${f.line}`);
+              console.log(`   ${f.match.slice(0, 100)}`);
+              if (f.fix) console.log(`   💡 Fix: ${f.fix}`);
+            }
+            if (findings.length > 20) {
+              console.log(`\n... and ${findings.length - 20} more (limit to 20). Run \`milens security scan\` for full output.`);
+            }
+          } else {
+            console.log('✅ No security issues found.');
+          }
+        } catch (e: any) {
+          console.error(`Security scan failed: ${e.message || e}`);
+        }
         break;
       }
       case 'refactor': {
@@ -652,9 +797,59 @@ program
         break;
       }
       case 'handoff': {
-        console.log('Handoff Workflow:');
-        console.log(`  Use session_start() → handoff() via MCP to transfer context between agents.`);
-        console.log(`  See 'milens hooks list' for session lifecycle automation.`);
+        const store = new AnnotationStore(db.connection);
+        console.log('╔══════════════════════════════════╗');
+        console.log('║    Handoff Workflow             ║');
+        console.log('╚══════════════════════════════════╝\n');
+
+        // Show recent sessions
+        const recentAnns = store.recall({ limit: 30 });
+        const sessions = new Set<string>();
+        for (const a of recentAnns) { if (a.sessionId) sessions.add(a.sessionId); }
+
+        console.log(`📋 Indexed annotations: ${store.getAnnotationCount()}`);
+        console.log(`📂 Recent sessions: ${sessions.size}`);
+
+        try {
+          const allAnnotations = store.recall({ limit: 100 });
+          // Group by key for summary
+          const byKey = new Map<string, { count: number; symbols: string[]; topConfidence: number }>();
+          for (const a of allAnnotations) {
+            const group = byKey.get(a.key) || { count: 0, symbols: [], topConfidence: 0 };
+            group.count++;
+            if (group.symbols.length < 5) group.symbols.push(a.symbol);
+            if (a.confidence > group.topConfidence) group.topConfidence = a.confidence;
+            byKey.set(a.key, group);
+          }
+
+          if (byKey.size > 0) {
+            console.log(`\n🗂️  Knowledge by category:`);
+            for (const [key, group] of byKey) {
+              const pct = Math.round(group.topConfidence * 100);
+              const bar = '█'.repeat(Math.round(group.topConfidence * 10));
+              console.log(`  [${key}] ${group.count} annotations, top confidence: ${bar} ${pct}%`);
+              if (group.symbols.length > 0) {
+                console.log(`    Symbols: ${group.symbols.join(', ')}`);
+              }
+            }
+          }
+
+          // Promotable annotations (high confidence)
+          const promotable = allAnnotations.filter(a => a.confidence >= 0.8);
+          if (promotable.length > 0) {
+            console.log(`\n⭐ ${promotable.length} high-confidence annotations ready for promotion:`);
+            for (const a of promotable.slice(0, 5)) {
+              console.log(`  [${a.key}] ${a.symbol}: ${a.value.slice(0, 80)}`);
+            }
+            console.log(`\n  Run \`milens evolve -p "${root}"\` to promote these to rules/skills.`);
+          }
+        } catch { /* annotations may not be available */ }
+
+        console.log(`\n📋 CLI handoff commands:`);
+        console.log(`  1. milens workflow onboard --path <path>  → fresh agent onboarding`);
+        console.log(`  2. milens workflow review --path <path>    → pre-handoff review`);
+        console.log(`  3. milens evolve -p <path>                 → promote knowledge to rules`);
+        console.log(`\n💡 Tip: Use \`milens serve\` + MCP for full session_start() → annotate() → handoff() flow.`);
         break;
       }
       default:

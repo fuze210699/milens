@@ -4,6 +4,26 @@ applyTo: "adapters/**"
 
 # Adapters
 
+## Working with this area
+When working with code in **adapters/**, follow these mandatory safety rules:
+
+### Before editing any symbol in this area:
+1. Call `mcp_milens_impact({target: "<symbol>", repo: "<workspaceRoot>"})` — check blast radius
+2. If depth-1 dependents > 5 → **STOP and warn** before proceeding
+3. Call `mcp_milens_context({name: "<symbol>", repo: "<workspaceRoot>"})` — see all callers/callees
+
+### Before committing changes in this area:
+1. Call `mcp_milens_detect_changes({repo: "<workspaceRoot>"})` — verify scope
+2. If unexpected files changed → **STOP and report**
+
+### Key tools for this area:
+| Task | Tool |
+|---|---|
+| Find all references | `mcp_milens_context` |
+| Check edit safety | `mcp_milens_edit_check` |
+| Text search across files | `mcp_milens_grep` |
+| See file symbols | `mcp_milens_get_file_symbols` |
+
 ## Overview
 Contains 30 symbols (27 exported) across 3 files.
 

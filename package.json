@@ -1,7 +1,7 @@
 {
   "name": "milens",
-  "version": "0.6.4",
-  "description": "AI-DOS: Code Intelligence Platform — knowledge graphs, security scanning, and closed-loop AI development. 33 MCP tools, 6 sub-agent prompts, 50 security rules.",
+  "version": "0.6.5",
+  "description": "AI-DOS: Code Intelligence Platform — knowledge graphs, security scanning, and closed-loop AI development. 41 MCP tools, 7 sub-agent prompts, 50 security rules, 7 CLI workflows.",
   "type": "module",
   "bin": {
     "milens": "./dist/cli.js"

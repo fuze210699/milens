@@ -126,4 +126,4 @@ For other editors (Codex, Gemini, Zed), see `adapters/` in the repository.
 - [Skills & Prompts](../.agents/skills/) — Pre-built agent workflows
 - [Security Rules](security-presets.md) — 50+ rules with OWASP mapping
 - [Adapters](adapters.md) — Connect your harness
-- [Pricing](pricing.md) — Free / Pro / Enterprise
+- [Pricing](pricing.md) — Free / Pro

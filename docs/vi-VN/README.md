@@ -19,7 +19,7 @@
   <a href="https://github.com/fuze210699/milens">⭐ Star</a> ·
   <a href="https://github.com/sponsors/fuze210699">💖 Sponsor</a> ·
   <a href="https://github.com/fuze210699/milens/discussions">💬 Thảo Luận</a> ·
-  <a href="https://github.com/fuze210699/milens/blob/main/docs/pricing.md">Pro $19/seat</a>
+  <a href="https://github.com/fuze210699/milens/blob/main/docs/pricing.md">Pro $1/seat</a>
 </p>
 
 ---
@@ -155,7 +155,7 @@ Mở AI agent của bạn. Nó tự động tải `AGENTS.md` với ngữ cảnh
 ┌─────────────────────────────────────────────────────────┐
 │  LỚP NỀN TẢNG                                           │
 │  GitHub App · npm · 7 adapter packs · Desktop Dashboard │
-│  Giá: Free / Pro ($19/seat) / Enterprise                │
+│  Giá: Free / Pro ($1/seat)                │
 ├─────────────────────────────────────────────────────────┤
 │  LỚP TỰ ĐỘNG HÓA                                        │
 │  6 Hook (SessionStart, SessionEnd, PreCommit, ...)      │
@@ -610,8 +610,8 @@ $ milens metrics
 | Gói | Giá | Tính Năng Chính |
 |---|---|---|
 | **Free** | $0 | Tất cả 33 công cụ, repo công khai, 50+ quy tắc bảo mật, CLI, hỗ trợ cộng đồng. MIT core. |
-| **Pro** | $19/seat/tháng | Repo riêng tư, GitHub App, quét nâng cao, hỗ trợ ưu tiên, skill tùy chỉnh |
-| **Enterprise** | Liên hệ | SSO/SAML, audit logging, on-prem, quy tắc tùy chỉnh, SLA, tư vấn triển khai |
+| **Pro** | $1/seat/tháng | Repo riêng tư, GitHub App, quét nâng cao, hỗ trợ ưu tiên, skill tùy chỉnh |
+
 
 OSS miễn phí mãi mãi. [Chi tiết giá →](docs/pricing.md)
 

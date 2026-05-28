@@ -1,7 +1,7 @@
 <!-- milens:start -->
-# Milens — Code Intelligence (MCP)
+# Milens — AI-DOS
 
-This project is indexed by milens (1045 symbols, 1580 links, 109 files).
+The Operating System for AI-Driven Development. This project is indexed by milens (1048 symbols, 1771 links, 129 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
@@ -79,6 +79,10 @@ When the user says... → do this FIRST:
 | "compare impact of `X`" | `mcp_milens_compare_impact({name: "X", action: "snapshot"|"compare", repo: "<workspaceRoot>"})` |
 | "check pre-commit" | `mcp_milens_pre_commit_check({repo: "<workspaceRoot>"})` |
 | "save/restore context" | `mcp_milens_hook_preCompact()` / `mcp_milens_hook_postCompact()` |
+| "scan security / audit security" | `mcp_milens_security_scan({repo: "<workspaceRoot>"})` — full audit across all 50+ rules |
+| "end session" / "finish work" | `mcp_milens_session_end({session_id: "..."})` — record stats, trigger onSessionEnd hook |
+| "what did session X do" | `mcp_milens_session_context({session_id: "..."})` — get annotations + tool calls |
+| "file changed to X" | `mcp_milens_hook_onFileChange({files: ["path/to/file"], repo: "<workspaceRoot>"})` |
 
 ## Documentation Workflows
 
@@ -122,16 +126,16 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symb
 | `mcp_milens_get_file_symbols` | All symbols in a file |
 | `mcp_milens_get_type_hierarchy` | Class inheritance tree |
 | `mcp_milens_find_dead_code` | Unused exported symbols |
-| `mcp_milens_status` | Index health check |
+| `mcp_milens_status` | Index stats for a repository: symbols, links, files, coverage %, staleness |
 | `mcp_milens_edit_check` | Pre-edit safety: callers + export status + re-export chains + test coverage |
 | `mcp_milens_trace` | Execution flow: call chains from entrypoints to a symbol |
 | `mcp_milens_routes` | Detect framework routes/endpoints (Express, FastAPI, NestJS, etc.) |
 | `mcp_milens_smart_context` | Intent-aware context: understand/edit/debug/test |
-| `mcp_milens_overview` | Combined context + impact + grep in one call |
+| `mcp_milens_overview` | Combined context + impact + grep in ONE call. Preferred before editing/deleting/renaming a symbol. |
 | `mcp_milens_domains` | Domain clusters: groups of files forming logical modules |
 | `mcp_milens_repos` | List all indexed repositories with summary stats |
 | `mcp_milens_ast_explore` | Explore raw AST structure of a code file |
-| `mcp_milens_test_query` | Run raw SQL query against the milens index database |
+| `mcp_milens_test_query` | Run a tree-sitter query against a code snippet and return matched nodes with capture names |
 | `mcp_milens_review_pr` | PR risk assessment: scores changed symbols by blast radius + test coverage |
 | `mcp_milens_review_symbol` | Single symbol risk: role, heat, dependents, test status |
 | `mcp_milens_test_plan` | Dependency-aware test plan: mocks, strategies, suggested tests |
@@ -146,16 +150,19 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symb
 | `mcp_milens_semantic_search` | Hybrid FTS5 + vector search (requires --embeddings) |
 | `mcp_milens_find_similar` | Find symbols similar by embedding proximity |
 | `mcp_milens_compare_impact` | Compare impact graph before/after edit — detects regressions |
-| `mcp_milens_orchestrate` | Full autonomous review cycle: changes → risk → gaps → dead code → plan |
+| `mcp_milens_orchestrate` | Run full orchestration cycle: detect_changes → review_pr → impact → coverage gaps → dead code → action plan |
 | `mcp_milens_fix_apply` | Apply a security fix to a file (creates backup) |
-| `mcp_milens_test_generate` | Auto-generate test file with framework detection + mock strategy |
+| `mcp_milens_test_generate` | Auto-generate test file: detects framework (vitest/jest/mocha/pytest) and writes complete test with mock strategy |
 | `mcp_milens_pre_commit_check` | Pre-commit risk scan: review_pr + dead code + coverage gaps |
 | `mcp_milens_hook_preCompact` | Save metrics snapshot before context compaction |
 | `mcp_milens_hook_postCompact` | Restore context by recalling annotations after compaction |
+| `mcp_milens_session_end` | End a session and record its stats. Use at the end of every session. |
+| `mcp_milens_hook_onFileChange` | Trigger the onFileChange hook. Call when files are modified to get impact summary. |
+| `mcp_milens_security_scan` | Scan codebase for security vulnerabilities using 50+ built-in rules. Replaces multiple manual grep() calls. |
 
 ### Keeping the Index Fresh
 
-After significant code changes: `npx milens analyze -p . --force`
+After significant code changes: `npx milens analyze -p . --force` (replace `.` with your project root if running from a different directory)
 
 ### Skills
 
@@ -174,5 +181,13 @@ After significant code changes: `npx milens analyze -p . --force`
 | Work in the Security area | `.windsurfrules` |
 | Work in the Server area | `.windsurfrules` |
 | Work in the Store area | `.windsurfrules` |
+| Execute milens-plan workflow | `.windsurfrules` |
+| Execute milens-code-review workflow | `.windsurfrules` |
+| Execute milens-tdd workflow | `.windsurfrules` |
+| Execute milens-security-review workflow | `.windsurfrules` |
+| Execute milens-refactor-clean workflow | `.windsurfrules` |
+| Execute milens-eval workflow | `.windsurfrules` |
+| Execute milens-architect workflow | `.windsurfrules` |
+| Execute milens-debugger workflow | `.windsurfrules` |
 
 <!-- milens:end -->

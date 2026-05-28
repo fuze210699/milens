@@ -79,7 +79,7 @@ Different harnesses benefit from different tool profiles:
 |---|---|---|
 | `minimal` | 10 | Gemini, Zed (limited context windows) |
 | `standard` | 25 | Claude Code, OpenCode, Codex, Cursor, Copilot (daily coding) |
-| `full` | 33 | Security audits, architecture reviews (all tools) |
+| `full` | 41 | Security audits, architecture reviews (all tools) |
 
 Set via environment variable: `MILENS_PROFILE=standard`
 

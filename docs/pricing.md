@@ -1,6 +1,6 @@
 # Milens Pricing
 
-> **The value proposition:** Milens saves ~70% AI token costs per session. The GitHub App automates this across your team. Pro pays for itself after 2-3 sessions per developer per month.
+> **The value proposition:** Milens saves ~70% AI token costs per session. The GitHub App automates this across your team. Pro pays for itself after 1-2 sessions per developer per month.
 
 ---
 
@@ -8,9 +8,8 @@
 
 | You're a... | Problem | Milens solves it | Cost |
 |---|---|---|---|
-| **Solo dev** | Agent burns tokens reading 15 files blind, edits break things, no memory across sessions | Knowledge graph + blast radius + annotations. All 33 tools, forever free. | $0 |
-| **Team of 5** | Private repos, each dev manually runs milens, PRs get merged without review, security gaps accumulate | GitHub App auto-runs on every PR. review_pr + security_scan posted as comments. Shared knowledge base. | $95/mo |
-| **Company (50+)** | Compliance requires audit logs, SSO mandatory, air-gapped environment, custom security rules | Enterprise governance: SSO, audit trail, on-prem deployment, custom rule engine. | Contact |
+| **Solo dev** | Agent burns tokens reading 15 files blind, edits break things, no memory across sessions | Knowledge graph + blast radius + annotations. All 41 tools, forever free. | $0 |
+| **Team of 5+** | Private repos, each dev manually runs milens, PRs get merged without review, security gaps accumulate | GitHub App auto-runs on every PR. review_pr + security_scan posted as comments. Shared knowledge base. | $5/mo |
 
 ---
 
@@ -23,7 +22,7 @@
 | Feature | Included |
 |---|---|
 | All 41 MCP tools | ✓ Forever |
-| 6 sub-agent prompts | ✓ |
+| 7 sub-agent prompts | ✓ |
 | 50+ security rules | ✓ |
 | CLI tools (init, workflow, hooks, security, watch) | ✓ |
 | AGENTS.md auto-generator | ✓ |
@@ -33,7 +32,7 @@
 
 [Get Started](https://github.com/fuze210699/milens)
 
-### Pro — $19/seat/month
+### Pro — $1/seat/month
 
 **For professional teams.** The GitHub App automation layer.
 
@@ -45,7 +44,7 @@
 | **Push auto-index** | ✓ On push to main |
 | `/milens analyze` | 50/seat/month (pooled) |
 | Commits per run | 1,000 |
-| Advanced security scanning | ✓ AgentShield-backed |
+| Advanced security scanning | ✓ milens security scan |
 | Custom skill packs | ✓ |
 | Billing portal | ✓ Self-serve |
 | Priority support | ✓ Email + Slack |
@@ -54,37 +53,17 @@
 
 [Subscribe](https://github.com/sponsors/fuze210699)
 
-### Enterprise — Contact Sales
-
-**For organizations.** Governance, compliance, rollout.
-
-| Feature | Included |
-|---|---|
-| Everything in Pro | ✓ |
-| `/milens analyze` | Unlimited |
-| Commits per run | 5,000 |
-| SSO/SAML | ✓ |
-| Audit logging | ✓ |
-| Custom security rules | ✓ |
-| Policy packs | ✓ |
-| On-premises deployment | ✓ |
-| Dedicated support + SLAs | ✓ |
-| Rollout consulting | ✓ |
-| Procurement support | ✓ |
-
-[Contact Enterprise](mailto:milens-enterprise@example.com)
-
 ---
 
 ## FAQ
 
 ### Why would I pay when the core is free?
 
-The core MCP server (33 tools) is free forever. You pay for **automation** — the GitHub App that runs milens on every PR without manual intervention. Pro saves teams hours of manual review and thousands of AI tokens per month.
+The core MCP server (41 tools) is free forever. You pay for **automation** — the GitHub App that runs milens on every PR without manual intervention. Pro saves teams hours of manual review and thousands of AI tokens per month.
 
 ### Does Pro really pay for itself?
 
-Yes. A single `review_pr()` call in the GitHub App replaces ~15K tokens of manual AI review work. At Sonnet pricing ($3/MTok), that's ~$0.045 per PR. With 100 PRs/month, the manual approach costs ~$135/month in tokens alone. Pro costs $95/month for 5 seats — you save $40/month **just on tokens**, plus the time savings from automated reviews.
+Yes. A single `review_pr()` call in the GitHub App replaces ~15K tokens of manual AI review work. With 100 PRs/month, the manual approach costs significant time and tokens. Pro costs just $5/month for 5 seats — the savings are immediate.
 
 ### What's the difference between Free and Pro GitHub App?
 

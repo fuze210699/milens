@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pricing — Milens | GitHub App Plans & Enterprise Rollout</title>
-  <meta name="description" content="Milens pricing — start free on public repos, move to Pro for private repositories and GitHub automation, or Enterprise for rollout and governance.">
-  <meta property="og:title" content="Pricing — Milens | GitHub App Plans & Enterprise Rollout">
-  <meta property="og:description" content="Milens stays free. Pro and Enterprise add private repos, GitHub automation, and team rollout.">
+  <title>Pricing — Milens | GitHub App Plans</title>
+  <meta name="description" content="Milens pricing — start free on public repos, move to Pro for private repositories and GitHub automation.">
+  <meta property="og:title" content="Pricing — Milens | GitHub App Plans">
+  <meta property="og:description" content="Milens stays free. Pro adds private repos, GitHub automation, and team rollout.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://milens.ai/pricing.html">
   <meta property="og:image" content="https://milens.ai/og-pricing.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Pricing — Milens | GitHub App Plans & Enterprise Rollout">
-  <meta name="twitter:description" content="Milens stays free. Pro and Enterprise add private repos, GitHub automation, and team rollout.">
+  <meta name="twitter:title" content="Pricing — Milens | GitHub App Plans">
+  <meta name="twitter:description" content="Milens stays free. Pro adds private repos, GitHub automation, and team rollout.">
   <meta name="twitter:image" content="https://milens.ai/og-pricing.png">
   <script type="application/ld+json">
   {
@@ -34,7 +34,7 @@
       {
         "@type": "Offer",
         "name": "Pro",
-        "price": "19",
+        "price": "1",
         "priceCurrency": "USD",
         "description": "Private repos, GitHub App, 50 analyses/seat/month, priority support."
       }
@@ -118,7 +118,7 @@
     .billing-option:hover:not(.active) { color: var(--text); }
     .billing-save { background: rgba(126,231,135,0.15); color: var(--green); font-size: 0.78em; padding: 2px 8px; border-radius: 6px; font-weight: 700; }
 
-    .pricing-grid-v2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; align-items: start; margin-bottom: 80px; }
+    .pricing-grid-v2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; align-items: start; margin-bottom: 80px; }
     .plan { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 36px 28px; display: flex; flex-direction: column; transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; position: relative; }
     .plan:hover { border-color: var(--muted); transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,0.35); }
     .plan.featured { border-color: var(--accent); box-shadow: 0 8px 32px rgba(88,166,255,0.08); }
@@ -143,7 +143,7 @@
     .section-label { display: block; text-transform: uppercase; letter-spacing: 0.08em; font-size: clamp(0.72rem, 0.9vw, 0.78em); font-weight: 700; color: var(--muted); margin-bottom: 8px; }
     .section-title { font-size: clamp(1.5rem, 3.5vw, 2em); color: var(--text); margin-bottom: 12px; }
     .section-subtitle { color: var(--muted); font-size: clamp(0.95rem, 1.5vw, 1.05em); max-width: 640px; margin-bottom: 40px; line-height: 1.6; }
-    .decision-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .decision-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
     .decision-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; }
     .decision-card:hover { border-color: var(--muted); transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
     .decision-card.featured { border-color: var(--accent); }
@@ -223,7 +223,6 @@
       <a href="scenarios.html">Scenarios</a>
       <a href="security.html">Security</a>
       <a href="pricing.html" class="active">Pricing</a>
-      <a href="enterprise.html">Enterprise</a>
       <a href="https://github.com/fuze210699/milens">GitHub</a>
     </div>
   </div>
@@ -232,7 +231,7 @@
 <section class="pricing-hero" id="main-content">
   <div class="container">
     <h1><span>GitHub App</span> Pricing</h1>
-    <p class="subtitle">Milens stays free. Pro and Enterprise add private repos, GitHub automation, and team rollout.</p>
+    <p class="subtitle">Milens stays free. Pro adds private repos, GitHub automation, and team rollout.</p>
     <div class="billing-toggle-wrap">
       <div class="billing-toggle" id="billingToggle">
         <button class="billing-option active" data-period="monthly">Monthly</button>
@@ -270,7 +269,7 @@
       <div class="plan-name">Pro</div>
       <p class="plan-desc">Best for private repos and small-team rollout.</p>
       <div class="plan-price">
-        <span class="price-monthly">$19 <span>/seat/month</span></span>
+        <span class="price-monthly">$1 <span>/seat/month</span></span>
         <span class="price-yearly" style="display:none">$16 <span>/seat/month</span></span>
       </div>
       <ul class="plan-features">
@@ -285,26 +284,6 @@
       </ul>
       <a href="#contact" class="plan-btn primary">Start Pro</a>
     </div>
-
-    <div class="plan">
-      <div class="plan-name">Enterprise</div>
-      <p class="plan-desc">Best for procurement, rollout, and governance.</p>
-      <div class="plan-price" style="font-size:1.8em;">
-        <span class="price-monthly">Contact <span>sales</span></span>
-        <span class="price-yearly" style="display:none">Contact <span>sales</span></span>
-      </div>
-      <ul class="plan-features">
-        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> Everything in Pro</li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> SSO/SAML authentication</li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> Audit logging</li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> On-prem deployment</li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> Custom rules engine</li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> Unlimited analyses</li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> Dedicated support & SLAs</li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> Rollout consulting</li>
-      </ul>
-      <a href="#contact" class="plan-btn outline">Enterprise Rollout</a>
-    </div>
   </div>
 </section>
 
@@ -312,7 +291,7 @@
   <div class="container">
     <span class="section-label">Decision Guide</span>
     <h2 class="section-title">Choose the right path.</h2>
-    <p class="section-subtitle">Three clear paths — pick the one that matches where your team is today.</p>
+    <p class="section-subtitle">Two clear paths — pick the one that matches where your team is today.</p>
     <div class="decision-grid stagger-children">
       <div class="decision-card">
         <div class="decision-label">Stay on Free if…</div>
@@ -321,10 +300,6 @@
       <div class="decision-card featured">
         <div class="decision-label">Buy Pro if…</div>
         <p>You work in private repositories and need the GitHub App to auto-review PRs and run security scans on every push. You want 50 analyses per seat per month, priority support, custom skill packs, and a billing portal for team management.</p>
-      </div>
-      <div class="decision-card">
-        <div class="decision-label">Talk to Enterprise if…</div>
-        <p>You need SSO/SAML, audit logging, on-prem deployment, custom rules, SLAs, and rollout consulting. Procurement and governance are part of the job, and you need a dedicated partner to roll Milens across the organization.</p>
       </div>
     </div>
   </div>
@@ -339,17 +314,17 @@
       <div class="delta-card">
         <span class="delta-label">Repository scope</span>
         <h3>Public → Private</h3>
-        <p>Free covers public repos only. Pro and Enterprise unlock private repositories — the full codebase, not just what's open. Your proprietary code gets the same intelligence layer as OSS.</p>
+        <p>Free covers public repos only. Pro unlocks private repositories — the full codebase, not just what's open. Your proprietary code gets the same intelligence layer as OSS.</p>
       </div>
       <div class="delta-card">
         <span class="delta-label">Automation layer</span>
         <h3>Manual → Auto-triggers</h3>
-        <p>Free gives you manual CLI runs. Pro adds the GitHub App with PR auto-review, scheduled analysis, and CI/CD hooks. Enterprise adds custom rule engines that trigger on your policies.</p>
+        <p>Free gives you manual CLI runs. Pro adds the GitHub App with PR auto-review, scheduled analysis, and CI/CD hooks.</p>
       </div>
       <div class="delta-card">
         <span class="delta-label">Operational support</span>
         <h3>Community → Priority</h3>
-        <p>Free gets community forums and docs. Pro adds Slack/email priority support. Enterprise gets a dedicated support engineer, SLAs with uptime guarantees, and rollout consulting.</p>
+        <p>Free gets community forums and docs. Pro adds Slack/email priority support.</p>
       </div>
     </div>
   </div>
@@ -359,7 +334,7 @@
   <div class="container">
     <span class="section-label">Feature Comparison</span>
     <h2 class="section-title">Full feature breakdown.</h2>
-    <p class="section-subtitle">Every feature across all three plans. See exactly what each tier unlocks.</p>
+    <p class="section-subtitle">Every feature across both plans. See exactly what each tier unlocks.</p>
     <div class="table-wrapper">
       <table class="compare-table">
         <thead>
@@ -367,7 +342,6 @@
             <th>Feature</th>
             <th>Free</th>
             <th class="featured-col">Pro</th>
-            <th>Enterprise</th>
           </tr>
         </thead>
         <tbody>
@@ -375,17 +349,14 @@
             <td>Public repo analysis</td>
             <td class="check">&#x2713;</td>
             <td class="check">&#x2713;</td>
-            <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>Private repo analysis</td>
             <td class="dash">—</td>
             <td class="check">&#x2713;</td>
-            <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>All 41 MCP tools</td>
-            <td class="check">&#x2713;</td>
             <td class="check">&#x2713;</td>
             <td class="check">&#x2713;</td>
           </tr>
@@ -393,11 +364,9 @@
             <td>7 sub-agent prompts</td>
             <td class="check">&#x2713;</td>
             <td class="check">&#x2713;</td>
-            <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>50+ security rules</td>
-            <td class="check">&#x2713;</td>
             <td class="check">&#x2713;</td>
             <td class="check">&#x2713;</td>
           </tr>
@@ -405,79 +374,66 @@
             <td>CLI tools</td>
             <td class="check">&#x2713;</td>
             <td class="check">&#x2713;</td>
-            <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>GitHub App</td>
             <td>Public only</td>
-            <td class="check">&#x2713;</td>
             <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>PR auto-review</td>
             <td class="dash">—</td>
             <td class="check">&#x2713;</td>
-            <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>Security scanning</td>
             <td>Community rules</td>
-            <td>AgentShield-backed</td>
-            <td>Custom rules</td>
+            <td>Built-in milens rules</td>
           </tr>
           <tr>
             <td>Analyses per month</td>
             <td>10</td>
             <td>50/seat</td>
-            <td>Unlimited</td>
           </tr>
           <tr>
             <td>Custom skill packs</td>
             <td class="dash">—</td>
-            <td class="check">&#x2713;</td>
             <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>Priority support</td>
             <td class="dash">—</td>
             <td class="check">&#x2713;</td>
-            <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>SSO/SAML</td>
             <td class="dash">—</td>
             <td class="dash">—</td>
-            <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>Audit logging</td>
             <td class="dash">—</td>
             <td class="dash">—</td>
-            <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>On-prem deployment</td>
             <td class="dash">—</td>
             <td class="dash">—</td>
-            <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>Custom rules</td>
             <td class="dash">—</td>
             <td class="dash">—</td>
-            <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>Rollout consulting</td>
             <td class="dash">—</td>
             <td class="dash">—</td>
-            <td class="check">&#x2713;</td>
           </tr>
           <tr>
             <td>SLAs</td>
             <td class="dash">—</td>
             <td class="dash">—</td>
-            <td class="check">&#x2713;</td>
           </tr>
         </tbody>
       </table>
@@ -489,7 +445,7 @@
   <div class="container">
     <span class="oss-badge">&#x2713; MIT License</span>
     <h2>Open Source is Always Free.</h2>
-    <p>The core MCP server with all 33 tools, 7 sub-agent prompts, and 50+ security rules is MIT-licensed and stays free forever. No vendor lock-in. No surprise pricing. The open-source install never requires a Pro or Enterprise subscription.</p>
+    <p>The core MCP server with all 41 tools, 7 sub-agent prompts, and 50+ security rules is MIT-licensed and stays free forever. No vendor lock-in. No surprise pricing. The open-source install never requires a Pro subscription.</p>
     <a href="https://github.com/fuze210699/milens" class="plan-btn outline" style="display:inline-flex;width:auto;gap:8px;align-items:center;">
       <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 01-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 010 8c0-4.42 3.58-8 8-8z"/></svg>
       View on GitHub
@@ -507,7 +463,7 @@
     </div>
     <div class="faq-item">
       <button class="faq-q">What does Pro unlock? <span class="arrow">&#x25BE;</span></button>
-      <div class="faq-a"><p>Pro unlocks private repository support, the full GitHub App with PR auto-review and automated analysis, AgentShield-backed security scanning, 50 analyses per seat per month, custom skill packs, priority support via Slack and email, and a team billing portal. Priced at $19 per active seat per month.</p></div>
+      <div class="faq-a"><p>Pro unlocks private repository support, the full GitHub App with PR auto-review and automated analysis, advanced security scanning, 50 analyses per seat per month, custom skill packs, priority support via Slack and email, and a team billing portal. Priced at $1 per active seat per month.</p></div>
     </div>
     <div class="faq-item">
       <button class="faq-q">How do seats work? <span class="arrow">&#x25BE;</span></button>
@@ -519,11 +475,7 @@
     </div>
     <div class="faq-item">
       <button class="faq-q">Does the open-source install stay free? <span class="arrow">&#x25BE;</span></button>
-      <div class="faq-a"><p><strong>Yes.</strong> The core <code>npx milens</code> install is MIT-licensed and will always be free. Pro and Enterprise are subscriptions for the hosted GitHub App and team features. You can use the OSS install on private repos with your own infrastructure at no cost.</p></div>
-    </div>
-    <div class="faq-item">
-      <button class="faq-q">How is Enterprise billed? <span class="arrow">&#x25BE;</span></button>
-      <div class="faq-a"><p>Enterprise is billed annually with custom pricing based on organization size, deployment model, and support requirements. Contact our sales team to scope your rollout. Enterprise includes SSO/SAML, audit logging, on-prem deployment, custom rules, SLAs, and dedicated rollout consulting.</p></div>
+      <div class="faq-a"><p><strong>Yes.</strong> The core <code>npx milens</code> install is MIT-licensed and will always be free. Pro is a subscription for the hosted GitHub App and team features. You can use the OSS install on private repos with your own infrastructure at no cost.</p></div>
     </div>
   </div>
 </section>

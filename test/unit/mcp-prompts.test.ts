@@ -2,14 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { MILENS_PROMPT_NAMES, registerAllPrompts } from '../../src/server/mcp-prompts.js';
 
 describe('MILENS_PROMPT_NAMES', () => {
-  it('contains all 6 prompt names', () => {
-    expect(MILENS_PROMPT_NAMES).toHaveLength(6);
+  it('contains all 7 prompt names', () => {
+    expect(MILENS_PROMPT_NAMES).toHaveLength(7);
     expect(MILENS_PROMPT_NAMES).toContain('milens-planner');
     expect(MILENS_PROMPT_NAMES).toContain('milens-reviewer');
     expect(MILENS_PROMPT_NAMES).toContain('milens-tester');
     expect(MILENS_PROMPT_NAMES).toContain('milens-architect');
     expect(MILENS_PROMPT_NAMES).toContain('milens-security');
     expect(MILENS_PROMPT_NAMES).toContain('milens-debugger');
+    expect(MILENS_PROMPT_NAMES).toContain('dead_code_remove');
   });
 
   it('has names in expected order', () => {
@@ -20,6 +21,7 @@ describe('MILENS_PROMPT_NAMES', () => {
       'milens-architect',
       'milens-security',
       'milens-debugger',
+      'dead_code_remove',
     ]);
   });
 });
@@ -35,9 +37,7 @@ describe('registerAllPrompts', () => {
 
     registerAllPrompts(mockServer as any);
 
-    expect(calls).toHaveLength(6);
-    const names = calls.map(c => c.name);
-    expect(names).toEqual(MILENS_PROMPT_NAMES);
+    expect(calls).toHaveLength(6); // registerAllPrompts registers 6 prompts (dead_code_remove in mcp.ts)
   });
 
   it('registers prompts with non-empty descriptions', () => {

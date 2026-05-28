@@ -508,13 +508,23 @@ program
         `# Milens Evolved ${key.toUpperCase()} Rules`,
         `# Auto-generated from ${anns.length} high-confidence annotations`,
         '',
+        '## Discovered Knowledge',
+        '',
       ];
       for (const a of anns) {
-        lines.push(`- **${a.symbol}**: ${a.value}`);
+        lines.push(`- **\`${a.symbol}\`**: ${a.value}`);
       }
+      lines.push('');
+      lines.push('## Using This Knowledge');
+      lines.push('Before editing any symbol mentioned above:');
+      lines.push('1. `mcp_milens_impact({target: "<symbol>", repo: "<workspaceRoot>"})` — check blast radius');
+      lines.push('2. `mcp_milens_context({name: "<symbol>", repo: "<workspaceRoot>"})` — see callers/callees');
+      lines.push('3. If depth-1 dependents > 5 → **STOP and warn** before proceeding');
+      lines.push('');
+      lines.push('> See `milens/SKILL.md` for full mandatory workflows and tool reference.');
 
-      // Write to .agents/skills/{key}.md
-      const skillDir = pathJoin(resolve(opts.path), '.agents', 'skills', `milens-${key}`);
+      // Write to .agents/skills/milens-evolved-{key}.md (avoid collision with domain skills)
+      const skillDir = pathJoin(resolve(opts.path), '.agents', 'skills', `milens-evolved-${key}`);
       if (!existsSync(skillDir)) mkdirSync(skillDir, { recursive: true });
       writeFileSync(pathJoin(skillDir, 'SKILL.md'), lines.join('\n'));
 

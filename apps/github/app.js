@@ -3,7 +3,7 @@
  *
  * Free:   /milens analyze → AGENTS.md + skills (public repos, 10/mo)
  * Pro:    Auto review_pr + security_scan on every PR (private repos, 50/seat/mo)
- * Enterprise: Custom rules, SSO, on-prem (contact)
+ * Pro: $1/seat PR auto-review (private repos)
  */
 
 const { execSync } = require('node:child_process');
@@ -32,7 +32,7 @@ function checkRateLimit(installationId, tier, repoId) {
   if (entry.count > monthlyLimit) {
     return {
       allowed: false,
-      message: `Monthly limit reached (${entry.count}/${monthlyLimit}). Upgrade to ${tier === 'free' ? 'Pro ($19/seat)' : 'Enterprise'} for more.`,
+      message: `Monthly limit reached (${entry.count}/${monthlyLimit}). Upgrade to ${tier === 'free' ? 'Pro ($1/seat)' : 'Pro'} for more.`,
     };
   }
 
@@ -143,7 +143,7 @@ module.exports = (app) => {
       await context.octokit.issues.createComment({
         owner: repo.owner.login, repo: repo.name,
         issue_number: issue.number,
-        body: `🔒 Private repos require [Milens Pro ($19/seat)](https://github.com/fuze210699/milens).\n\nInstall on a public repo to try for free.`,
+        body: `🔒 Private repos require [Milens Pro ($1/seat)](https://github.com/fuze210699/milens).\n\nInstall on a public repo to try for free.`,
       });
       return;
     }
@@ -195,7 +195,7 @@ module.exports = (app) => {
     );
 
     if (tier === 'free') {
-      lines.push('---', '💡 **Pro tip:** Upgrade to [Milens Pro ($19/seat)](https://github.com/fuze210699/milens) for private repos and auto-review on every PR.');
+      lines.push('---', '💡 **Pro tip:** Upgrade to [Milens Pro ($1/seat)](https://github.com/fuze210699/milens) for private repos and auto-review on every PR.');
     }
 
     await context.octokit.issues.createComment({

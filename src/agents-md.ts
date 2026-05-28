@@ -109,13 +109,14 @@ export function generateAgentsMd(db: Database, rootPath: string): string {
   lines.push('- `/milens:tdd <symbol>` — write tests with coverage analysis');
   lines.push('- `/milens:security` — security audit');
   lines.push('- `/milens:refactor <symbol>` — safe refactor with blast radius check');
+  lines.push('- `/milens:architect` — analyze architecture, domains, coupling');
+  lines.push('- `/milens:debugger <symbol>` — root cause analysis with execution tracing');
   lines.push('');
-
   lines.push('## Session Startup');
   lines.push('When starting work, call:');
-  lines.push('1. session_start({agent: "your-agent-name"})');
-  lines.push('2. recall({}) — retrieve past annotations');
-  lines.push('3. codebase_summary({}) — refresh context');
+  lines.push('1. mcp_milens_session_start({agent: "your-agent-name", repo: "<workspaceRoot>"})');
+  lines.push('2. mcp_milens_recall({repo: "<workspaceRoot>"}) — retrieve past annotations');
+  lines.push('3. mcp_milens_codebase_summary({repo: "<workspaceRoot>"}) — refresh context');
   lines.push('');
 
   return lines.join('\n');

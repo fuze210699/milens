@@ -173,6 +173,27 @@ function renderSkillContent(
   lines.push(`# ${capitalize(areaName)}`);
   lines.push('');
 
+  lines.push('## Working with this area');
+  lines.push(`When working with code in **${areaName}/**, follow these mandatory safety rules:`);
+  lines.push('');
+  lines.push('### Before editing any symbol in this area:');
+  lines.push('1. Call `mcp_milens_impact({target: "<symbol>", repo: "<workspaceRoot>"})` — check blast radius');
+  lines.push('2. If depth-1 dependents > 5 → **STOP and warn** before proceeding');
+  lines.push('3. Call `mcp_milens_context({name: "<symbol>", repo: "<workspaceRoot>"})` — see all callers/callees');
+  lines.push('');
+  lines.push('### Before committing changes in this area:');
+  lines.push('1. Call `mcp_milens_detect_changes({repo: "<workspaceRoot>"})` — verify scope');
+  lines.push('2. If unexpected files changed → **STOP and report**');
+  lines.push('');
+  lines.push('### Key tools for this area:');
+  lines.push('| Task | Tool |');
+  lines.push('|---|---|');
+  lines.push('| Find all references | `mcp_milens_context` |');
+  lines.push('| Check edit safety | `mcp_milens_edit_check` |');
+  lines.push('| Text search across files | `mcp_milens_grep` |');
+  lines.push('| See file symbols | `mcp_milens_get_file_symbols` |');
+  lines.push('');
+
   lines.push('## Overview');
   lines.push(`Contains ${area.symbols.length} symbols (${area.exported.length} exported) across ${area.files.size} files.`);
   lines.push('');
@@ -269,14 +290,22 @@ function editorSkillPath(editor: EditorName, name: string): string {
 function renderMilensInstructions(_rootDir: string, stats: { symbols: number; links: number; files: number }, areaNames: string[], editor: EditorName): string {
   const t = (name: string) => `mcp_milens_${name}`;
 
-  const skillsRows = areaNames.map(a =>
+  const workflowSkillNames = ['milens-plan', 'milens-code-review', 'milens-tdd', 'milens-security-review', 'milens-refactor-clean', 'milens-eval', 'milens-architect', 'milens-debugger'];
+
+  const domainRows = areaNames.map(a =>
     `| Work in the ${capitalize(a)} area | \`${editorSkillPath(editor, a)}\` |`
   ).join('\n');
 
-  return `<!-- milens:start -->
-# Milens — Code Intelligence (MCP)
+  const workflowRows = workflowSkillNames.map(a =>
+    `| Execute ${a} workflow | \`${editorSkillPath(editor, a)}\` |`
+  ).join('\n');
 
-This project is indexed by milens (${stats.symbols} symbols, ${stats.links} links, ${stats.files} files).
+  const skillsRows = domainRows + '\n' + workflowRows;
+
+  return `<!-- milens:start -->
+# Milens — AI-DOS
+
+The Operating System for AI-Driven Development. This project is indexed by milens (${stats.symbols} symbols, ${stats.links} links, ${stats.files} files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include the \`repo\` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
@@ -354,6 +383,10 @@ When the user says... → do this FIRST:
 | "compare impact of \`X\`" | \`${t('compare_impact')}({name: "X", action: "snapshot"|"compare", repo: "<workspaceRoot>"})\` |
 | "check pre-commit" | \`${t('pre_commit_check')}({repo: "<workspaceRoot>"})\` |
 | "save/restore context" | \`${t('hook_preCompact')}()\` / \`${t('hook_postCompact')}()\` |
+| "scan security / audit security" | \`${t('security_scan')}({repo: "<workspaceRoot>"})\` — full audit across all 50+ rules |
+| "end session" / "finish work" | \`${t('session_end')}({session_id: "..."})\` — record stats, trigger onSessionEnd hook |
+| "what did session X do" | \`${t('session_context')}({session_id: "..."})\` — get annotations + tool calls |
+| "file changed to X" | \`${t('hook_onFileChange')}({files: ["path/to/file"], repo: "<workspaceRoot>"})\` |
 
 ## Documentation Workflows
 
@@ -397,16 +430,16 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` sy
 | \`${t('get_file_symbols')}\` | All symbols in a file |
 | \`${t('get_type_hierarchy')}\` | Class inheritance tree |
 | \`${t('find_dead_code')}\` | Unused exported symbols |
-| \`${t('status')}\` | Index health check |
+| \`${t('status')}\` | Index stats for a repository: symbols, links, files, coverage %, staleness |
 | \`${t('edit_check')}\` | Pre-edit safety: callers + export status + re-export chains + test coverage |
 | \`${t('trace')}\` | Execution flow: call chains from entrypoints to a symbol |
 | \`${t('routes')}\` | Detect framework routes/endpoints (Express, FastAPI, NestJS, etc.) |
 | \`${t('smart_context')}\` | Intent-aware context: understand/edit/debug/test |
-| \`${t('overview')}\` | Combined context + impact + grep in one call |
+| \`${t('overview')}\` | Combined context + impact + grep in ONE call. Preferred before editing/deleting/renaming a symbol. |
 | \`${t('domains')}\` | Domain clusters: groups of files forming logical modules |
 | \`${t('repos')}\` | List all indexed repositories with summary stats |
 | \`${t('ast_explore')}\` | Explore raw AST structure of a code file |
-| \`${t('test_query')}\` | Run raw SQL query against the milens index database |
+| \`${t('test_query')}\` | Run a tree-sitter query against a code snippet and return matched nodes with capture names |
 | \`${t('review_pr')}\` | PR risk assessment: scores changed symbols by blast radius + test coverage |
 | \`${t('review_symbol')}\` | Single symbol risk: role, heat, dependents, test status |
 | \`${t('test_plan')}\` | Dependency-aware test plan: mocks, strategies, suggested tests |
@@ -421,16 +454,19 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` sy
 | \`${t('semantic_search')}\` | Hybrid FTS5 + vector search (requires --embeddings) |
 | \`${t('find_similar')}\` | Find symbols similar by embedding proximity |
 | \`${t('compare_impact')}\` | Compare impact graph before/after edit — detects regressions |
-| \`${t('orchestrate')}\` | Full autonomous review cycle: changes → risk → gaps → dead code → plan |
+| \`${t('orchestrate')}\` | Run full orchestration cycle: detect_changes → review_pr → impact → coverage gaps → dead code → action plan |
 | \`${t('fix_apply')}\` | Apply a security fix to a file (creates backup) |
-| \`${t('test_generate')}\` | Auto-generate test file with framework detection + mock strategy |
+| \`${t('test_generate')}\` | Auto-generate test file: detects framework (vitest/jest/mocha/pytest) and writes complete test with mock strategy |
 | \`${t('pre_commit_check')}\` | Pre-commit risk scan: review_pr + dead code + coverage gaps |
 | \`${t('hook_preCompact')}\` | Save metrics snapshot before context compaction |
 | \`${t('hook_postCompact')}\` | Restore context by recalling annotations after compaction |
+| \`${t('session_end')}\` | End a session and record its stats. Use at the end of every session. |
+| \`${t('hook_onFileChange')}\` | Trigger the onFileChange hook. Call when files are modified to get impact summary. |
+| \`${t('security_scan')}\` | Scan codebase for security vulnerabilities using 50+ built-in rules. Replaces multiple manual grep() calls. |
 
 ### Keeping the Index Fresh
 
-After significant code changes: \`npx milens analyze -p . --force\`
+After significant code changes: \`npx milens analyze -p . --force\` (replace \`.\` with your project root if running from a different directory)
 
 ### Skills
 

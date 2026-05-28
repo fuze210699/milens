@@ -317,7 +317,7 @@
       <a href="scenarios.html">Scenarios</a>
       <a href="security.html">Security</a>
       <a href="pricing.html">Pricing</a>
-      <a href="enterprise.html">Enterprise</a>
+      <a href="pricing.html">Pricing</a>
       <a href="https://github.com/fuze210699/milens">GitHub</a>
     </div>
   </div>
@@ -339,40 +339,22 @@
 <section class="timeline" id="timeline">
   <div class="container">
 
-    <!-- v0.8.0 -->
+    <!-- v0.6.5 -->
     <div class="timeline-entry">
       <div class="timeline-badge">
-        <span class="version">v0.8.0</span>
+        <span class="version">v0.6.5</span>
         <span class="date">May 2026</span>
       </div>
       <div class="timeline-card">
-        <h3><span class="version-dot"></span> Regression Detection &amp; Dashboard Metrics</h3>
+        <h3><span class="version-dot"></span> CLI Workflows, Orchestration &amp; Expanded Test Coverage</h3>
         <ul>
-          <li class="new">Added <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">compare_impact</code> tool for regression detection — snapshot and compare blast radius graphs before and after edits to catch unexpected side effects</li>
-          <li class="new">New hook: <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">onFileChange</code> for live impact updates — triggered automatically when files are saved, keeping the knowledge graph fresh without manual re-analysis</li>
-          <li>Security scan expanded to 50+ rules with new coverage for supply chain attacks, prototype pollution, and deserialization vulnerabilities</li>
-          <li>Dashboard: metrics tab with TER (Token Efficiency Ratio), CQI (Code Quality Index), and UCR (Unused Code Ratio) charts for team-wide visibility</li>
-          <li>Improved AGENTS.md generation with domain-aware context grouping and symbol priority ranking</li>
-          <li>Performance: knowledge graph index rebuild 3x faster with incremental update support</li>
-        </ul>
-      </div>
-    </div>
-
-    <!-- v0.7.0 -->
-    <div class="timeline-entry">
-      <div class="timeline-badge">
-        <span class="version">v0.7.0</span>
-        <span class="date">April 2026</span>
-      </div>
-      <div class="timeline-card">
-        <h3><span class="version-dot"></span> Sub-Agent Prompts &amp; Skills Catalog</h3>
-        <ul>
-          <li class="new">7 pre-built sub-agent prompts: Planner, Reviewer, Tester, Architect, Security Auditor, Debugger, and Refactorer — each bundles multiple milens tools into a single, repeatable workflow</li>
-          <li class="new">Skills catalog: 6 curated skill files covering planning, code review, TDD, security audit, refactoring, and evaluation — with structured instructions for AI agents</li>
-          <li class="new">AGENTS.md auto-generator: analyzes codebase structure and generates a comprehensive AGENTS.md with domain summaries, key symbols, and workflow instructions</li>
-          <li class="new">Selective install profiles: <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">--profile core|developer|security|full</code> for targeted installations without unnecessary files</li>
-          <li>Enhanced domain clustering: files grouped into logical modules based on dependency graph analysis for better codebase navigation</li>
-          <li>Adapter packs updated for Claude Code, OpenCode, and Codex with full hook support</li>
+          <li class="new">7 CLI workflow commands: <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">tdd</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">review</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">plan</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">onboard</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">security-scan</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">refactor</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">handoff</code></li>
+          <li class="new">14 new test files: 554 tests with 58% coverage (up from 168 tests, 23% coverage)</li>
+          <li class="new">Enhanced orchestrator: <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">orchestrate()</code> with snapshot persistence and structured action plans</li>
+          <li class="new"><code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">compare_impact</code> tool for regression detection — snapshot and compare blast radius graphs before and after edits</li>
+          <li class="new">Coverage thresholds in vitest.config.ts; CI/CD: milens-ci-test.yml workflow</li>
+          <li>41 MCP tools in full profile (up from 33); 7 sub-agent prompts; 50+ security rules</li>
+          <li>Improved orchestrator with snapshot persistence for compare_impact workflows</li>
         </ul>
       </div>
     </div>

@@ -20,9 +20,12 @@
  * side effects (program.parse()) and we need fresh state per test.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import { readFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { Database } from '../../src/store/db.js';
+import { RepoRegistry } from '../../src/store/registry.js';
+import type { CodeSymbol, SymbolLink } from '../../src/types.js';
 
 const PKG = JSON.parse(
   readFileSync(join(import.meta.dirname, '..', '..', 'package.json'), 'utf-8'),

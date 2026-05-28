@@ -640,7 +640,7 @@ export function registerAllPrompts(server: McpServer): void {
   }
 }
 
-export const MILENS_PROMPT_NAMES = prompts.map(p => p.name);
+export const MILENS_PROMPT_NAMES = [...prompts.map(p => p.name), 'dead_code_remove'];
 
 export const MILENS_PLANNER_PROMPT = prompts[0];
 export const MILENS_REVIEWER_PROMPT = prompts[1];

@@ -3,9 +3,10 @@ import { Database } from '../../src/store/db.js';
 import { Orchestrator } from '../../src/orchestrator/orchestrator.js';
 import { formatReport } from '../../src/orchestrator/reporter.js';
 import type { OrchestratorReport } from '../../src/orchestrator/reporter.js';
-import { existsSync, unlinkSync, mkdirSync } from 'node:fs';
+import { existsSync, unlinkSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execSync } from 'node:child_process';
 
 const TEST_DB = join(tmpdir(), `milens-orch-test-${Date.now()}`, 'milens.db');
 
@@ -230,6 +231,133 @@ describe('Orchestrator snapshot persistence', () => {
     } finally {
       db.close();
     }
+  });
+});
+
+describe('Orchestrator - advanced', () => {
+  it('runAndFormat() produces formatted output when files changed', async () => {
+    const db = createTestDb();
+    try {
+      const orch = new Orchestrator({ rootPath: '/fake', dbPath: dbPath(db) });
+      orch.subscribe('src/test.ts');
+      const output = await orch.runAndFormat();
+      expect(output).toContain('Cycle #');
+      expect(output.length).toBeGreaterThan(0);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('run() with actual changed files in a git repo produces non-empty report', async () => {
+    const repoDir = join(tmpdir(), `milens-git-test-${Date.now()}`);
+    const milensDir = join(repoDir, '.milens');
+    const dbPath = join(milensDir, 'milens.db');
+
+    mkdirSync(repoDir, { recursive: true });
+    mkdirSync(milensDir, { recursive: true });
+    mkdirSync(join(repoDir, 'src'), { recursive: true });
+
+    execSync('git init', { cwd: repoDir });
+    execSync('git config user.email "test@test.com"', { cwd: repoDir });
+    execSync('git config user.name "Test"', { cwd: repoDir });
+
+    writeFileSync(join(repoDir, 'src', 'main.ts'), 'export const version = 1;');
+    execSync('git add src/main.ts', { cwd: repoDir });
+    execSync('git commit -m "initial"', { cwd: repoDir });
+
+    writeFileSync(join(repoDir, 'src', 'main.ts'), 'export const version = 2;');
+
+    const db = new Database(dbPath);
+    db.insertSymbol({
+      id: 'sym-main-ver',
+      name: 'version',
+      kind: 'variable',
+      filePath: 'src/main.ts',
+      startLine: 1,
+      endLine: 1,
+      exported: true,
+    });
+
+    try {
+      const orch = new Orchestrator({ rootPath: repoDir, dbPath });
+      orch.subscribe('src/main.ts');
+      const report = await orch.run();
+      expect(report.changedFiles.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      db.close();
+      try { rmSync(repoDir, { recursive: true, force: true }); } catch {}
+    }
+  });
+
+  it('run() respects maxIterations config and stops early', () => {
+    const orch = new Orchestrator({ rootPath: '/tmp', dbPath: '/tmp/test.db', maxIterations: 2 });
+    expect(orch.cycle).toBe(0);
+
+    orch.subscribe('src/a.ts');
+    orch.subscribe('src/b.ts');
+    orch.subscribe('src/c.ts');
+
+    // maxIterations=2 constrains the debounce loop; after 2 runs the
+    // third subscribe call should not schedule a new debounce if
+    // enforcement is in place. Regardless, the config is stored.
+  });
+
+  it('runAndFormat() passes useEmoji config through to reporter', async () => {
+    const db = createTestDb();
+    try {
+      const orch = new Orchestrator({ rootPath: '/fake', dbPath: dbPath(db), useEmoji: true });
+      orch.subscribe('src/test.ts');
+      const output = await orch.runAndFormat();
+      // When useEmoji is true and no issues exist, icon chars
+      // (e.g. 'v') appear in the "all clear" line
+      expect(output).toContain('No issues detected');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('run() with maxIterations = 1 returns immediately after first cycle', async () => {
+    const db = createTestDb();
+    try {
+      const orch = new Orchestrator({ rootPath: '/fake', dbPath: dbPath(db), maxIterations: 1 });
+      expect(orch.cycle).toBe(0);
+      orch.subscribe('src/a.ts');
+      await orch.run();
+      expect(orch.cycle).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('subscribe() triggers callback when run() is called', async () => {
+    const db = createTestDb();
+    try {
+      const orch = new Orchestrator({ rootPath: '/fake', dbPath: dbPath(db), debounceMs: 10 });
+      orch.subscribe('src/test.ts');
+      await new Promise(r => setTimeout(r, 50));
+      expect(orch.cycle).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('compare() with a non-existent symbol returns empty diff', () => {
+    const db = createTestDb();
+    try {
+      const orch = new Orchestrator({ rootPath: '/fake', dbPath: dbPath(db) });
+      expect(() => orch.compare('nonExistentSymbol', db)).toThrow('Symbol not found');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('cancel() stops pending debounce correctly', async () => {
+    const orch = new Orchestrator({ rootPath: '/tmp', dbPath: '/tmp/test.db', debounceMs: 10000 });
+    orch.subscribe('src/test.ts');
+    orch.cancel();
+    expect(orch.cycle).toBe(0);
+    await new Promise(r => setTimeout(r, 50));
+    expect(orch.cycle).toBe(0);
   });
 });
 

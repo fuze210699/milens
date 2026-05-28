@@ -1,12 +1,10 @@
 {
   "version": 2,
-  "buildCommand": null,
   "outputDirectory": "docs",
-  "cleanUrls": true,
-  "trailingSlash": false,
-  "rewrites": [
-    { "source": "/", "destination": "/index.html" },
-    { "source": "/((?!.*\\.html$).*)", "destination": "/$1.html" }
+  "routes": [
+    { "src": "/(.*)\\.html$", "dest": "/$1.html", "status": 200 },
+    { "handle": "filesystem" },
+    { "src": "/([^.]*)$", "dest": "/$1.html", "status": 200 }
   ],
   "headers": [
     {

@@ -198,15 +198,19 @@ program
 program
   .command('list')
   .description('List all indexed repositories')
-  .action(async () => {
+  .option('-p, --path <path>', 'Repository root path (filter by path prefix)')
+  .action(async (opts) => {
     const { RepoRegistry } = await import('./store/registry.js');
     const entries = new RepoRegistry().listAll();
-    if (entries.length === 0) {
+    const filtered = opts.path
+      ? entries.filter((e: any) => e.rootPath.startsWith(resolve(opts.path)))
+      : entries;
+    if (filtered.length === 0) {
       console.log('No indexed repositories.');
       return;
     }
-    console.log(`${entries.length} indexed repositories:\n`);
-    for (const entry of entries) {
+    console.log(`${filtered.length} indexed repositories:\n`);
+    for (const entry of filtered) {
       console.log(`  ${entry.rootPath}`);
       console.log(`    DB:      ${entry.dbPath}`);
       console.log(`    Indexed: ${entry.analyzedAt}`);
@@ -628,6 +632,31 @@ program
         console.log(`  1. session_start() → codebase_summary() → recall()`);
         break;
       }
+      case 'security-scan': {
+        console.log('Security Scan Workflow:');
+        console.log(`  Run 'milens security scan --scope all' for a full security audit.`);
+        console.log(`  Or call security_scan() via MCP for automated scanning.`);
+        break;
+      }
+      case 'refactor': {
+        const deadCode = db.findDeadCode(undefined, 20);
+        console.log('Refactor Workflow — Dead Code Candidates:');
+        if (deadCode.length === 0) {
+          console.log('  No dead code found.');
+        } else {
+          for (const s of deadCode) {
+            console.log(`  ${s.name} [${s.kind}] ${s.filePath}:${s.startLine}`);
+          }
+        }
+        console.log(`\nRun 'milens analyze --force' to refresh the index before refactoring.`);
+        break;
+      }
+      case 'handoff': {
+        console.log('Handoff Workflow:');
+        console.log(`  Use session_start() → handoff() via MCP to transfer context between agents.`);
+        console.log(`  See 'milens hooks list' for session lifecycle automation.`);
+        break;
+      }
       default:
         console.log(`Unknown workflow: ${name}`);
         console.log(`Available: tdd, review, plan, onboard, security-scan, refactor, handoff`);
@@ -875,11 +904,14 @@ securityCmd
   .option('-p, --path <path>', 'Repository root path', '.')
   .option('--scope <scope>', 'all|secrets|injection|unicode|dangerous|config|data-leak|crypto|auth|file-access', 'all')
   .option('--severity <severity>', 'CRITICAL|HIGH|MEDIUM|LOW')
+  .option('--limit <limit>', 'Max findings to report', '30')
   .option('--format <format>', 'table|json|markdown', 'table')
   .action(async (opts) => {
     const root = resolve(opts.path);
+    const maxFindings = parseInt(opts.limit) || 30;
+    const MAX_FILE_SIZE = 200 * 1024; // skip files >200KB to avoid regex timeout
     const { loadRules } = await import('./security/rules.js');
-    const { readFileSync, existsSync, readdirSync } = await import('node:fs');
+    const { readFileSync, existsSync, readdirSync, statSync } = await import('node:fs');
     const { join: pathJoin, relative: pathRelative } = await import('node:path');
 
     const rules = loadRules();
@@ -906,6 +938,11 @@ securityCmd
             const ext = entry.name.split('.').pop() || '';
             if (!['ts', 'js', 'tsx', 'jsx', 'py', 'go', 'rs', 'java', 'rb', 'php', 'sql', 'sh', 'yaml', 'yml', 'json', 'html', 'css'].includes(ext)) continue;
             try {
+              const stat = statSync(fullPath);
+              if (stat.size > MAX_FILE_SIZE) {
+                if (opts.format === 'table') console.log(`  Skipping large file: ${pathRelative(root, fullPath)} (${(stat.size / 1024).toFixed(0)}KB)`);
+                return;
+              }
               const content = readFileSync(fullPath, 'utf-8');
               const lines = content.split('\n');
               for (const rule of filtered) {
@@ -943,7 +980,7 @@ securityCmd
     }
     console.log();
 
-    for (const f of findings.slice(0, 30)) {
+    for (const f of findings.slice(0, maxFindings)) {
       console.log(`[${f.severity}] ${f.rule} ${f.file}:${f.line} — ${f.match}`);
     }
   });

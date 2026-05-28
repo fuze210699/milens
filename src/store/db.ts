@@ -16,6 +16,15 @@ export class Database {
     return this.db;
   }
 
+  /** Check whether the underlying sqlite connection is still open */
+  isOpen(): boolean {
+    try {
+      return this.db.open;
+    } catch {
+      return false;
+    }
+  }
+
   constructor(dbPath: string) {
     this.db = new BetterSqlite3(dbPath);
     this.db.pragma('journal_mode = WAL');

@@ -2,8 +2,8 @@
   "mcpServers": {
     "milens": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["tsx", "src/cli.ts", "serve", "-p", "${workspaceFolder}"]
+      "command": "node",
+      "args": ["dist/cli.js", "serve", "-p", "."]
     }
   }
 }

@@ -40,7 +40,7 @@ class LazyDb {
 
   get(): Database {
     this.resetTimer();
-    if (!this.instance) {
+    if (!this.instance || !this.instance.isOpen()) {
       this.instance = new Database(this.dbPath);
       this.statsCache = null;
       this.domainCache = null;

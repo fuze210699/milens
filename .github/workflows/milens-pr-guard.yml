@@ -10,22 +10,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Install milens
-        run: npm install -g milens
-      - name: Analyze codebase
-        run: npx milens analyze -p . --force
-      - name: Review PR Risk
-        run: |
-          echo "## Milens PR Review" >> $GITHUB_STEP_SUMMARY
-          npx milens metrics -p . >> $GITHUB_STEP_SUMMARY 2>&1 || true
-      - name: Find Dead Code
-        run: |
-          echo "## Dead Code" >> $GITHUB_STEP_SUMMARY
-          npx milens search "TODO|FIXME" -p . >> $GITHUB_STEP_SUMMARY 2>&1 || true
-      - name: Security Scan
-        run: |
-          echo "## Security Scan" >> $GITHUB_STEP_SUMMARY
-          npx milens search "password|secret|api_key|token" -p . >> $GITHUB_STEP_SUMMARY 2>&1 || true
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Coverage report
+        run: npx vitest run --coverage
+
+      - name: Security scan
+        run: npx milens security scan -p . --scope secrets,data-leak --severity HIGH || true
+
+      - name: Find dead code
+        run: npx milens workflow refactor -p . || true
+
+      - name: PR risk check
+        run: npx milens workflow review -p . || true

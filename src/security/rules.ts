@@ -1042,7 +1042,10 @@ export const ALL_RULES: SecurityRule[] = [
 // ── Utility functions ──
 
 export function loadRules(): SecurityRule[] {
-  return ALL_RULES.filter((r) => r.enabled);
+  return ALL_RULES.filter((r) => r.enabled).map(r => ({
+    ...r,
+    patterns: r.patterns.map(p => new RegExp(p.source, p.flags.includes('g') ? p.flags : p.flags + 'g')),
+  }));
 }
 
 export function getRulesByCategory(category: SecurityCategory): SecurityRule[] {

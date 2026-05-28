@@ -1,0 +1,22 @@
+name: Milens CI Test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm test -- --coverage
+
+      - name: Coverage threshold
+        run: |
+          COV=$(node -e "process.stdout.write(process.env.COVERAGE || '0')")
+          if [ "$COV" -lt 50 ]; then echo "Coverage below 50%"; exit 1; fi

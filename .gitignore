@@ -5,3 +5,4 @@ standalone/
 !.milens/README.md
 *.sqlite
 *.sqlite-journal
+coverage/

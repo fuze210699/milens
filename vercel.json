@@ -4,6 +4,16 @@
   "outputDirectory": "docs",
   "cleanUrls": true,
   "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/:page",
+      "destination": "/:page.html"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

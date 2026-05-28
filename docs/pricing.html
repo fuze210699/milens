@@ -8,6 +8,39 @@
   <meta property="og:title" content="Pricing — Milens | GitHub App Plans & Enterprise Rollout">
   <meta property="og:description" content="Milens stays free. Pro and Enterprise add private repos, GitHub automation, and team rollout.">
   <meta property="og:type" content="website">
+  <meta property="og:url" content="https://milens.ai/pricing.html">
+  <meta property="og:image" content="https://milens.ai/og-pricing.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Pricing — Milens | GitHub App Plans & Enterprise Rollout">
+  <meta name="twitter:description" content="Milens stays free. Pro and Enterprise add private repos, GitHub automation, and team rollout.">
+  <meta name="twitter:image" content="https://milens.ai/og-pricing.png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Milens",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "All",
+    "description": "Code intelligence MCP server with 41 tools, 7 sub-agent prompts, and 50+ security rules. GitHub App for PR review and automated analysis.",
+    "url": "https://milens.ai",
+    "offers": [
+      {
+        "@type": "Offer",
+        "name": "Free",
+        "price": "0",
+        "priceCurrency": "USD",
+        "description": "Public repos, all 41 MCP tools, 50+ security rules, community support."
+      },
+      {
+        "@type": "Offer",
+        "name": "Pro",
+        "price": "19",
+        "priceCurrency": "USD",
+        "description": "Private repos, GitHub App, 50 analyses/seat/month, priority support."
+      }
+    ]
+  }
+  </script>
   <style>
     :root {
       --bg: #0d1117;
@@ -19,88 +52,118 @@
       --green: #7ee787;
       --orange: #d2991d;
       --red: #f85149;
-      --radius: 8px;
+      --radius: 12px;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    body::before { content: ''; position: fixed; inset: 0; z-index: -1; background: radial-gradient(ellipse 80% 60% at 20% 10%, rgba(88,166,255,0.06) 0%, transparent 60%), radial-gradient(ellipse 60% 50% at 80% 80%, rgba(126,231,135,0.04) 0%, transparent 60%), radial-gradient(ellipse 50% 40% at 50% 50%, rgba(210,153,29,0.03) 0%, transparent 60%); pointer-events: none; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .container { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+    .container { max-width: min(90vw, 1400px); margin: 0 auto; padding: 0 24px; }
 
-    /* ── Nav ── */
+    .skip-link { position: absolute; top: -100px; left: 16px; background: var(--accent); color: #fff; padding: 8px 16px; border-radius: 6px; z-index: 200; font-weight: 600; }
+    .skip-link:focus { top: 8px; }
+
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .stagger-children > * { animation: fadeInUp 0.5s ease forwards; opacity: 0; }
+    .stagger-children > *:nth-child(1) { animation-delay: 0s; }
+    .stagger-children > *:nth-child(2) { animation-delay: 0.08s; }
+    .stagger-children > *:nth-child(3) { animation-delay: 0.16s; }
+    .stagger-children > *:nth-child(4) { animation-delay: 0.24s; }
+    .stagger-children > *:nth-child(5) { animation-delay: 0.32s; }
+    .stagger-children > *:nth-child(6) { animation-delay: 0.40s; }
+    .stagger-children > *:nth-child(7) { animation-delay: 0.48s; }
+    .stagger-children > *:nth-child(8) { animation-delay: 0.56s; }
+    .stagger-children > *:nth-child(9) { animation-delay: 0.64s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+      html { scroll-behavior: auto; }
+    }
+
     .nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
-    .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; max-width: 1040px; margin: 0 auto; padding: 0 24px; }
-    .nav-logo { font-size: 1.2em; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; max-width: min(90vw, 1400px); margin: 0 auto; padding: 0 24px; }
+    .nav-logo { font-size: clamp(1rem, 1.5vw, 1.2em); font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
     .nav-logo span { color: var(--accent); }
     .nav-links { display: flex; align-items: center; gap: 24px; }
-    .nav-links a { color: var(--muted); font-size: 0.9em; }
+    .nav-links a { color: var(--muted); font-size: clamp(0.8rem, 1vw, 0.9em); }
     .nav-links a:hover { color: var(--text); text-decoration: none; }
     .nav-links a.active { color: var(--accent); font-weight: 600; }
-    .nav-cta { background: var(--accent); color: #fff !important; padding: 6px 16px; border-radius: 6px; font-weight: 600; font-size: 0.85em; }
-    .nav-cta:hover { background: #79b8ff; text-decoration: none !important; }
-    @media (max-width: 768px) { .nav-links { gap: 12px; font-size: 0.8em; } .nav-links a.hide-mobile { display: none; } }
+    .nav-cta { background: linear-gradient(135deg, #58a6ff, #3fb950); color: #fff !important; padding: 6px 16px; border-radius: 10px; font-weight: 600; font-size: clamp(0.78rem, 1vw, 0.85em); box-shadow: 0 0 20px rgba(88,166,255,0.25); }
+    .nav-cta:hover { box-shadow: 0 0 28px rgba(88,166,255,0.4); text-decoration: none !important; }
 
-    /* ── Pricing Hero ── */
-    .pricing-hero { text-align: center; padding: 64px 0 40px; }
-    .pricing-hero h1 { font-size: 3em; font-weight: 800; color: var(--text); line-height: 1.2; margin-bottom: 16px; letter-spacing: -0.02em; }
+    .hamburger { display: none; flex-direction: column; gap: 4px; background: none; border: none; cursor: pointer; padding: 4px; z-index: 101; }
+    .hamburger span { width: 22px; height: 2px; background: var(--text); border-radius: 2px; transition: all 0.2s; }
+    .hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(4px, 4px); }
+    .hamburger.open span:nth-child(2) { opacity: 0; }
+    .hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(4px, -4px); }
+
+    @media (max-width: 768px) {
+      .nav-links { position: fixed; top: 56px; left: 0; right: 0; background: rgba(13,17,23,0.97); backdrop-filter: blur(16px); flex-direction: column; padding: 24px; gap: 16px; border-bottom: 1px solid var(--border); transform: translateY(-110%); opacity: 0; transition: all 0.3s ease; pointer-events: none; }
+      .nav-links.open { transform: translateY(0); opacity: 1; pointer-events: auto; }
+      .hamburger { display: flex; }
+    }
+
+    .pricing-hero { text-align: center; padding: clamp(48px, 8vw, 64px) 0 clamp(32px, 5vw, 40px); }
+    .pricing-hero h1 { font-size: clamp(2rem, 5vw, 3em); font-weight: 800; color: var(--text); line-height: 1.2; margin-bottom: 16px; letter-spacing: -0.02em; }
     .pricing-hero h1 span { color: var(--accent); }
-    .pricing-hero .subtitle { font-size: 1.15em; color: var(--muted); max-width: 600px; margin: 0 auto 32px; line-height: 1.6; }
-    @media (max-width: 640px) { .pricing-hero h1 { font-size: 2em; } }
+    .pricing-hero .subtitle { font-size: clamp(0.95rem, 1.5vw, 1.15em); color: var(--muted); max-width: 600px; margin: 0 auto 32px; line-height: 1.6; }
+    @media (max-width: 640px) { .pricing-hero h1 { font-size: clamp(1.6rem, 6vw, 2em); } }
 
-    /* ── Billing Toggle ── */
     .billing-toggle-wrap { display: flex; justify-content: center; margin-bottom: 48px; }
     .billing-toggle { display: inline-flex; background: var(--card); border: 1px solid var(--border); border-radius: 100px; padding: 4px; gap: 2px; }
-    .billing-option { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 0.9em; font-weight: 600; padding: 10px 24px; border-radius: 100px; cursor: pointer; transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 8px; }
-    .billing-option.active { background: rgba(88,166,255,0.12); color: var(--accent); }
+    .billing-option { background: none; border: none; color: var(--muted); font-family: inherit; font-size: clamp(0.82rem, 1vw, 0.9em); font-weight: 600; padding: 10px 24px; border-radius: 100px; cursor: pointer; transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 8px; }
+    .billing-option.active { background: rgba(88,166,255,0.15); color: var(--accent); }
     .billing-option:hover:not(.active) { color: var(--text); }
     .billing-save { background: rgba(126,231,135,0.15); color: var(--green); font-size: 0.78em; padding: 2px 8px; border-radius: 6px; font-weight: 700; }
 
-    /* ── Pricing Cards ── */
     .pricing-grid-v2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; align-items: start; margin-bottom: 80px; }
-    .plan { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 36px 28px; display: flex; flex-direction: column; transition: border-color 0.2s, transform 0.15s; position: relative; }
-    .plan:hover { border-color: var(--muted); transform: translateY(-2px); }
+    .plan { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 36px 28px; display: flex; flex-direction: column; transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; position: relative; }
+    .plan:hover { border-color: var(--muted); transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,0.35); }
     .plan.featured { border-color: var(--accent); box-shadow: 0 8px 32px rgba(88,166,255,0.08); }
+    .plan.featured:hover { box-shadow: 0 12px 40px rgba(88,166,255,0.14); }
     .plan-badge { display: inline-block; background: rgba(88,166,255,0.12); color: var(--accent); padding: 6px 14px; border-radius: 100px; font-size: 0.78em; font-weight: 700; margin-bottom: 16px; border: 1px solid rgba(88,166,255,0.2); letter-spacing: 0.04em; text-transform: uppercase; align-self: flex-start; }
-    .plan-name { font-size: 1.3em; font-weight: 700; color: var(--text); margin-bottom: 6px; }
-    .plan-desc { color: var(--muted); font-size: 0.9em; margin-bottom: 20px; line-height: 1.5; }
-    .plan-price { font-size: 2.8em; font-weight: 700; color: var(--accent); margin-bottom: 8px; line-height: 1; }
+    .plan-name { font-size: clamp(1.1rem, 1.5vw, 1.3em); font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .plan-desc { color: var(--muted); font-size: clamp(0.82rem, 1vw, 0.9em); margin-bottom: 20px; line-height: 1.5; }
+    .plan-price { font-size: clamp(2rem, 3vw, 2.8em); font-weight: 700; color: var(--accent); margin-bottom: 8px; line-height: 1; }
     .plan-price span { font-size: 0.35em; font-weight: 400; color: var(--muted); }
     .plan-features { list-style: none; flex: 1; margin-bottom: 24px; }
-    .plan-features li { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; font-size: 0.9em; color: var(--muted); border-bottom: 1px solid rgba(48,54,61,0.4); }
+    .plan-features li { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; font-size: clamp(0.82rem, 1vw, 0.9em); color: var(--muted); border-bottom: 1px solid rgba(48,54,61,0.4); }
     .plan-features li:last-child { border-bottom: none; }
     .plan-features li svg { color: var(--green); flex-shrink: 0; margin-top: 2px; }
-    .plan-btn { display: block; width: 100%; text-align: center; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 0.95em; cursor: pointer; border: none; transition: all 0.15s; text-decoration: none; }
-    .plan-btn.primary { background: var(--accent); color: #fff; }
-    .plan-btn.primary:hover { background: #79b8ff; transform: translateY(-1px); text-decoration: none; }
+    .plan-btn { display: block; width: 100%; text-align: center; padding: 12px 20px; border-radius: 10px; font-weight: 600; font-size: clamp(0.88rem, 1.1vw, 0.95em); cursor: pointer; border: none; transition: all 0.2s; text-decoration: none; }
+    .plan-btn.primary { background: linear-gradient(135deg, #58a6ff, #3fb950); color: #fff; box-shadow: 0 0 20px rgba(88,166,255,0.2); }
+    .plan-btn.primary:hover { box-shadow: 0 0 32px rgba(88,166,255,0.35); transform: translateY(-1px); text-decoration: none; }
     .plan-btn.outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
     .plan-btn.outline:hover { border-color: var(--muted); text-decoration: none; transform: translateY(-1px); }
     @media (max-width: 900px) { .pricing-grid-v2 { grid-template-columns: 1fr; max-width: 420px; margin-left: auto; margin-right: auto; } }
 
-    /* ── Decision Guide ── */
-    .decision-section { padding: 0 0 72px; }
-    .section-label { display: block; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78em; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
-    .section-title { font-size: 2em; color: var(--text); margin-bottom: 12px; }
-    .section-subtitle { color: var(--muted); font-size: 1.05em; max-width: 640px; margin-bottom: 40px; line-height: 1.6; }
+    .decision-section { padding: 0 0 clamp(48px, 8vw, 72px); }
+    .section-label { display: block; text-transform: uppercase; letter-spacing: 0.08em; font-size: clamp(0.72rem, 0.9vw, 0.78em); font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+    .section-title { font-size: clamp(1.5rem, 3.5vw, 2em); color: var(--text); margin-bottom: 12px; }
+    .section-subtitle { color: var(--muted); font-size: clamp(0.95rem, 1.5vw, 1.05em); max-width: 640px; margin-bottom: 40px; line-height: 1.6; }
     .decision-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-    .decision-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; }
+    .decision-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; }
+    .decision-card:hover { border-color: var(--muted); transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
     .decision-card.featured { border-color: var(--accent); }
+    .decision-card.featured:hover { border-color: var(--accent); box-shadow: 0 8px 28px rgba(88,166,255,0.1); }
     .decision-label { font-size: 0.82em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 12px; }
-    .decision-card p { color: var(--muted); font-size: 0.93em; line-height: 1.7; }
-    @media (max-width: 768px) { .decision-grid { grid-template-columns: 1fr; } .section-title { font-size: 1.5em; } }
+    .decision-card p { color: var(--muted); font-size: clamp(0.85rem, 1vw, 0.93em); line-height: 1.7; }
+    @media (max-width: 768px) { .decision-grid { grid-template-columns: 1fr; } .section-title { font-size: clamp(1.2rem, 5vw, 1.5em); } }
 
-    /* ── What Changes ── */
-    .delta-section { padding: 72px 0; background: var(--card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .delta-section { padding: clamp(48px, 8vw, 72px) 0; background: var(--card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
     .delta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-    .delta-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; }
+    .delta-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; }
+    .delta-card:hover { border-color: var(--muted); transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
     .delta-label { display: inline-block; font-size: 0.78em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--green); margin-bottom: 12px; padding: 4px 10px; background: rgba(126,231,135,0.1); border-radius: 4px; }
-    .delta-card h3 { font-size: 1.15em; color: var(--text); margin-bottom: 8px; }
-    .delta-card p { color: var(--muted); font-size: 0.93em; line-height: 1.6; }
+    .delta-card h3 { font-size: clamp(1rem, 1.3vw, 1.15em); color: var(--text); margin-bottom: 8px; }
+    .delta-card p { color: var(--muted); font-size: clamp(0.85rem, 1vw, 0.93em); line-height: 1.6; }
     @media (max-width: 768px) { .delta-grid { grid-template-columns: 1fr; } }
 
-    /* ── Feature Table ── */
-    .table-section { padding: 72px 0; }
+    .table-section { padding: clamp(48px, 8vw, 72px) 0; }
     .table-wrapper { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
-    .compare-table { width: 100%; border-collapse: collapse; font-size: 0.9em; min-width: 600px; }
+    .compare-table { width: 100%; border-collapse: collapse; font-size: clamp(0.82rem, 1vw, 0.9em); min-width: 600px; }
     .compare-table th { background: var(--bg); color: var(--text); font-weight: 700; padding: 14px 20px; text-align: center; border-bottom: 1px solid var(--border); }
     .compare-table th:first-child { text-align: left; color: var(--muted); font-weight: 500; }
     .compare-table th.featured-col { color: var(--accent); }
@@ -111,28 +174,33 @@
     .compare-table .dash { color: var(--muted); }
     @media (max-width: 768px) { .compare-table { font-size: 0.8em; } .compare-table th, .compare-table td { padding: 10px 12px; } }
 
-    /* ── OSS Guarantee ── */
-    .oss-section { padding: 72px 0; background: var(--card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: center; }
+    .oss-section { padding: clamp(48px, 8vw, 72px) 0; background: var(--card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: center; }
     .oss-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 20px; background: rgba(126,231,135,0.1); border: 1px solid rgba(126,231,135,0.2); border-radius: 100px; color: var(--green); font-size: 0.82em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 24px; }
-    .oss-section h2 { font-size: 1.8em; color: var(--text); margin-bottom: 12px; }
-    .oss-section p { color: var(--muted); font-size: 1em; max-width: 560px; margin: 0 auto 20px; line-height: 1.6; }
+    .oss-section h2 { font-size: clamp(1.4rem, 3vw, 1.8em); color: var(--text); margin-bottom: 12px; }
+    .oss-section p { color: var(--muted); font-size: clamp(0.9rem, 1.2vw, 1em); max-width: 560px; margin: 0 auto 20px; line-height: 1.6; }
 
-    /* ── FAQ ── */
-    .faq-section { padding: 72px 0; }
+    .faq-section { padding: clamp(48px, 8vw, 72px) 0; }
     .faq-item { border-bottom: 1px solid var(--border); }
-    .faq-q { width: 100%; text-align: left; background: none; border: none; color: var(--text); font-size: 1.05em; font-weight: 600; padding: 18px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-family: inherit; }
+    .faq-q { width: 100%; text-align: left; background: none; border: none; color: var(--text); font-size: clamp(0.95rem, 1.2vw, 1.05em); font-weight: 600; padding: 18px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-family: inherit; }
     .faq-q:hover { color: var(--accent); }
     .faq-q .arrow { transition: transform 0.2s; font-size: 0.8em; color: var(--muted); }
     .faq-q.open .arrow { transform: rotate(180deg); }
     .faq-a { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
     .faq-a.open { max-height: 400px; }
-    .faq-a p { color: var(--muted); padding: 0 0 18px 0; font-size: 0.95em; line-height: 1.7; }
+    .faq-a p { color: var(--muted); padding: 0 0 18px 0; font-size: clamp(0.88rem, 1vw, 0.95em); line-height: 1.7; }
 
-    /* ── Footer ── */
-    .footer { border-top: 1px solid var(--border); padding: 48px 0 32px; text-align: center; }
-    .footer-links { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
-    .footer-links a { color: var(--muted); font-size: 0.9em; }
-    .footer p { color: var(--muted); font-size: 0.82em; }
+    .footer { border-top: 1px solid var(--border); padding: 64px 0 32px; }
+    .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+    .footer-brand .nav-logo { font-size: clamp(1rem, 1.5vw, 1.2em); font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .footer-brand .nav-logo span { color: var(--accent); }
+    .footer-brand p { color: var(--muted); font-size: clamp(0.82rem, 1vw, 0.9em); line-height: 1.6; }
+    .footer-col h4 { color: var(--text); font-size: clamp(0.78rem, 0.9vw, 0.85em); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 16px; }
+    .footer-col a { display: block; color: var(--muted); font-size: clamp(0.82rem, 1vw, 0.9em); padding: 4px 0; }
+    .footer-col a:hover { color: var(--text); text-decoration: none; }
+    .footer-bottom { text-align: center; border-top: 1px solid var(--border); padding-top: 24px; }
+    .footer-bottom p { color: var(--muted); font-size: clamp(0.75rem, 0.9vw, 0.82em); }
+    @media (max-width: 768px) { .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; } .footer-brand { grid-column: 1 / -1; } }
+    @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; } }
 
     .text-center { text-align: center; }
     html { scroll-behavior: smooth; }
@@ -140,23 +208,28 @@
 </head>
 <body>
 
-<!-- ── Nav ── -->
+<a href="#main-content" class="skip-link">Skip to content</a>
+
 <nav class="nav">
   <div class="nav-inner">
     <a href="index.html" class="nav-logo"><span>◆</span> Milens</a>
+    <button class="hamburger" id="hamburger-btn" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
     <div class="nav-links">
       <a href="index.html">Home</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="skills.html">Skills</a>
+      <a href="scenarios.html">Scenarios</a>
+      <a href="security.html">Security</a>
       <a href="pricing.html" class="active">Pricing</a>
-      <a href="index.html#security" class="hide-mobile">Security</a>
-      <a href="index.html#skills" class="hide-mobile">Skills</a>
-      <a href="https://github.com/fuze210699/milens" class="hide-mobile">GitHub</a>
-      <a href="https://github.com/fuze210699/milens" class="nav-cta">Get Started</a>
+      <a href="enterprise.html">Enterprise</a>
+      <a href="https://github.com/fuze210699/milens">GitHub</a>
     </div>
   </div>
 </nav>
 
-<!-- ── Pricing Hero ── -->
-<section class="pricing-hero">
+<section class="pricing-hero" id="main-content">
   <div class="container">
     <h1><span>GitHub App</span> Pricing</h1>
     <p class="subtitle">Milens stays free. Pro and Enterprise add private repos, GitHub automation, and team rollout.</p>
@@ -169,15 +242,16 @@
   </div>
 </section>
 
-<!-- ── Pricing Cards ── -->
 <section class="container">
-  <div class="pricing-grid-v2">
+  <div class="pricing-grid-v2 stagger-children">
 
-    <!-- Free -->
     <div class="plan">
       <div class="plan-name">Free</div>
       <p class="plan-desc">Best for trying Milens and staying OSS-first.</p>
-      <div class="plan-price" data-monthly="$0" data-yearly="$0">$0 <span>/month</span></div>
+      <div class="plan-price">
+        <span class="price-monthly">$0 <span>/month</span></span>
+        <span class="price-yearly" style="display:none">$0 <span>/month</span></span>
+      </div>
       <ul class="plan-features">
         <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> All 41 MCP tools</li>
         <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> Public repos</li>
@@ -191,12 +265,14 @@
       <a href="https://github.com/fuze210699/milens" class="plan-btn outline">Get Started Free</a>
     </div>
 
-    <!-- Pro -->
     <div class="plan featured">
       <span class="plan-badge">Most Popular</span>
       <div class="plan-name">Pro</div>
       <p class="plan-desc">Best for private repos and small-team rollout.</p>
-      <div class="plan-price" data-monthly="$19" data-yearly="$16">$19 <span>/seat/month</span></div>
+      <div class="plan-price">
+        <span class="price-monthly">$19 <span>/seat/month</span></span>
+        <span class="price-yearly" style="display:none">$16 <span>/seat/month</span></span>
+      </div>
       <ul class="plan-features">
         <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> Everything in Free</li>
         <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> Private repos</li>
@@ -210,11 +286,13 @@
       <a href="#contact" class="plan-btn primary">Start Pro</a>
     </div>
 
-    <!-- Enterprise -->
     <div class="plan">
       <div class="plan-name">Enterprise</div>
       <p class="plan-desc">Best for procurement, rollout, and governance.</p>
-      <div class="plan-price" style="font-size:1.8em;" data-monthly="Contact" data-yearly="Contact">Contact <span>sales</span></div>
+      <div class="plan-price" style="font-size:1.8em;">
+        <span class="price-monthly">Contact <span>sales</span></span>
+        <span class="price-yearly" style="display:none">Contact <span>sales</span></span>
+      </div>
       <ul class="plan-features">
         <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> Everything in Pro</li>
         <li><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg> SSO/SAML authentication</li>
@@ -230,13 +308,12 @@
   </div>
 </section>
 
-<!-- ── Choose the Right Path ── -->
 <section class="decision-section">
   <div class="container">
     <span class="section-label">Decision Guide</span>
     <h2 class="section-title">Choose the right path.</h2>
     <p class="section-subtitle">Three clear paths — pick the one that matches where your team is today.</p>
-    <div class="decision-grid">
+    <div class="decision-grid stagger-children">
       <div class="decision-card">
         <div class="decision-label">Stay on Free if…</div>
         <p>You work on public, open-source repositories. You need all 41 MCP tools, 7 sub-agent prompts, and 50+ security rules — without paying a cent. You're fine with 10 GitHub App analyses per month and community support.</p>
@@ -253,13 +330,12 @@
   </div>
 </section>
 
-<!-- ── What Changes When You Pay ── -->
 <section class="delta-section">
   <div class="container">
     <span class="section-label">The Delta</span>
     <h2 class="section-title">What changes when you pay.</h2>
     <p class="section-subtitle">Three dimensions unlock as you move up. Each tier builds on the one before it — nothing is taken away.</p>
-    <div class="delta-grid">
+    <div class="delta-grid stagger-children">
       <div class="delta-card">
         <span class="delta-label">Repository scope</span>
         <h3>Public → Private</h3>
@@ -279,7 +355,6 @@
   </div>
 </section>
 
-<!-- ── Feature Comparison Table ── -->
 <section class="table-section">
   <div class="container">
     <span class="section-label">Feature Comparison</span>
@@ -410,7 +485,6 @@
   </div>
 </section>
 
-<!-- ── Open Source is Always Free ── -->
 <section class="oss-section">
   <div class="container">
     <span class="oss-badge">&#x2713; MIT License</span>
@@ -423,7 +497,6 @@
   </div>
 </section>
 
-<!-- ── FAQ ── -->
 <section class="faq-section" id="faq">
   <div class="container">
     <span class="section-label">FAQ</span>
@@ -455,29 +528,65 @@
   </div>
 </section>
 
-<!-- ── Footer ── -->
 <footer class="footer">
   <div class="container">
-    <div class="footer-links">
-      <a href="https://github.com/fuze210699/milens">GitHub</a>
-      <a href="https://github.com/fuze210699/milens#readme">Docs</a>
-      <a href="pricing.html">Pricing</a>
-      <a href="index.html#security">Security</a>
-      <a href="index.html#skills">Skills</a>
-      <a href="https://github.com/fuze210699/milens/blob/main/CONTRIBUTING.md">Contribute</a>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="index.html" class="nav-logo"><span>◆</span> Milens</a>
+        <p>AI-DOS. Code intelligence that understands your codebase before you ask.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="index.html#features">Features</a>
+        <a href="security.html">Security</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="https://github.com/fuze210699/milens">GitHub</a>
+      </div>
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <a href="https://github.com/fuze210699/milens#readme">Docs</a>
+        <a href="scenarios.html">Scenarios</a>
+        <a href="index.html#skills">Skills</a>
+        <a href="https://github.com/fuze210699/milens/blob/main/CONTRIBUTING.md">Contribute</a>
+      </div>
+      <div class="footer-col">
+        <h4>Connect</h4>
+        <a href="https://github.com/fuze210699/milens">GitHub</a>
+        <a href="https://github.com/fuze210699/milens/issues">Issues</a>
+        <a href="https://github.com/fuze210699/milens/discussions">Discussions</a>
+      </div>
     </div>
-    <p>Open Source · MIT Licensed · No vendor lock-in</p>
-    <p style="margin-top:4px;">Built for the vibe coding era. Milens — AI-DOS.</p>
+    <div class="footer-bottom">
+      <p>Open Source · MIT Licensed · No vendor lock-in</p>
+      <p style="margin-top:4px;">Built for the vibe coding era. Milens — AI-DOS.</p>
+    </div>
   </div>
 </footer>
 
 <script>
-// ── Monthly / Yearly toggle ──
+(function() {
+  var hamburger = document.getElementById('hamburger-btn');
+  var navLinks = document.querySelector('.nav-links');
+  if (hamburger && navLinks) {
+    hamburger.addEventListener('click', function() {
+      navLinks.classList.toggle('open');
+      hamburger.classList.toggle('open');
+      hamburger.setAttribute('aria-expanded', navLinks.classList.contains('open'));
+    });
+    navLinks.querySelectorAll('a').forEach(function(link) {
+      link.addEventListener('click', function() {
+        navLinks.classList.remove('open');
+        hamburger.classList.remove('open');
+        hamburger.setAttribute('aria-expanded', 'false');
+      });
+    });
+  }
+})();
+
 (function() {
   var toggle = document.getElementById('billingToggle');
   if (!toggle) return;
   var options = toggle.querySelectorAll('.billing-option');
-  var prices = document.querySelectorAll('.plan-price');
 
   options.forEach(function(opt) {
     opt.addEventListener('click', function() {
@@ -485,22 +594,16 @@
       this.classList.add('active');
       var period = this.getAttribute('data-period');
 
-      prices.forEach(function(el) {
-        var val = el.getAttribute('data-' + period);
-        if (!val) return;
-        if (val === '$0') {
-          el.innerHTML = '$0 <span>/month</span>';
-        } else if (val === 'Contact') {
-          el.innerHTML = 'Contact <span>sales</span>';
-        } else {
-          el.innerHTML = val + ' <span>/seat/month</span>';
-        }
+      document.querySelectorAll('.price-monthly').forEach(function(el) {
+        el.style.display = period === 'monthly' ? '' : 'none';
+      });
+      document.querySelectorAll('.price-yearly').forEach(function(el) {
+        el.style.display = period === 'yearly' ? '' : 'none';
       });
     });
   });
 })();
 
-// ── FAQ Accordion ──
 (function() {
   var faqs = document.querySelectorAll('.faq-q');
   faqs.forEach(function(btn) {

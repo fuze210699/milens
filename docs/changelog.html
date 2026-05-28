@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Changelog — Milens: What's New in Every Release</title>
+  <meta name="description" content="Every Milens release, documented. Track new tools, features, and improvements across versions from v0.5.0 to the latest release.">
+  <link rel="canonical" href="https://milens.dev/changelog">
+  <meta property="og:title" content="Milens Changelog — What's New in Every Release">
+  <meta property="og:description" content="Every Milens release, documented. Track new tools, features, and improvements across versions.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://milens.dev/changelog">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Milens Changelog — What's New">
+  <meta name="twitter:description" content="Every Milens release, documented. From v0.5.0 to the latest.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "Milens Changelog",
+    "description": "Every Milens release, documented. Track new tools, features, and improvements across versions from v0.5.0 to the latest release.",
+    "url": "https://milens.dev/changelog",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "Milens",
+      "url": "https://milens.dev"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #7ee787;
+      --orange: #d2991d;
+      --red: #f85149;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --mesh-1: rgba(88,166,255,0.06);
+      --mesh-2: rgba(126,231,135,0.04);
+      --mesh-3: rgba(210,153,29,0.03);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      position: relative;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 10%, var(--mesh-1) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 30%, var(--mesh-2) 0%, transparent 55%),
+        radial-gradient(ellipse 70% 50% at 50% 80%, var(--mesh-3) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 90% 80%, var(--mesh-1) 0%, transparent 50%);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
+
+    /* ── Skip to Content ── */
+    .skip-link {
+      position: absolute;
+      top: -100px;
+      left: 16px;
+      background: var(--accent);
+      color: #fff;
+      padding: 8px 20px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.9em;
+      z-index: 200;
+      transition: top 0.2s;
+    }
+    .skip-link:focus { top: 10px; text-decoration: none; }
+
+    /* ── Focus Visible ── */
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      border-radius: 3px;
+    }
+
+    /* ── Reduced Motion ── */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      html { scroll-behavior: auto; }
+    }
+
+    /* ── Nav ── */
+    .nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; max-width: 1400px; margin: 0 auto; padding: 0 32px; }
+    .nav-logo { font-size: 1.2em; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .nav-logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 24px; }
+    .nav-links a { color: var(--muted); font-size: 0.9em; }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-links a.active { color: var(--accent); font-weight: 600; }
+    .nav-cta {
+      background: linear-gradient(135deg, var(--accent), #79b8ff);
+      box-shadow: 0 2px 10px rgba(88,166,255,0.25);
+      color: #fff !important;
+      padding: 6px 18px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.85em;
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .nav-cta:hover { box-shadow: 0 4px 16px rgba(88,166,255,0.4); text-decoration: none !important; transform: translateY(-1px); }
+
+    /* ── Hamburger ── */
+    .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 6px; flex-direction: column; gap: 5px; z-index: 110; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: var(--text); border-radius: 2px; transition: transform 0.25s, opacity 0.25s; }
+    .hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .hamburger.open span:nth-child(2) { opacity: 0; }
+    .hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    @media (max-width: 768px) {
+      .nav-links { position: fixed; top: 0; right: -100%; width: 280px; height: 100vh; background: rgba(22,27,34,0.98); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); flex-direction: column; padding: 80px 32px 32px; gap: 0; transition: right 0.3s ease; border-left: 1px solid var(--border); z-index: 105; }
+      .nav-links.open { right: 0; }
+      .nav-links a { padding: 14px 0; font-size: 1.05em; border-bottom: 1px solid var(--border); width: 100%; }
+      .nav-links a.nav-cta { margin-top: 16px; text-align: center; display: block; }
+      .hamburger { display: flex; }
+      .container { padding: 0 20px; }
+      .nav-inner { padding: 0 20px; }
+    }
+
+    /* ── Hero ── */
+    .hero { text-align: center; padding: clamp(48px, 6vw, 80px) 0 clamp(32px, 5vw, 60px); position: relative; z-index: 1; }
+    .hero h1 {
+      font-size: clamp(2em, 5vw, 3.2em);
+      color: var(--text);
+      line-height: 1.15;
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+    .hero h1 span { color: var(--accent); }
+    .hero .subtitle {
+      font-size: clamp(0.95em, 1.8vw, 1.18em);
+      color: var(--muted);
+      max-width: 780px;
+      margin: 0 auto 32px;
+      line-height: 1.6;
+    }
+    .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 24px; border-radius: var(--radius-sm);
+      font-weight: 600; font-size: clamp(0.85em, 1.4vw, 0.95em);
+      cursor: pointer; border: none; transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #79b8ff);
+      box-shadow: 0 4px 14px rgba(88,166,255,0.3);
+      color: #fff;
+    }
+    .btn-primary:hover { box-shadow: 0 6px 22px rgba(88,166,255,0.45); text-decoration: none; transform: translateY(-2px); }
+    .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .btn-outline:hover { border-color: var(--muted); text-decoration: none; transform: translateY(-2px); }
+    @media (max-width: 640px) { .hero-ctas { flex-direction: column; align-items: center; } .btn { width: 100%; justify-content: center; } }
+
+    /* ── Section Labels ── */
+    .section-label { display: block; text-transform: uppercase; letter-spacing: 0.08em; font-size: clamp(0.7em, 1.1vw, 0.78em); font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+
+    /* ── Timeline ── */
+    .timeline { padding: 24px 0 72px; position: relative; z-index: 1; }
+    .timeline-entry {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 48px;
+      opacity: 0;
+      animation: fadeInUp 0.5s ease forwards;
+    }
+    .timeline-entry:nth-child(1) { animation-delay: 0.05s; }
+    .timeline-entry:nth-child(2) { animation-delay: 0.15s; }
+    .timeline-entry:nth-child(3) { animation-delay: 0.25s; }
+    .timeline-entry:nth-child(4) { animation-delay: 0.35s; }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 700px) { .timeline-entry { flex-direction: column; gap: 16px; } }
+    .timeline-badge {
+      flex-shrink: 0;
+      width: 140px;
+      padding: 12px 18px;
+      background: rgba(210,153,29,0.1);
+      border: 1px solid rgba(210,153,29,0.3);
+      border-radius: var(--radius);
+      text-align: center;
+      align-self: flex-start;
+    }
+    .timeline-badge .version {
+      font-size: 1.25em;
+      font-weight: 700;
+      color: var(--orange);
+      display: block;
+    }
+    .timeline-badge .date {
+      font-size: 0.82em;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .timeline-card {
+      flex: 1;
+      background: rgba(22,27,34,0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
+    }
+    .timeline-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      border-color: var(--muted);
+    }
+    .timeline-card h3 {
+      font-size: 1.25em;
+      color: var(--text);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .timeline-card h3 .version-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--orange);
+      flex-shrink: 0;
+    }
+    .timeline-card ul {
+      list-style: none;
+    }
+    .timeline-card ul li {
+      padding: 6px 0;
+      font-size: 0.93em;
+      color: var(--muted);
+      line-height: 1.55;
+      display: flex;
+      gap: 10px;
+    }
+    .timeline-card ul li::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+      margin-top: 9px;
+    }
+    .timeline-card ul li.new { color: var(--green); font-weight: 500; }
+    .timeline-card ul li.new::before { background: var(--green); }
+
+    /* ── Subscribe Banner ── */
+    .subscribe { text-align: center; padding: 64px 0 80px; border-top: 1px solid var(--border); position: relative; z-index: 1; background: rgba(22,27,34,0.4); }
+    .subscribe h2 { font-size: clamp(1.5em, 3.5vw, 2.2em); color: var(--text); margin-bottom: 16px; }
+    .subscribe p { color: var(--muted); font-size: clamp(0.9em, 1.5vw, 1.1em); max-width: 640px; margin: 0 auto 28px; line-height: 1.6; }
+    .subscribe-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    @media (max-width: 640px) { .subscribe-btns { flex-direction: column; align-items: center; } .subscribe-btns .btn { width: 100%; justify-content: center; } }
+
+    /* ── Footer (4-column) ── */
+    .footer { border-top: 1px solid var(--border); padding: 64px 0 40px; position: relative; z-index: 1; }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 40px;
+      margin-bottom: 40px;
+    }
+    @media (max-width: 900px) { .footer-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .footer-grid { grid-template-columns: 1fr; gap: 28px; } }
+    .footer-brand .footer-logo { font-size: 1.15em; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .footer-brand .footer-logo span { color: var(--accent); }
+    .footer-brand p { color: var(--muted); font-size: 0.88em; line-height: 1.55; }
+    .footer-col h4 { font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text); font-weight: 700; margin-bottom: 14px; }
+    .footer-col a { display: block; color: var(--muted); font-size: 0.88em; padding: 4px 0; }
+    .footer-col a:hover { color: var(--text); text-decoration: none; }
+    .footer-bottom { text-align: center; border-top: 1px solid var(--border); padding-top: 28px; }
+    .footer-bottom p { color: var(--muted); font-size: 0.82em; }
+    .footer-bottom p + p { margin-top: 4px; }
+
+    html { scroll-behavior: smooth; }
+  </style>
+</head>
+<body>
+
+<!-- ── Skip to Content ── -->
+<a href="#main-content" class="skip-link">Skip to Content</a>
+
+<!-- ── Nav ── -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo"><span>&#9670;</span> Milens</a>
+    <button class="hamburger" id="hamburger" aria-label="Toggle menu" onclick="document.getElementById('navMenu').classList.toggle('open');this.classList.toggle('open');">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="nav-links" id="navMenu">
+      <a href="index.html">Home</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="skills.html">Skills</a>
+      <a href="scenarios.html">Scenarios</a>
+      <a href="security.html">Security</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="enterprise.html">Enterprise</a>
+      <a href="https://github.com/fuze210699/milens">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero" id="main-content">
+  <div class="container">
+    <h1>What&rsquo;s New<br><span>in Milens.</span></h1>
+    <p class="subtitle">Every release, documented. From the first public launch to the latest tools, features, and improvements.</p>
+    <div class="hero-ctas">
+      <a href="https://github.com/fuze210699/milens/releases" class="btn btn-primary">View on GitHub Releases</a>
+      <a href="#timeline" class="btn btn-outline">Changelog Timeline</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Timeline ── -->
+<section class="timeline" id="timeline">
+  <div class="container">
+
+    <!-- v0.8.0 -->
+    <div class="timeline-entry">
+      <div class="timeline-badge">
+        <span class="version">v0.8.0</span>
+        <span class="date">May 2026</span>
+      </div>
+      <div class="timeline-card">
+        <h3><span class="version-dot"></span> Regression Detection &amp; Dashboard Metrics</h3>
+        <ul>
+          <li class="new">Added <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">compare_impact</code> tool for regression detection — snapshot and compare blast radius graphs before and after edits to catch unexpected side effects</li>
+          <li class="new">New hook: <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">onFileChange</code> for live impact updates — triggered automatically when files are saved, keeping the knowledge graph fresh without manual re-analysis</li>
+          <li>Security scan expanded to 50+ rules with new coverage for supply chain attacks, prototype pollution, and deserialization vulnerabilities</li>
+          <li>Dashboard: metrics tab with TER (Token Efficiency Ratio), CQI (Code Quality Index), and UCR (Unused Code Ratio) charts for team-wide visibility</li>
+          <li>Improved AGENTS.md generation with domain-aware context grouping and symbol priority ranking</li>
+          <li>Performance: knowledge graph index rebuild 3x faster with incremental update support</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- v0.7.0 -->
+    <div class="timeline-entry">
+      <div class="timeline-badge">
+        <span class="version">v0.7.0</span>
+        <span class="date">April 2026</span>
+      </div>
+      <div class="timeline-card">
+        <h3><span class="version-dot"></span> Sub-Agent Prompts &amp; Skills Catalog</h3>
+        <ul>
+          <li class="new">7 pre-built sub-agent prompts: Planner, Reviewer, Tester, Architect, Security Auditor, Debugger, and Refactorer — each bundles multiple milens tools into a single, repeatable workflow</li>
+          <li class="new">Skills catalog: 6 curated skill files covering planning, code review, TDD, security audit, refactoring, and evaluation — with structured instructions for AI agents</li>
+          <li class="new">AGENTS.md auto-generator: analyzes codebase structure and generates a comprehensive AGENTS.md with domain summaries, key symbols, and workflow instructions</li>
+          <li class="new">Selective install profiles: <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">--profile core|developer|security|full</code> for targeted installations without unnecessary files</li>
+          <li>Enhanced domain clustering: files grouped into logical modules based on dependency graph analysis for better codebase navigation</li>
+          <li>Adapter packs updated for Claude Code, OpenCode, and Codex with full hook support</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- v0.6.0 -->
+    <div class="timeline-entry">
+      <div class="timeline-badge">
+        <span class="version">v0.6.0</span>
+        <span class="date">March 2026</span>
+      </div>
+      <div class="timeline-card">
+        <h3><span class="version-dot"></span> GitHub App &amp; Automation Pipeline</h3>
+        <ul>
+          <li class="new">GitHub App with PR review automation: automatic risk assessment comments on every pull request with per-symbol scores, heat maps, and test coverage indicators</li>
+          <li class="new">41 MCP tools total — up from 33 in v0.5.0, including semantic search, test impact, pre-commit check, dead code detection, and route analysis</li>
+          <li class="new">Hook system: <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">onSessionStart</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">onSessionEnd</code>, and <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">onPreCommit</code> hooks for automated workflows triggered by agent lifecycle events</li>
+          <li class="new">Learning &amp; Evolution pipeline: annotations across sessions, recall of past learnings, and auto-promotion of critical findings to permanent knowledge</li>
+          <li>Security scan upgraded: dependency audit with 34 CVE checks across npm, Python, Rust, Go, and Java ecosystems</li>
+          <li>Desktop dashboard (Electron): visual metrics, PR history, and team-wide code intelligence overview</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- v0.5.0 -->
+    <div class="timeline-entry">
+      <div class="timeline-badge">
+        <span class="version">v0.5.0</span>
+        <span class="date">February 2026</span>
+      </div>
+      <div class="timeline-card">
+        <h3><span class="version-dot"></span> Initial Public Release</h3>
+        <ul>
+          <li class="new">33 core MCP tools: symbol search, text grep, impact analysis, dependency graphs, context views, explain relationships, and more</li>
+          <li class="new">Knowledge graph engine: SQLite + FTS5 for real-time code intelligence with automatic symbol extraction, dependency resolution, and semantic search</li>
+          <li class="new">12 language support via tree-sitter WASM: TypeScript, JavaScript, Python, Java, Go, Rust, PHP, Ruby, HTML, CSS, Vue, and more</li>
+          <li>Security scanner with 20 built-in rules: secret detection, injection prevention, hidden unicode scanning, and dangerous pattern detection</li>
+          <li>CLI tools: init, analyze, serve, workflow, and hooks — all accessible via <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">npx milens</code></li>
+          <li>3 harness adapters at launch: Claude Code, Cursor, and OpenCode with full MCP configuration</li>
+          <li>MIT licensed. Open source. No vendor lock-in.</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── Subscribe ── -->
+<section class="subscribe">
+  <div class="container">
+    <h2>Stay up to date.</h2>
+    <p>Every release ships with detailed changelogs, upgrade guides, and migration notes. Watch the GitHub repository for notifications on new versions.</p>
+    <div class="subscribe-btns">
+      <a href="https://github.com/fuze210699/milens/releases" class="btn btn-primary">GitHub Releases</a>
+      <a href="https://github.com/fuze210699/milens" class="btn btn-outline">Star on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer class="footer" id="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="footer-logo"><span>&#9670;</span> Milens</div>
+        <p>Open-source AI-DOS platform. 41 MCP tools, knowledge graphs, security scanning, and closed-loop AI development. MIT licensed, zero lock-in.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="index.html">Home</a>
+        <a href="index.html#pricing">Pricing</a>
+        <a href="security.html">Security</a>
+        <a href="scenarios.html">Scenarios</a>
+      </div>
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <a href="skills.html">Skills</a>
+        <a href="platforms.html">Platforms</a>
+        <a href="compare.html">Compare</a>
+        <a href="index.html#faq">FAQ</a>
+      </div>
+      <div class="footer-col">
+        <h4>Connect</h4>
+        <a href="https://github.com/fuze210699/milens">GitHub</a>
+        <a href="https://github.com/fuze210699/milens#readme">Docs</a>
+        <a href="https://github.com/apps/milens">Enterprise</a>
+        <a href="https://github.com/fuze210699/milens/blob/main/CONTRIBUTING.md">Contribute</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>Open Source &middot; MIT Licensed &middot; No vendor lock-in</p>
+      <p>Built for the vibe coding era. Milens &mdash; AI-DOS.</p>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

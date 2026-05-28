@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Learning — Milens Code Intelligence With Memory</title>
+  <meta name="description" content="Milens is the only code intelligence tool that learns. Agents annotate discoveries. Milens remembers. Patterns evolve into permanent rules.">
+  <meta name="keywords" content="AI coding memory, code intelligence learning, annotate, recall, evolve, confidence score, AGENTS.md">
+  <link rel="canonical" href="https://milens.io/learning">
+  <meta property="og:title" content="Milens Learning — Your Codebase Gets Smarter Every Session">
+  <meta property="og:description" content="Agents annotate discoveries. Milens remembers. Over time, patterns evolve into permanent rules. The only code intelligence tool with memory.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://milens.io/learning">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Milens Learning — Your Codebase Gets Smarter Every Session">
+  <meta name="twitter:description" content="Agents annotate discoveries. Milens remembers. Over time, patterns evolve into permanent rules.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Milens Learning Engine",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "All",
+    "description": "Self-learning code intelligence platform. Agents annotate discoveries with confidence scores. Patterns evolve into permanent enforceable rules.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --glass: rgba(22, 27, 34, 0.65);
+      --border: #30363d;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-2: #3b82f6;
+      --green: #7ee787;
+      --orange: #d2991d;
+      --red: #f85149;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    .skip-link { position: absolute; top: -100px; left: 16px; background: var(--accent); color: #fff; padding: 8px 16px; border-radius: 0 0 6px 6px; z-index: 999; font-weight: 600; font-size: 0.9em; text-decoration: none; transition: top 0.2s; }
+    .skip-link:focus { top: 0; }
+
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; position: relative; overflow-x: hidden; }
+
+    .mesh-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .mesh-bg::before,
+    .mesh-bg::after { content: ''; position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.07; }
+    .mesh-bg::before { width: 700px; height: 700px; background: radial-gradient(circle, var(--accent), transparent 70%); top: -200px; right: -150px; animation: meshFloat1 20s ease-in-out infinite; }
+    .mesh-bg::after { width: 600px; height: 600px; background: radial-gradient(circle, var(--green), transparent 70%); bottom: -150px; left: -100px; animation: meshFloat2 24s ease-in-out infinite; }
+    @keyframes meshFloat1 { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(-60px, 40px) scale(1.1); } 66% { transform: translate(30px, -20px) scale(0.95); } }
+    @keyframes meshFloat2 { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(50px, -30px) scale(1.08); } 66% { transform: translate(-40px, 20px) scale(0.92); } }
+
+    .page-wrap { position: relative; z-index: 1; }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
+
+    /* ── Nav ── */
+    .nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.88); backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%); border-bottom: 1px solid var(--border); }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; max-width: 1400px; margin: 0 auto; padding: 0 32px; }
+    .nav-logo { font-size: 1.2em; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .nav-logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 28px; }
+    .nav-links a { color: var(--muted); font-size: 0.9em; transition: color 0.15s; }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-links a.active { color: var(--accent); font-weight: 600; }
+    .nav-cta { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff !important; padding: 7px 18px; border-radius: var(--radius-sm); font-weight: 600; font-size: 0.85em; transition: transform 0.15s, box-shadow 0.15s !important; }
+    .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(88,166,255,0.3); text-decoration: none !important; }
+
+    .hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; background: none; border: none; padding: 4px; }
+    .hamburger span { display: block; width: 24px; height: 2px; background: var(--text); border-radius: 2px; transition: all 0.25s; }
+    .mobile-menu { display: none; position: fixed; top: 60px; left: 0; right: 0; bottom: 0; background: rgba(13,17,23,0.97); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 99; flex-direction: column; padding: 32px; gap: 8px; overflow-y: auto; }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu a { display: block; padding: 14px 20px; color: var(--text); font-size: 1.1em; font-weight: 500; border-radius: var(--radius); transition: background 0.15s; }
+    .mobile-menu a:hover { background: var(--card); text-decoration: none; }
+    .mobile-menu a.active { background: rgba(88,166,255,0.1); color: var(--accent); font-weight: 600; }
+    @media (max-width: 960px) {
+      .nav-links { display: none; }
+      .hamburger { display: flex; }
+    }
+
+    h1 { font-size: clamp(2rem, 4vw, 3.2rem); line-height: 1.15; letter-spacing: -0.02em; }
+    h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); }
+    h3 { font-size: clamp(1.1rem, 2vw, 1.35rem); }
+
+    .hero { text-align: center; padding: clamp(60px, 8vw, 100px) 0 clamp(40px, 6vw, 72px); }
+    .hero h1 { color: var(--text); margin-bottom: 20px; }
+    .hero h1 span { color: var(--accent); }
+    .hero .subtitle { font-size: clamp(1rem, 1.8vw, 1.2rem); color: var(--muted); max-width: 720px; margin: 0 auto 40px; line-height: 1.7; }
+    .hero-ctas { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 48px; }
+
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 28px; border-radius: var(--radius-sm); font-weight: 600; font-size: 0.95em; cursor: pointer; border: none; transition: all 0.2s; font-family: inherit; text-decoration: none; }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(88,166,255,0.35); text-decoration: none; }
+    .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .btn-outline:hover { border-color: var(--muted); transform: translateY(-2px); text-decoration: none; }
+    .btn-ghost { background: transparent; color: var(--accent); }
+    .btn-ghost:hover { text-decoration: none; opacity: 0.85; }
+
+    .section { padding: clamp(48px, 6vw, 88px) 0; }
+    .section-alt { background: var(--card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: clamp(48px, 6vw, 88px) 0; }
+    .section-label { display: block; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.78em; font-weight: 700; color: var(--muted); margin-bottom: 10px; }
+    .section-title { color: var(--text); margin-bottom: 14px; }
+    .section-subtitle { color: var(--muted); font-size: clamp(0.95rem, 1.5vw, 1.1rem); max-width: 680px; margin-bottom: 48px; line-height: 1.7; }
+
+    /* ── Cards ── */
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+    .card { background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s; }
+    .card:hover { transform: translateY(-4px); border-color: var(--muted); box-shadow: 0 12px 40px rgba(0,0,0,0.3); }
+
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+    .stagger > * { opacity: 0; animation: fadeInUp 0.5s ease-out forwards; }
+    .stagger > *:nth-child(1) { animation-delay: 0.05s; }
+    .stagger > *:nth-child(2) { animation-delay: 0.15s; }
+    .stagger > *:nth-child(3) { animation-delay: 0.25s; }
+    .stagger > *:nth-child(4) { animation-delay: 0.35s; }
+    .stagger > *:nth-child(5) { animation-delay: 0.45s; }
+    .stagger > *:nth-child(6) { animation-delay: 0.55s; }
+
+    /* ── How It Works Steps ── */
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 28px; }
+    .step-card { background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--border); border-radius: var(--radius); padding: 36px 32px; transition: transform 0.25s, border-color 0.25s; position: relative; overflow: hidden; }
+    .step-card:hover { transform: translateY(-4px); border-color: var(--muted); }
+    .step-num { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.3em; font-weight: 800; margin-bottom: 20px; }
+    .step-num.blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+    .step-num.green { background: rgba(126,231,135,0.15); color: var(--green); }
+    .step-num.orange { background: rgba(210,153,29,0.15); color: var(--orange); }
+    .step-card h3 { font-size: 1.2em; color: var(--text); margin-bottom: 10px; }
+    .step-card p { color: var(--muted); font-size: 0.93em; line-height: 1.65; }
+    .step-card code { background: rgba(88,166,255,0.1); color: var(--accent); padding: 2px 8px; border-radius: 4px; font-size: 0.88em; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+
+    /* ── Terminal ── */
+    .terminal { background: #0d1117; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: 32px 0; max-width: 780px; }
+    .terminal-bar { background: #161b22; padding: 10px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
+    .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .terminal-dot.red { background: #f85149; }
+    .terminal-dot.yellow { background: #d2991d; }
+    .terminal-dot.green { background: #7ee787; }
+    .terminal-bar span { color: var(--muted); font-size: 0.82em; margin-left: 8px; }
+    .terminal-body { padding: 20px 24px; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 0.86em; line-height: 1.7; overflow-x: auto; }
+    .terminal-body .prompt { color: var(--green); }
+    .terminal-body .check { color: var(--green); }
+    .terminal-body .dim { color: var(--muted); }
+    .terminal-body .warn { color: var(--orange); }
+    .terminal-body .comment { color: var(--muted); font-style: italic; }
+    .terminal-body .section-label { color: var(--accent); font-size: 0.85em; font-weight: 700; display: block; margin-top: 16px; margin-bottom: 4px; text-transform: none; letter-spacing: 0; }
+    .terminal-body .conf { color: var(--orange); }
+    .terminal-body .cmd { color: var(--accent); }
+    @media (max-width: 640px) { .terminal-body { font-size: 0.72em; padding: 14px 16px; } }
+
+    /* ── Confidence Cards ── */
+    .conf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+    .conf-card { background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 30px; transition: transform 0.25s, border-color 0.25s; }
+    .conf-card:hover { transform: translateY(-4px); border-color: var(--muted); }
+    .conf-range { display: inline-block; font-size: 1.4em; font-weight: 800; margin-bottom: 12px; padding: 4px 0; }
+    .conf-range.low { color: var(--muted); }
+    .conf-range.med { color: var(--orange); }
+    .conf-range.high { color: var(--green); }
+    .conf-card h3 { font-size: 1.1em; color: var(--text); margin-bottom: 8px; }
+    .conf-card p { color: var(--muted); font-size: 0.93em; line-height: 1.65; }
+
+    /* ── Endcap ── */
+    .endcap { text-align: center; padding: clamp(60px, 8vw, 96px) 0; }
+    .endcap h2 { font-size: clamp(1.8rem, 3.5vw, 2.6rem); color: var(--text); margin-bottom: 16px; }
+    .endcap h2 span { color: var(--accent); }
+    .endcap p { color: var(--muted); font-size: clamp(1rem, 1.6vw, 1.15rem); max-width: 600px; margin: 0 auto 32px; line-height: 1.7; }
+
+    /* ── Evolve Box ── */
+    .evolve-demo { max-width: 680px; margin: 0 auto; }
+    .terminal-inline { background: #0d1117; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 18px; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 0.88em; color: var(--text); margin-bottom: 12px; overflow-x: auto; }
+    .terminal-inline .cmd { color: var(--accent); }
+    .terminal-inline .comment { color: var(--muted); }
+
+    /* ── Info Banner ── */
+    .info-banner { display: inline-flex; align-items: center; gap: 8px; background: rgba(88,166,255,0.08); border: 1px solid rgba(88,166,255,0.2); border-radius: 100px; padding: 10px 22px; color: var(--accent); font-size: 0.88em; font-weight: 600; margin-bottom: 24px; }
+
+    /* ── Tag ── */
+    .tag { display: inline-block; background: rgba(88,166,255,0.12); color: var(--accent); border: 1px solid rgba(88,166,255,0.25); border-radius: 20px; padding: 4px 12px; font-size: 0.8em; font-weight: 600; margin: 4px 4px 4px 0; }
+    .tag.green { background: rgba(126,231,135,0.12); color: var(--green); border-color: rgba(126,231,135,0.25); }
+    .tag.orange { background: rgba(210,153,29,0.12); color: var(--orange); border-color: rgba(210,153,29,0.25); }
+
+    /* ── 4-Column Footer ── */
+    .footer { border-top: 1px solid var(--border); padding: clamp(40px, 5vw, 64px) 0 36px; }
+    .footer-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 40px; max-width: 1400px; margin: 0 auto 36px; padding: 0 32px; }
+    .footer-col h4 { font-size: 0.85em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text); margin-bottom: 16px; }
+    .footer-col a { display: block; color: var(--muted); font-size: 0.9em; padding: 4px 0; transition: color 0.15s; }
+    .footer-col a:hover { color: var(--text); text-decoration: none; }
+    .footer-col p { color: var(--muted); font-size: 0.9em; line-height: 1.7; }
+    .footer-bottom { text-align: center; border-top: 1px solid var(--border); padding-top: 24px; max-width: 1400px; margin: 0 auto; padding-left: 32px; padding-right: 32px; }
+    .footer-bottom p { color: var(--muted); font-size: 0.82em; }
+    .footer-bottom p + p { margin-top: 6px; }
+    @media (max-width: 768px) { .footer-grid { grid-template-columns: repeat(2, 1fr); gap: 32px; } }
+    @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; gap: 28px; } }
+
+    .text-center { text-align: center; }
+    html { scroll-behavior: smooth; }
+  </style>
+</head>
+<body>
+
+<div class="mesh-bg" aria-hidden="true"></div>
+<a href="#main-content" class="skip-link">Skip to content</a>
+
+<div class="page-wrap">
+
+<nav class="nav" aria-label="Main navigation">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo" aria-label="Milens home"><span>◆</span> Milens</a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="skills.html">Skills</a>
+      <a href="learning.html" class="active">Learning</a>
+      <a href="scenarios.html">Scenarios</a>
+      <a href="security.html">Security</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="enterprise.html">Enterprise</a>
+      <a href="https://github.com/fuze210699/milens">GitHub</a>
+    </div>
+    <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<div class="mobile-menu" id="mobileMenu">
+  <a href="index.html">Home</a>
+  <a href="platforms.html">Platforms</a>
+  <a href="skills.html">Skills</a>
+  <a href="learning.html" class="active">Learning</a>
+  <a href="scenarios.html">Scenarios</a>
+  <a href="security.html">Security</a>
+  <a href="pricing.html">Pricing</a>
+  <a href="enterprise.html">Enterprise</a>
+  <a href="https://github.com/fuze210699/milens">GitHub</a>
+</div>
+
+<main id="main-content">
+
+<!-- ── Hero ── -->
+<section class="hero">
+  <div class="container">
+    <div class="info-banner">Unique to Milens</div>
+    <h1>Your Codebase Gets<br><span>Smarter Every Session.</span></h1>
+    <p class="subtitle">Milens is the only code intelligence tool that learns. Agents annotate discoveries. Milens remembers. Over time, patterns evolve into permanent rules.</p>
+    <div class="hero-ctas">
+      <a href="#how" class="btn btn-primary">How It Works</a>
+      <a href="#journey" class="btn btn-outline">See the Journey</a>
+      <a href="https://github.com/fuze210699/milens" class="btn btn-ghost">View on GitHub &#x2192;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── How It Works ── -->
+<section class="section" id="how">
+  <div class="container">
+    <span class="section-label">How It Works</span>
+    <h2 class="section-title">Three steps. Your codebase learns.</h2>
+    <p class="section-subtitle">Every AI agent session becomes a learning opportunity. Discoveries are saved, recalled, and eventually promoted to permanent rules.</p>
+    <div class="steps stagger">
+      <div class="step-card">
+        <div class="step-num blue">1</div>
+        <h3>Annotate</h3>
+        <p>Agent discovers a bug, quirk, or pattern during a session. Saves it with a confidence score via <code>annotate({symbol, key, value})</code>. The observation persists across all future sessions.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num green">2</div>
+        <h3>Recall</h3>
+        <p>Next session, the agent auto-retrieves all annotations. <em>&ldquo;I know <code>createUser()</code> has a bug&mdash;call <code>normalizeEmail()</code> first.&rdquo;</em> Agents avoid repeating past mistakes.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num orange">3</div>
+        <h3>Evolve</h3>
+        <p>High-confidence patterns (&#x2265;0.9) are promoted to permanent <code>.agents/skills/*.md</code> files via <code>milens evolve</code>. Now enforced as rules for every agent, every session.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Session Journey ── -->
+<section class="section-alt" id="journey">
+  <div class="container">
+    <span class="section-label">Session Journey</span>
+    <h2 class="section-title">Watch the learning loop in action.</h2>
+    <p class="section-subtitle">From a single annotation to an enforced rule &mdash; here&rsquo;s how Milens turns agent discoveries into permanent codebase intelligence.</p>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+        <span>terminal ~ milens session</span>
+      </div>
+      <div class="terminal-body">
+        <span class="section-label">SESSION 1</span>
+        <span class="prompt">$</span> <span class="dim">annotate({symbol: "createUser", key: "bug",</span><br>
+        <span class="dim">    value: "Must call normalizeEmail() before createUser()"})</span><br>
+        <span class="check">&#x2713;</span> <span class="dim">Annotated. Confidence: </span><span class="conf">0.5</span><br><br>
+
+        <span class="section-label">SESSION 2</span>
+        <span class="prompt">$</span> <span class="dim">recall({symbol: "createUser"})</span><br>
+        <span class="warn">&#x26A0;</span> <span class="warn">Known issue:</span> <span class="dim">"Must call normalizeEmail() before createUser()"</span><br>
+        <span class="dim">Agent avoids the bug. Confidence &#x2191; </span><span class="conf">0.7</span><br><br>
+
+        <span class="section-label">SESSION 5</span>
+        <span class="dim">Confidence reaches </span><span class="conf">0.9</span><br>
+        <span class="prompt">$</span> <span class="cmd">milens evolve</span><br>
+        <span class="check">&#x2713;</span> <span class="dim">Promoted to </span><span class="cmd">.agents/skills/milens-bug/SKILL.md</span><br>
+        <span class="check">&#x2713;</span> <span class="dim">Now enforced for </span><span class="warn">ALL</span><span class="dim"> future sessions.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Confidence Scoring ── -->
+<section class="section" id="confidence">
+  <div class="container">
+    <span class="section-label">Confidence Scoring</span>
+    <h2 class="section-title">How confidence builds over time.</h2>
+    <p class="section-subtitle">Every annotation starts with a confidence score. As it&rsquo;s corroborated across sessions, the score rises&mdash;and high-confidence patterns get promoted to permanent rules.</p>
+    <div class="conf-grid stagger">
+      <div class="conf-card">
+        <span class="conf-range low">0.3 &ndash; 0.5</span>
+        <h3>Noted</h3>
+        <p>Agent noticed something worth remembering. Might be useful in future sessions. Low confidence means the agent will mention it but won&rsquo;t act on it aggressively.</p>
+      </div>
+      <div class="conf-card">
+        <span class="conf-range med">0.6 &ndash; 0.8</span>
+        <h3>Corroborated</h3>
+        <p>Multiple agents or sessions have confirmed the pattern. It&rsquo;s likely important. Agents will actively warn before touching the affected symbol. Confidence rises with each corroboration.</p>
+      </div>
+      <div class="conf-card">
+        <span class="conf-range high">0.9+</span>
+        <h3>Proven</h3>
+        <p>The pattern has been confirmed across enough sessions that it qualifies as a permanent rule. Auto-promoted to <code>.agents/skills/*.md</code> via <code>milens evolve</code>. Now enforced automatically.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Evolve Scheduling ── -->
+<section class="section-alt" id="evolve">
+  <div class="container">
+    <span class="section-label">Scheduling</span>
+    <h2 class="section-title">Automate the evolution.</h2>
+    <p class="section-subtitle">Don&rsquo;t remember to run evolve. Schedule it once and let Milens handle the rest.</p>
+    <div class="evolve-demo">
+      <div class="terminal-inline">
+        <span class="prompt" style="color:var(--green);">$</span> <span class="cmd">milens evolve</span>                        <span class="comment"># Run now</span>
+      </div>
+      <div class="terminal-inline">
+        <span class="prompt" style="color:var(--green);">$</span> <span class="cmd">milens evolve --schedule install</span>     <span class="comment"># Auto-run weekly via cron/schtasks</span>
+      </div>
+      <p style="color:var(--muted);font-size:0.9em;margin-top:20px;line-height:1.7;">Once scheduled, Milens checks annotations weekly. Any symbol whose confidence reaches 0.9 is automatically promoted. Your codebase evolves without anyone lifting a finger.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── Endcap ── -->
+<section class="endcap" id="endcap">
+  <div class="container">
+    <h2>Not just indexed. <span>Learned.</span></h2>
+    <p>Milens is the only code intelligence tool with memory. Annotations persist across sessions. Patterns evolve into rules. Your codebase gets smarter every time an agent touches it.</p>
+    <a href="#how" class="btn btn-primary">Start Learning</a>
+  </div>
+</section>
+
+</main>
+
+<!-- ── 4-Column Footer ── -->
+<footer class="footer">
+  <div class="footer-grid">
+    <div class="footer-col">
+      <h4>Product</h4>
+      <a href="index.html">Home</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="skills.html">Skills</a>
+      <a href="scenarios.html">Scenarios</a>
+    </div>
+    <div class="footer-col">
+      <h4>Resources</h4>
+      <a href="security.html">Security</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="enterprise.html">Enterprise</a>
+      <a href="https://github.com/fuze210699/milens#readme">Documentation</a>
+    </div>
+    <div class="footer-col">
+      <h4>Company</h4>
+      <a href="https://github.com/fuze210699/milens">GitHub</a>
+      <a href="https://github.com/fuze210699/milens/blob/main/CONTRIBUTING.md">Contribute</a>
+      <a href="https://github.com/fuze210699/milens/blob/main/LICENSE">MIT License</a>
+    </div>
+    <div class="footer-col">
+      <h4>About</h4>
+      <p>Milens is an open-source AI-DOS platform. 41 MCP tools, knowledge graphs, security scanning, and closed-loop AI development. Built for the vibe coding era.</p>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p>Open Source &middot; MIT Licensed &middot; No vendor lock-in</p>
+    <p>Built for the vibe coding era. Milens &mdash; AI-DOS.</p>
+  </div>
+</footer>
+
+</div>
+
+<script>
+(function() {
+  var hamburger = document.getElementById('hamburger');
+  var mobileMenu = document.getElementById('mobileMenu');
+  if (hamburger && mobileMenu) {
+    hamburger.addEventListener('click', function() {
+      var open = mobileMenu.classList.toggle('open');
+      hamburger.setAttribute('aria-expanded', open);
+    });
+    var links = mobileMenu.querySelectorAll('a');
+    links.forEach(function(a) {
+      a.addEventListener('click', function() {
+        mobileMenu.classList.remove('open');
+        hamburger.setAttribute('aria-expanded', 'false');
+      });
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

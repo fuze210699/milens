@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scenarios — Milens in Action</title>
+  <meta name="description" content="Real-world usage scenarios for Milens. Learn what tools to use for editing, code review, testing, security, debugging, and architecture tasks.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Milens",
+    "applicationCategory": "DeveloperApplication",
+    "description": "Code intelligence MCP tools for AI-powered development workflows",
+    "url": "https://github.com/fuze210699/milens"
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #7ee787;
+      --orange: #d2991d;
+      --red: #f85149;
+      --radius: 12px;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; position: relative; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: min(90vw, 1400px); margin: 0 auto; padding: 0 24px; }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: -1;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(88,166,255,0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(126,231,135,0.04) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(188,140,255,0.04) 0%, transparent 50%);
+    }
+
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+
+    .skip-link { position: absolute; top: -100%; left: 16px; padding: 8px 16px; background: var(--accent); color: #fff; border-radius: 10px; font-weight: 600; z-index: 200; font-size: 0.9em; }
+    .skip-link:focus { top: 8px; }
+
+    html { scroll-behavior: smooth; }
+
+    .section { border-top: 1px solid var(--border); padding-top: 72px; }
+    .section:first-of-type { border-top: none; }
+
+    .nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; max-width: min(90vw, 1400px); margin: 0 auto; padding: 0 24px; }
+    .nav-logo { font-size: clamp(1em, 2vw, 1.2em); font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .nav-logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 24px; }
+    .nav-links a { color: var(--muted); font-size: clamp(0.8em, 1.4vw, 0.9em); }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-links a.active { color: var(--accent); font-weight: 600; }
+    .nav-cta { background: linear-gradient(135deg, var(--accent), #79b8ff); color: #fff !important; padding: 6px 16px; border-radius: 10px; font-weight: 600; font-size: clamp(0.75em, 1.3vw, 0.85em); box-shadow: 0 4px 14px rgba(88,166,255,0.3); transition: all 0.2s ease; }
+    .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(88,166,255,0.4); text-decoration: none !important; }
+
+    .btn-primary { background: linear-gradient(135deg, var(--accent), #79b8ff); color: #fff; padding: 10px 24px; border-radius: 10px; font-weight: 600; font-size: clamp(0.85em, 1.4vw, 0.95em); box-shadow: 0 4px 14px rgba(88,166,255,0.3); transition: all 0.2s ease; border: none; cursor: pointer; display: inline-block; }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(88,166,255,0.4); text-decoration: none; }
+
+    .menu-btn { display: none; background: none; border: none; cursor: pointer; padding: 8px; flex-direction: column; gap: 5px; z-index: 101; }
+    .bar { width: 24px; height: 2px; background: var(--text); border-radius: 2px; transition: 0.3s; }
+    .menu-btn.open .bar:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+    .menu-btn.open .bar:nth-child(2) { opacity: 0; }
+    .menu-btn.open .bar:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+
+    @media (max-width: 768px) {
+      .menu-btn { display: flex; }
+      .nav-links { position: fixed; top: 56px; left: 0; right: 0; bottom: 0; background: var(--bg); flex-direction: column; padding: 32px 24px; gap: 20px; transform: translateX(100%); transition: transform 0.3s ease; display: flex; align-items: flex-start; }
+      .nav-links.open { transform: translateX(0); }
+      .nav-links a { font-size: 1.1em; }
+    }
+
+    .hero { text-align: center; padding-bottom: 48px; }
+    .hero h1 { font-size: clamp(1.8em, 5vw, 2.8em); color: var(--text); line-height: 1.2; margin-bottom: 16px; letter-spacing: -0.02em; }
+    .hero h1 span { color: var(--accent); }
+    .hero .subtitle { font-size: clamp(0.95em, 2vw, 1.1em); color: var(--muted); max-width: 700px; margin: 0 auto 32px; line-height: 1.6; }
+    .hero-stats { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .stat-badge { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 20px; font-size: clamp(0.72em, 1.2vw, 0.88em); color: var(--muted); text-align: center; }
+    .stat-badge strong { display: block; color: var(--text); font-size: clamp(1em, 1.6vw, 1.2em); }
+    @media (max-width: 640px) { .hero h1 { font-size: clamp(1.4em, 8vw, 1.8em); } .hero-stats { gap: 8px; } .stat-badge { padding: 10px 14px; font-size: clamp(0.68em, 3vw, 0.78em); } }
+
+    .stories { padding-bottom: 64px; }
+    .stories-intro { text-align: center; margin-bottom: 40px; }
+    .stories-intro .section-label { display: block; text-transform: uppercase; letter-spacing: 0.08em; font-size: clamp(0.68em, 1vw, 0.78em); font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+    .stories-intro h2 { font-size: clamp(1.4em, 3vw, 1.8em); color: var(--text); margin-bottom: 12px; }
+    .stories-intro p { color: var(--muted); font-size: clamp(0.9em, 1.5vw, 1.02em); max-width: 680px; margin: 0 auto; line-height: 1.6; }
+
+    .story-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; margin-bottom: 20px; transform: translateY(0); transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; display: grid; grid-template-columns: 48px 1fr; gap: 24px; align-items: start; }
+    .story-card:hover { border-color: var(--muted); transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+    .story-card.featured { border-color: var(--accent); background: linear-gradient(135deg, rgba(88,166,255,0.04) 0%, var(--card) 100%); }
+    .story-card.featured:hover { box-shadow: 0 8px 36px rgba(88,166,255,0.15); }
+    .story-num { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: clamp(1em, 1.6vw, 1.2em); font-weight: 800; flex-shrink: 0; }
+    .story-num.blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+    .story-num.green { background: rgba(126,231,135,0.15); color: var(--green); }
+    .story-num.orange { background: rgba(210,153,29,0.15); color: var(--orange); }
+    .story-num.red { background: rgba(248,81,73,0.15); color: var(--red); }
+    .story-num.purple { background: rgba(188,140,255,0.15); color: #bc8cff; }
+
+    .story-top { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+    .story-title { font-size: clamp(1em, 1.8vw, 1.15em); font-weight: 700; color: var(--text); }
+    .story-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+    .story-tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: clamp(0.62em, 1vw, 0.72em); font-weight: 700; }
+    .story-tag.scale { background: rgba(88,166,255,0.12); color: var(--accent); border: 1px solid rgba(88,166,255,0.25); }
+    .story-tag.team { background: rgba(126,231,135,0.12); color: var(--green); border: 1px solid rgba(126,231,135,0.25); }
+    .story-tag.role { background: rgba(210,153,29,0.12); color: var(--orange); border: 1px solid rgba(210,153,29,0.25); }
+
+    .story-desc { color: var(--muted); font-size: clamp(0.83em, 1.4vw, 0.93em); line-height: 1.6; margin-bottom: 16px; }
+
+    .story-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: clamp(0.68em, 1.1vw, 0.78em); }
+    .story-step { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; color: var(--green); white-space: nowrap; }
+    .story-step.dim { color: var(--muted); }
+    .story-arrow { color: var(--muted); font-size: 0.9em; font-weight: 700; }
+    .story-outcome { color: var(--text); font-size: clamp(0.8em, 1.3vw, 0.9em); line-height: 1.5; padding: 12px 16px; background: rgba(126,231,135,0.06); border: 1px solid rgba(126,231,135,0.15); border-radius: 6px; }
+    .story-outcome strong { color: var(--green); white-space: nowrap; }
+    @media (max-width: 640px) { .story-card { grid-template-columns: 1fr; padding: 20px; } .story-flow { gap: 4px; } .story-step { padding: 6px 10px; font-size: clamp(0.62em, 2.5vw, 0.72em); } }
+
+    .tabs { padding-bottom: 32px; text-align: center; }
+    .tabs-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    .tab-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 8px 18px; border-radius: 20px; font-size: clamp(0.75em, 1.2vw, 0.85em); font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+    .tab-btn:hover { border-color: var(--muted); color: var(--text); }
+    .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .scenarios { padding-bottom: 64px; }
+    .scenario-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    @media (max-width: 900px) { .scenario-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px) { .scenario-grid { grid-template-columns: 1fr; } }
+
+    .scenario-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; transform: translateY(0); transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s; display: flex; flex-direction: column; }
+    .scenario-card:hover { border-color: var(--muted); transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+    .scenario-card.hidden { display: none; }
+
+    .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .card-icon { font-size: clamp(1.1em, 1.8vw, 1.3em); }
+    .card-name { font-size: clamp(0.9em, 1.5vw, 1em); font-weight: 700; color: var(--text); }
+    .card-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: clamp(0.62em, 1vw, 0.72em); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-left: auto; }
+    .card-badge.editing { background: rgba(88,166,255,0.12); color: var(--accent); border: 1px solid rgba(88,166,255,0.25); }
+    .card-badge.review { background: rgba(210,153,29,0.12); color: var(--orange); border: 1px solid rgba(210,153,29,0.25); }
+    .card-badge.testing { background: rgba(126,231,135,0.12); color: var(--green); border: 1px solid rgba(126,231,135,0.25); }
+    .card-badge.security { background: rgba(248,81,73,0.12); color: var(--red); border: 1px solid rgba(248,81,73,0.25); }
+    .card-badge.debugging { background: rgba(188,140,255,0.12); color: #bc8cff; border: 1px solid rgba(188,140,255,0.25); }
+    .card-badge.architecture { background: rgba(255,171,105,0.12); color: #ffab69; border: 1px solid rgba(255,171,105,0.25); }
+    .card-badge.discovery { background: rgba(139,148,158,0.12); color: var(--muted); border: 1px solid rgba(139,148,158,0.25); }
+
+    .card-says { color: var(--muted); font-size: clamp(0.68em, 1vw, 0.78em); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 4px; }
+    .card-quote { color: var(--text); font-size: clamp(0.85em, 1.4vw, 0.95em); font-style: italic; margin-bottom: 14px; padding-left: 10px; border-left: 2px solid var(--border); }
+
+    .card-tool-label { color: var(--muted); font-size: clamp(0.68em, 1vw, 0.78em); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 4px; }
+    .card-tool { background: #0d1117; border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: clamp(0.7em, 1.1vw, 0.8em); color: var(--green); line-height: 1.6; margin-bottom: 14px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+
+    .card-result-label { color: var(--muted); font-size: clamp(0.68em, 1vw, 0.78em); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 4px; }
+    .card-result { color: var(--muted); font-size: clamp(0.78em, 1.2vw, 0.88em); line-height: 1.5; flex: 1; }
+
+    .empty-state { grid-column: 1 / -1; text-align: center; padding: 48px 24px; color: var(--muted); }
+    .empty-state p { font-size: clamp(0.9em, 1.4vw, 1em); }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .stagger-children > * {
+      opacity: 0;
+      animation: fadeInUp 0.6s ease forwards;
+    }
+    .stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+    .stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
+    .stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
+    .stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
+    .stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+    .stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
+    .stagger-children > *:nth-child(7) { animation-delay: 0.35s; }
+    .stagger-children > *:nth-child(8) { animation-delay: 0.4s; }
+    .stagger-children > *:nth-child(9) { animation-delay: 0.45s; }
+    .stagger-children > *:nth-child(10) { animation-delay: 0.5s; }
+    .stagger-children > *:nth-child(11) { animation-delay: 0.55s; }
+    .stagger-children > *:nth-child(12) { animation-delay: 0.6s; }
+    .stagger-children > *:nth-child(13) { animation-delay: 0.65s; }
+    .stagger-children > *:nth-child(14) { animation-delay: 0.7s; }
+    .stagger-children > *:nth-child(15) { animation-delay: 0.75s; }
+
+    .footer { border-top: 1px solid var(--border); padding: 48px 0 32px; }
+    .footer-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; }
+    .footer-col h4 { color: var(--text); font-size: clamp(0.8em, 1.2vw, 0.9em); font-weight: 700; margin-bottom: 12px; }
+    .footer-col a { display: block; color: var(--muted); font-size: clamp(0.75em, 1.2vw, 0.85em); margin-bottom: 8px; }
+    .footer-col a:hover { color: var(--text); text-decoration: none; }
+    .footer-brand .nav-logo { margin-bottom: 8px; font-size: clamp(1em, 1.6vw, 1.1em); }
+    .footer-brand p { color: var(--muted); font-size: clamp(0.75em, 1.2vw, 0.85em); line-height: 1.5; }
+    .footer-copy { margin-top: 12px; font-size: clamp(0.68em, 1vw, 0.78em); opacity: 0.7; }
+    @media (max-width: 768px) { .footer-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to content</a>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo"><span>◆</span> Milens</a>
+    <button class="menu-btn" id="menuBtn" aria-label="Toggle menu">
+      <span class="bar"></span>
+      <span class="bar"></span>
+      <span class="bar"></span>
+    </button>
+    <div class="nav-links" id="navLinks">
+      <a href="index.html">Home</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="skills.html">Skills</a>
+      <a href="scenarios.html" class="active">Scenarios</a>
+      <a href="index.html#security">Security</a>
+      <a href="index.html#pricing">Pricing</a>
+      <a href="enterprise.html">Enterprise</a>
+      <a href="https://github.com/fuze210699/milens">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero section" id="main-content">
+  <div class="container">
+    <h1>Milens <span>in Action</span></h1>
+    <p class="subtitle">From one-command onboarding to enterprise multi-agent pipelines — see how Milens transforms development at every scale. 10 workflow stories + 24 tactical scenarios.</p>
+    <div class="hero-stats">
+      <div class="stat-badge"><strong>15</strong> Workflow Stories</div>
+      <div class="stat-badge"><strong>36</strong> Tool Scenarios</div>
+      <div class="stat-badge"><strong>41</strong> MCP Tools</div>
+      <div class="stat-badge"><strong>7</strong> Agent Harnesses</div>
+    </div>
+  </div>
+</section>
+
+<section class="stories section">
+  <div class="container stagger-children">
+    <div class="stories-intro">
+      <span class="section-label">Workflow Stories</span>
+      <h2>Not just tools. Complete workflows.</h2>
+      <p>Each story chains multiple Milens tools into a real workflow — the kind that saves hours or days. Pick your scale: startup, enterprise, legacy, or greenfield.</p>
+    </div>
+
+    <div class="story-card featured">
+      <div class="story-num blue">1</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">New Developer: Productive in 1 Hour</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Any Scale</span>
+            <span class="story-tag team">New Hire</span>
+            <span class="story-tag role">Onboarding</span>
+          </div>
+        </div>
+        <p class="story-desc">A new developer joins a 500k-line codebase. Zero documentation. Instead of weeks reading code, they ask the AI agent to explain the codebase — and Milens feeds it exactly what it needs, in the right order, with minimal tokens.</p>
+        <div class="story-flow">
+          <span class="story-step">codebase_summary()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">domains()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">routes()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">context({name: "OrderService"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">...start coding</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> Developer understands the project structure, key entry points, and the module they need to work on — all in under 60 minutes. Milens keeps the AI agent context under 1000 tokens per call.</div>
+      </div>
+    </div>
+
+    <div class="story-card">
+      <div class="story-num green">2</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">Startup: Ship Features Daily (2–5 Devs)</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Small Team</span>
+            <span class="story-tag team">2–5 Devs</span>
+            <span class="story-tag role">Velocity</span>
+          </div>
+        </div>
+        <p class="story-desc">A 4-person startup needs to move fast. Every PR must be safe, tested, and reviewed — but there's no dedicated QA or security team. Milens acts as the automated safety net.</p>
+        <div class="story-flow">
+          <span class="story-step">init --profile full</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">impact({target: "Payment"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">test_plan({name: "Payment"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">review_pr()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">pre_commit_check()</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> Every commit: blast-radius checked, tests planned, PR reviewed, security scanned. All automated. 4 devs ship like a 10-person team. No dedicated QA needed.</div>
+      </div>
+    </div>
+
+    <div class="story-card">
+      <div class="story-num orange">3</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">Enterprise: Monorepo with 200+ Engineers</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Large Enterprise</span>
+            <span class="story-tag team">200+ Devs</span>
+            <span class="story-tag role">Governance</span>
+          </div>
+        </div>
+        <p class="story-desc">A company with 15 microservices in one monorepo. Changing a shared type in <code>@company/common</code> could break 12 services. Milens indexes all 15 repos and tracks cross-repo impact automatically.</p>
+        <div class="story-flow">
+          <span class="story-step">repos()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">impact({target: "UserDTO", depth: 5})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">review_pr({ref: "main"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">orchestrate()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">test_impact()</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> Before merging any shared-type change: see exactly which 12 services break, get risk scores per service, know which tests to run, and get a structured action plan — automatically.</div>
+      </div>
+    </div>
+
+    <div class="story-card">
+      <div class="story-num red">4</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">Legacy Codebase: Migrate Without Fear</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Legacy</span>
+            <span class="story-tag team">Any Team</span>
+            <span class="story-tag role">Migration</span>
+          </div>
+        </div>
+        <p class="story-desc">A 10-year-old PHP monolith with 300k lines and zero tests. The team needs to extract the billing module into a microservice. No one knows what's safe to touch.</p>
+        <div class="story-flow">
+          <span class="story-step">find_dead_code()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">domains()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">trace({name: "billingProcess", direction: "from"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">impact({target: "Invoice"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">annotate({symbol: "Invoice", key: "migration", value: "extracted to svc-billing"})</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> Dead code removed first (safely). Billing domain isolated via graph analysis. Full downstream trace of every function the module touches. Annotations track migration progress across multiple sessions and agents.</div>
+      </div>
+    </div>
+
+    <div class="story-card featured">
+      <div class="story-num purple">5</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">Multi-Agent Pipeline: 5 Agents, 1 Feature</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Any Scale</span>
+            <span class="story-tag team">AI-Native Team</span>
+            <span class="story-tag role">Automation</span>
+          </div>
+        </div>
+        <p class="story-desc">A feature request goes through 5 specialized AI agents — Planner, Coder, Reviewer, Tester, Security — each with its own Milens session. Handoffs preserve context, annotations track decisions, and nothing gets lost.</p>
+        <div class="story-flow">
+          <span class="story-step">session_start("planner")</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">impact + test_plan</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">handoff(to: "coder")</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">edit_check + implement</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">handoff(to: "reviewer")</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">review_pr + review_symbol</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">handoff(to: "tester")</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">test_impact + test_generate</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">handoff(to: "security")</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">security_scan + fix_apply</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> Planner analyzes blast radius → Coder implements with real-time safety checks → Reviewer scores every changed symbol → Tester auto-generates test files → Security scans and auto-fixes. Each handoff transfers full context. Audit trail via annotations.</div>
+      </div>
+    </div>
+
+    <div class="story-card">
+      <div class="story-num blue">6</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">CI/CD: Automated Quality Gate</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Any Scale</span>
+            <span class="story-tag team">DevOps</span>
+            <span class="story-tag role">Pipeline</span>
+          </div>
+        </div>
+        <p class="story-desc">Every PR gets a Milens quality gate before merge. No human reviewer needed for routine changes. Risky changes get flagged automatically for human attention.</p>
+        <div class="story-flow">
+          <span class="story-step">detect_changes()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">pre_commit_check()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">review_pr()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">test_impact()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">orchestrate()</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> GitHub App auto-comments on every PR: risk scores, affected tests, dead code introduced, coverage gaps. Low-risk PRs auto-merge. High-risk PRs ping the right team. Zero manual triage.</div>
+      </div>
+    </div>
+
+    <div class="story-card">
+      <div class="story-num red">7</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">Security Compliance: SOC2 / ISO 27001 Ready</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Enterprise</span>
+            <span class="story-tag team">Security Team</span>
+            <span class="story-tag role">Compliance</span>
+          </div>
+        </div>
+        <p class="story-desc">A fintech company needs SOC2 compliance. Every commit must be scanned for secrets, injection, and data leaks. Auditors need evidence of continuous monitoring.</p>
+        <div class="story-flow">
+          <span class="story-step">security_scan({scope: "all", severity: "LOW"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">security_scan({scope: "secrets"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">fix_apply({ruleId: "..."})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">annotate({key: "security", value: "audited 2026-05-28"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">recall({key: "security"})</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> 50+ rules run on every commit. Secrets caught pre-push. Auto-fixes create auditable backups. Annotations provide timestamped evidence. Recall produces audit trail on demand. SOC2 evidence: done.</div>
+      </div>
+    </div>
+
+    <div class="story-card">
+      <div class="story-num orange">8</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">Tech Debt Sprint: From Chaos to Backlog</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Any Scale</span>
+            <span class="story-tag team">Engineering Lead</span>
+            <span class="story-tag role">Maintenance</span>
+          </div>
+        </div>
+        <p class="story-desc">Your team knows there's tech debt but can't quantify it. Is it 20 hours? 200 hours? Milens turns vague "we should clean up" into a prioritized, risk-scored backlog in 10 minutes.</p>
+        <div class="story-flow">
+          <span class="story-step">find_dead_code({limit: 100})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">test_coverage_gaps({limit: 50})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">review_symbol({name: "..."})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">impact({target: "...", depth: 3})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">annotate({key: "refactor", value: "priority: P1, risk: LOW, effort: 2h"})</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> 100 dead symbols found. 50 untested high-risk symbols surfaced. Each scored by blast radius. Annotations tag priority and effort. Your tech debt backlog writes itself — with actual data, not guesswork.</div>
+      </div>
+    </div>
+
+    <div class="story-card">
+      <div class="story-num purple">9</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">Bug Hunt: Production Incident in 20 Minutes</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Any Scale</span>
+            <span class="story-tag team">On-Call</span>
+            <span class="story-tag role">Incident Response</span>
+          </div>
+        </div>
+        <p class="story-desc">Payment processing is failing. Error: "Transaction timeout" at <code>PaymentGateway.process()</code>. Thousands of users affected. You need the root cause NOW — not after reading 50 files.</p>
+        <div class="story-flow">
+          <span class="story-step">trace({name: "PaymentGateway.process", direction: "to"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">smart_context({name: "PaymentGateway", intent: "debug"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">explain_relationship({from: "PaymentGateway", to: "BankAdapter"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">compare_impact({name: "PaymentGateway", action: "snapshot"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">...fix & deploy</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> Trace shows the exact call chain: API → PaymentController → PaymentGateway → BankAdapter (where it times out). Smart context reveals what changed. compare_impact shows the regression diff. Root cause in 20 min, not 4 hours.</div>
+      </div>
+    </div>
+
+    <div class="story-card featured">
+      <div class="story-num green">10</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">Greenfield: Best Practices From Day Zero</span>
+          <div class="story-tags">
+            <span class="story-tag scale">New Project</span>
+            <span class="story-tag team">Any Team</span>
+            <span class="story-tag role">Foundation</span>
+          </div>
+        </div>
+        <p class="story-desc">Starting a new project. You want AI agents to follow your conventions, write tested code, and never commit secrets. Milens sets up the guardrails before the first line of code.</p>
+        <div class="story-flow">
+          <span class="story-step">init --profile full --interactive</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">analyze -p . --force --skills</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">AGENTS.md generated</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">6 skill files installed</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">50+ security rules active</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">pre-commit hooks ready</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> One command. AGENTS.md tells every AI agent your conventions. Skills define workflows. Security rules run on every commit. Pre-commit hooks block risky changes. Your project starts with enterprise-grade guardrails — at zero cost.</div>
+      </div>
+    </div>
+
+    <div class="story-card featured">
+      <div class="story-num green">11</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">The Self-Learning Codebase</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Any Scale</span>
+            <span class="story-tag team">All Teams</span>
+            <span class="story-tag role">AI Learning</span>
+          </div>
+        </div>
+        <p class="story-desc">An AI agent discovers a subtle bug in <code>createUser()</code>: "must call <code>normalizeEmail()</code> first or it corrupts data." This knowledge shouldn't die when the session ends. Milens makes your codebase <em>learn</em> — and the agent gets smarter every session.</p>
+        <div class="story-flow">
+          <span class="story-step">annotate({symbol: "createUser", key: "bug", value: "Call normalizeEmail() first"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">Session 2</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">recall({symbol: "createUser"})</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">session_context()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">Session 5: confidence=0.9</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">evolve</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> Session 1: agent finds and annotates the bug. Session 2: agent auto-recalls the warning before touching <code>createUser()</code>. Session 5: confidence reaches 0.9 → <code>milens evolve</code> promotes it to <code>.agents/skills/milens-bug/SKILL.md</code>. Now enforced as a permanent rule. Your codebase literally gets smarter over time. No other tool does this.</div>
+      </div>
+    </div>
+
+    <div class="story-card">
+      <div class="story-num purple">12</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">Context Never Dies: The Hook System</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Any Scale</span>
+            <span class="story-tag team">AI-Native</span>
+            <span class="story-tag role">Continuity</span>
+          </div>
+        </div>
+        <p class="story-desc">AI agents have context windows (~200k tokens). When they fill up, the agent forgets everything — all the conventions it learned, all the bugs it found. Milens hooks automate context persistence: save before compaction, restore after. The agent never truly resets.</p>
+        <div class="story-flow">
+          <span class="story-step">hook_preCompact()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">save metrics snapshot</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">hook_postCompact()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">recall annotations</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">session_start()</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">annotate + recall</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> 6 hooks automate everything: <code>onSessionStart</code> refreshes index + recalls warnings. <code>onSessionEnd</code> auto-reviews changes + annotates. <code>onPreCommit</code> runs safety checks. <code>onFileChange</code> live-updates impact. <code>onPreCompact</code> saves before context loss. <code>onPostCompact</code> restores after. Agent works for hours without losing a thing.</div>
+      </div>
+    </div>
+
+    <div class="story-card">
+      <div class="story-num red">13</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">Zero-Trust: Fully Offline Intelligence</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Enterprise</span>
+            <span class="story-tag team">Security Team</span>
+            <span class="story-tag role">Compliance</span>
+          </div>
+        </div>
+        <p class="story-desc">Your source code is your most sensitive asset. Sending it to cloud AI APIs is a non-starter for defense contractors, banks, hospitals, and anyone under GDPR/HIPAA/ITAR. Milens runs entirely on your machine. Zero network. Zero telemetry. Zero external calls.</p>
+        <div class="story-flow">
+          <span class="story-step">npx milens init</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">analyze -p . --force</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">SQLite + tree-sitter WASM (local)</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">serve --http --port 3100</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">41 tools over localhost MCP</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> All 41 tools work completely offline. Knowledge graph stored in local SQLite. Tree-sitter runs as WASM — no native binaries. MCP server binds 127.0.0.1 only. No API keys, no cloud dependency, no telemetry. Defense-grade code intelligence without defense-grade complexity.</div>
+      </div>
+    </div>
+
+    <div class="story-card featured">
+      <div class="story-num orange">14</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">Standardize Your AI Team</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Enterprise</span>
+            <span class="story-tag team">Team Lead / CTO</span>
+            <span class="story-tag role">Governance</span>
+          </div>
+        </div>
+        <p class="story-desc">5 developers, 5 AI agents, 5 different coding styles. Chaos. Milens auto-generates <code>AGENTS.md</code> from your actual codebase conventions — not a generic template. Skill files enforce workflows. Security rules run on every commit. And <code>evolve</code> turns learned patterns into permanent rules.</p>
+        <div class="story-flow">
+          <span class="story-step">init --profile full --interactive</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">AGENTS.md auto-generated</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">6 skill files installed</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">50+ security rules active</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">evolve --schedule install</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> Every agent reads the same AGENTS.md — "use tabs, not spaces", "always run impact before editing", "never commit without detect_changes". Conventions enforced, not suggested. <code>evolve</code> runs weekly via cron: high-confidence patterns auto-promote to permanent rules. One command. One standard. Zero chaos.</div>
+      </div>
+    </div>
+
+    <div class="story-card">
+      <div class="story-num blue">15</div>
+      <div>
+        <div class="story-top">
+          <span class="story-title">60% Token Savings = $1,000s Saved Monthly</span>
+          <div class="story-tags">
+            <span class="story-tag scale">Any Scale</span>
+            <span class="story-tag team">Cost-Aware</span>
+            <span class="story-tag role">Optimization</span>
+          </div>
+        </div>
+        <p class="story-desc">AI agents charge per token. Every time your agent reads a full file to understand one function, you're burning cash. Milens' compact format cuts 40-60% of tokens. <code>codebase_summary</code> is ~500 tokens for the entire project. <code>smart_context</code> returns only what your intent needs. For a 10-person team using AI daily, this saves thousands per month.</p>
+        <div class="story-flow">
+          <span class="story-step">codebase_summary() → ~500 tokens</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">smart_context({intent: "edit"}) → callers only</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">overview() → 1 call vs 3 separate</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">context({detail: "L0"}) → names only</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step dim">$1000s saved/month</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> Compact format <code>name [kind] file:line</code> vs raw code blocks. Detail levels L0/L1/L2 control output size. <code>overview</code> combines 3 tools in 1 call (saves 2 round trips). <code>smart_context</code> filters by intent. For a team making 200 tool calls/day, 60% token savings = real budget impact. Your CFO will love this page.</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="tabs section">
+  <div class="container">
+    <div class="tabs-row" id="tabButtons">
+      <button class="tab-btn active" data-category="all">All</button>
+      <button class="tab-btn" data-category="editing">Editing</button>
+      <button class="tab-btn" data-category="review">Code Review</button>
+      <button class="tab-btn" data-category="testing">Testing</button>
+      <button class="tab-btn" data-category="security">Security</button>
+      <button class="tab-btn" data-category="debugging">Debugging</button>
+      <button class="tab-btn" data-category="architecture">Architecture</button>
+      <button class="tab-btn" data-category="discovery">Discovery</button>
+    </div>
+  </div>
+</section>
+
+<section class="scenarios section">
+  <div class="container">
+    <div class="scenario-grid stagger-children" id="scenarioGrid">
+
+      <div class="scenario-card" data-category="editing">
+        <div class="card-header">
+          <span class="card-icon">💥</span>
+          <span class="card-name">Check Blast Radius</span>
+          <span class="card-badge editing">Editing</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"sửa hàm loginHandler"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">impact({target: "loginHandler", depth: 3})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Shows every symbol that breaks if <code>loginHandler</code> changes. Depth-1: 3 dependents. Depth-2: 8. Depth-3: 14. If depth-1 > 5, Milens warns you before editing.</div>
+      </div>
+
+      <div class="scenario-card" data-category="editing">
+        <div class="card-header">
+          <span class="card-icon">🗑️</span>
+          <span class="card-name">Delete a Symbol Safely</span>
+          <span class="card-badge editing">Editing</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"xóa oldHelper đi"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">grep({pattern: "oldHelper"})<br>impact({target: "oldHelper"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Finds ALL text references (templates, configs, docs, routes) + all code dependents. Nothing is missed — grep catches what impact can't see.</div>
+      </div>
+
+      <div class="scenario-card" data-category="editing">
+        <div class="card-header">
+          <span class="card-icon">✏️</span>
+          <span class="card-name">Rename a Symbol</span>
+          <span class="card-badge editing">Editing</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"đổi tên getUser thành fetchUser"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">grep({pattern: "getUser"})<br>impact({target: "getUser", direction: "upstream"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Combines grep (text search across all files) + impact (code-level dependents). Shows exactly which files need updating before you touch anything.</div>
+      </div>
+
+      <div class="scenario-card" data-category="editing">
+        <div class="card-header">
+          <span class="card-icon">🔒</span>
+          <span class="card-name">Safe Commit</span>
+          <span class="card-badge editing">Editing</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"commit thôi"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">detect_changes({ref: "HEAD"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Scans git diff, returns only the symbols that actually changed + their direct dependents. Know exactly what you're committing before you commit.</div>
+      </div>
+
+      <div class="scenario-card" data-category="review">
+        <div class="card-header">
+          <span class="card-icon">📊</span>
+          <span class="card-name">PR Risk Assessment</span>
+          <span class="card-badge review">Review</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"review PR này"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">review_pr({ref: "HEAD"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Scores every changed symbol CRITICAL, HIGH, MEDIUM, or LOW based on heat (incoming refs), dependents, and test coverage. Instantly see which files are risky.</div>
+      </div>
+
+      <div class="scenario-card" data-category="review">
+        <div class="card-header">
+          <span class="card-icon">🎯</span>
+          <span class="card-name">Deep-Dive a Symbol</span>
+          <span class="card-badge review">Review</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"hàm handlePayment risky không?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">review_symbol({name: "handlePayment"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Returns role + heat + full dependent list + test status + risk level + actionable recommendation. One call, complete picture.</div>
+      </div>
+
+      <div class="scenario-card" data-category="review">
+        <div class="card-header">
+          <span class="card-icon">🧹</span>
+          <span class="card-name">Find Dead Code</span>
+          <span class="card-badge review">Review</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"có dead code không?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">find_dead_code({limit: 30})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Lists all exported symbols with zero incoming references. Filter by kind (function, class, method) to find unused code instantly.</div>
+      </div>
+
+      <div class="scenario-card" data-category="review">
+        <div class="card-header">
+          <span class="card-icon">🚦</span>
+          <span class="card-name">Pre-Commit Gate</span>
+          <span class="card-badge review">Review</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"check pre-commit"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">pre_commit_check()</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Runs review_pr + find_dead_code + test_coverage_gaps in one call. A complete pre-commit safety gate before you push.</div>
+      </div>
+
+      <div class="scenario-card" data-category="testing">
+        <div class="card-header">
+          <span class="card-icon">📋</span>
+          <span class="card-name">Plan Tests</span>
+          <span class="card-badge testing">Testing</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"viết test cho createUser"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">test_plan({name: "createUser"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Returns mock strategy (what to stub/spy/fake) + 3+ test scenarios: happy path, edge case, error handling. Know exactly what to test.</div>
+      </div>
+
+      <div class="scenario-card" data-category="testing">
+        <div class="card-header">
+          <span class="card-icon">🕳️</span>
+          <span class="card-name">Coverage Gaps</span>
+          <span class="card-badge testing">Testing</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"chỗ nào chưa có test?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">test_coverage_gaps({limit: 20})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Lists untested exported symbols sorted by risk (CRITICAL first). Prioritize what to test based on actual impact, not guesswork.</div>
+      </div>
+
+      <div class="scenario-card" data-category="testing">
+        <div class="card-header">
+          <span class="card-icon">🎯</span>
+          <span class="card-name">Test Impact</span>
+          <span class="card-badge testing">Testing</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"chạy test nào sau khi sửa?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">test_impact({ref: "HEAD"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Maps changed symbols directly to affected test files. Run only the tests that matter — no more running the entire suite.</div>
+      </div>
+
+      <div class="scenario-card" data-category="testing">
+        <div class="card-header">
+          <span class="card-icon">🤖</span>
+          <span class="card-name">Auto-Generate Tests</span>
+          <span class="card-badge testing">Testing</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"generate test cho formatDate"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">test_generate({symbol: "formatDate"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Auto-detects test framework (vitest/jest/mocha/pytest) and generates a complete test file with mock strategy and scenarios.</div>
+      </div>
+
+      <div class="scenario-card" data-category="security">
+        <div class="card-header">
+          <span class="card-icon">🛡️</span>
+          <span class="card-name">Full Security Audit</span>
+          <span class="card-badge security">Security</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"scan bảo mật toàn bộ project"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">security_scan({scope: "all", severity: "HIGH"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">50+ rules across 10 categories: secrets, injection, unicode, dangerous patterns, config leaks, data leaks, crypto, auth, file access. One call replaces 10 manual grep searches.</div>
+      </div>
+
+      <div class="scenario-card" data-category="security">
+        <div class="card-header">
+          <span class="card-icon">🔧</span>
+          <span class="card-name">Auto-Fix Security</span>
+          <span class="card-badge security">Security</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"fix lỗi bảo mật dòng 42 file auth.ts"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">fix_apply({ruleId: "secret-in-code", file: "src/auth.ts", line: 42})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Applies the security fix automatically and creates a backup in <code>.milens/backups/</code>. Safe, reversible, auditable.</div>
+      </div>
+
+      <div class="scenario-card" data-category="security">
+        <div class="card-header">
+          <span class="card-icon">🔑</span>
+          <span class="card-name">Detect Leaked Secrets</span>
+          <span class="card-badge security">Security</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"có secret nào bị leak không?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">security_scan({scope: "secrets"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Detects API keys, access tokens, passwords, private keys, and connection strings embedded in source code. Know before they reach production.</div>
+      </div>
+
+      <div class="scenario-card" data-category="debugging">
+        <div class="card-header">
+          <span class="card-icon">🔍</span>
+          <span class="card-name">Trace Execution</span>
+          <span class="card-badge debugging">Debugging</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"lỗi ở sendEmail, trace execution path"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">trace({name: "sendEmail", direction: "to"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Shows the full call chain from entrypoints down to <code>sendEmail</code>. Understand exactly how this code gets triggered at runtime.</div>
+      </div>
+
+      <div class="scenario-card" data-category="debugging">
+        <div class="card-header">
+          <span class="card-icon">🔗</span>
+          <span class="card-name">Find Relationships</span>
+          <span class="card-badge debugging">Debugging</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"AuthService và TokenManager liên quan thế nào?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">explain_relationship({from: "AuthService", to: "TokenManager"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Returns the shortest dependency path between any two symbols. AuthService → AuthMiddleware → TokenManager (2 steps).</div>
+      </div>
+
+      <div class="scenario-card" data-category="debugging">
+        <div class="card-header">
+          <span class="card-icon">🩺</span>
+          <span class="card-name">Debug a Symbol</span>
+          <span class="card-badge debugging">Debugging</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"tìm hiểu tại sao User model bị lỗi"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">smart_context({name: "User", intent: "debug"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Returns execution paths + data flow for the <code>User</code> symbol. See what calls it, what it calls, and where data flows — all in one call.</div>
+      </div>
+
+      <div class="scenario-card" data-category="architecture">
+        <div class="card-header">
+          <span class="card-icon">📦</span>
+          <span class="card-name">Codebase Overview</span>
+          <span class="card-badge architecture">Architecture</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"tổng quan project này thế nào?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">codebase_summary()</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">~500 token overview: domains, top hub symbols, test coverage %, annotation counts. The fastest way to understand any codebase.</div>
+      </div>
+
+      <div class="scenario-card" data-category="architecture">
+        <div class="card-header">
+          <span class="card-icon">🧩</span>
+          <span class="card-name">Domain Clusters</span>
+          <span class="card-badge architecture">Architecture</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"project này có những module nào?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">domains()</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Shows logical module clusters based on the dependency graph. See which files form cohesive groups — auth, db, routes, utils, config.</div>
+      </div>
+
+      <div class="scenario-card" data-category="architecture">
+        <div class="card-header">
+          <span class="card-icon">🌐</span>
+          <span class="card-name">API Endpoints</span>
+          <span class="card-badge architecture">Architecture</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"có những API endpoint nào?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">routes({framework: "express"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Detects framework routes and maps them to handler functions. [GET] /api/users → userController.list. Supports Express, FastAPI, NestJS, Flask, Go, PHP, Rails.</div>
+      </div>
+
+      <div class="scenario-card" data-category="discovery">
+        <div class="card-header">
+          <span class="card-icon">🔎</span>
+          <span class="card-name">Find Symbols</span>
+          <span class="card-badge discovery">Discovery</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"tìm hàm xử lý authentication"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">query({query: "auth"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">FTS5 symbol search returns definitions instantly. AuthService [class] src/auth.ts:12 (exported). Use query for code identifiers, grep for display text.</div>
+      </div>
+
+      <div class="scenario-card" data-category="discovery">
+        <div class="card-header">
+          <span class="card-icon">📝</span>
+          <span class="card-name">Text Search</span>
+          <span class="card-badge discovery">Discovery</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"tìm chữ 'User not found' ở đâu?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">grep({pattern: "User not found"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Searches ALL files — templates, configs, styles, docs, routes. Finds every occurrence, not just code symbols. Perfect for UI labels and error messages.</div>
+      </div>
+
+      <div class="scenario-card" data-category="discovery">
+        <div class="card-header">
+          <span class="card-icon">🪞</span>
+          <span class="card-name">Find Similar Code</span>
+          <span class="card-badge discovery">Discovery</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"có hàm nào giống formatCurrency không?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">find_similar({name: "formatCurrency"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Returns top 10 symbols that share callers or callees. Great for finding patterns to copy, refactor together, or avoid duplicating.</div>
+      </div>
+
+      <div class="scenario-card" data-category="discovery">
+        <div class="card-header">
+          <span class="card-icon">📄</span>
+          <span class="card-name">File Symbols</span>
+          <span class="card-badge discovery">Discovery</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"file src/auth.ts có những symbols gì?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">get_file_symbols({file: "src/auth.ts"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Lists every symbol in the file with kind, line number, and reference/dependency counts. Understand any file at a glance without opening it.</div>
+      </div>
+
+      <div class="scenario-card" data-category="discovery">
+        <div class="card-header">
+          <span class="card-icon">🧠</span>
+          <span class="card-name">Semantic Search</span>
+          <span class="card-badge discovery">Discovery</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"tìm concept 'payment processing' — không cần biết tên hàm"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">semantic_search({query: "payment processing"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Finds relevant symbols by meaning, not name. Discover <code>checkoutFlow</code> even though you searched "payment". Requires <code>--embeddings</code> flag for vector search.</div>
+      </div>
+
+      <div class="scenario-card" data-category="discovery">
+        <div class="card-header">
+          <span class="card-icon">🌳</span>
+          <span class="card-name">Explore AST</span>
+          <span class="card-badge discovery">Discovery</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"parse thử đoạn code này xem AST structure"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">ast_explore({code: "const x = 1", language: "typescript"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Returns the S-expression AST tree for any code snippet. Supports all 12 milens-indexed languages. Debug parsers, write tree-sitter queries, or understand language grammar.</div>
+      </div>
+
+      <div class="scenario-card" data-category="architecture">
+        <div class="card-header">
+          <span class="card-icon">🏛️</span>
+          <span class="card-name">Type Hierarchy</span>
+          <span class="card-badge architecture">Architecture</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"PaymentProcessor kế thừa từ những lớp nào?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">get_type_hierarchy({name: "PaymentProcessor"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Shows full inheritance tree: <code>BaseProcessor → PaymentProcessor → CreditCardProcessor, PayPalProcessor</code>. Understand OOP structure instantly.</div>
+      </div>
+
+      <div class="scenario-card" data-category="architecture">
+        <div class="card-header">
+          <span class="card-icon">🩺</span>
+          <span class="card-name">Index Health</span>
+          <span class="card-badge architecture">Architecture</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"index database còn healthy không?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">status()</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Returns symbols count, links count, files, test coverage %, and staleness. Know instantly if your index is up to date or needs <code>analyze --force</code>.</div>
+      </div>
+
+      <div class="scenario-card" data-category="architecture">
+        <div class="card-header">
+          <span class="card-icon">🗂️</span>
+          <span class="card-name">List Repos</span>
+          <span class="card-badge architecture">Architecture</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"có bao nhiêu repo đã được index?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">repos()</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Lists all indexed repositories with symbol counts, file counts, and last-indexed dates. Essential for monorepo and multi-project setups.</div>
+      </div>
+
+      <div class="scenario-card" data-category="editing">
+        <div class="card-header">
+          <span class="card-icon">⚠️</span>
+          <span class="card-name">Pre-Edit Safety Check</span>
+          <span class="card-badge editing">Editing</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"trước khi sửa resolveLinks, có warning gì không?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">edit_check({name: "resolveLinks"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Returns callers + export status + re-export chains + warnings. "WARNING: exported function — changing signature is a breaking change." Designed specifically for editing intent.</div>
+      </div>
+
+      <div class="scenario-card" data-category="editing">
+        <div class="card-header">
+          <span class="card-icon">⚡</span>
+          <span class="card-name">Overview in One Call</span>
+          <span class="card-badge editing">Editing</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"cho tôi context + impact + grep của Database trong 1 call"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">overview({name: "Database"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Combines context, impact, and grep into ONE call. Saves 2-3 round trips. The preferred tool before editing, deleting, or renaming any symbol.</div>
+      </div>
+
+      <div class="scenario-card" data-category="debugging">
+        <div class="card-header">
+          <span class="card-icon">📊</span>
+          <span class="card-name">Compare Impact</span>
+          <span class="card-badge debugging">Debugging</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"refactor UserService xong, blast radius tăng hay giảm?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">compare_impact({name: "UserService", action: "snapshot"})<br>compare_impact({name: "UserService", action: "compare"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Snapshot before, compare after. Detects regressions: new dependents appeared, heat increased, blast radius widened. Your automated regression guard for every refactor.</div>
+      </div>
+
+      <div class="scenario-card" data-category="debugging">
+        <div class="card-header">
+          <span class="card-icon">🔄</span>
+          <span class="card-name">File Change Impact</span>
+          <span class="card-badge debugging">Debugging</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"vừa sửa 3 files, symbols nào bị ảnh hưởng?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">hook_onFileChange({files: ["src/auth.ts", "src/models.ts"]})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Re-analyzes changed files and shows impact on all affected symbols. Hook triggers automatically when files change — no manual re-analysis needed.</div>
+      </div>
+
+      <div class="scenario-card" data-category="testing">
+        <div class="card-header">
+          <span class="card-icon">🔬</span>
+          <span class="card-name">Test Tree-Sitter Query</span>
+          <span class="card-badge testing">Testing</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"test tree-sitter query trước khi thêm vào parser"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">test_query({query: "(identifier) @name", code: "...", language: "typescript"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Runs a tree-sitter query against code and returns all captured matches. Test queries before adding them to a LangSpec. Essential for parser developers.</div>
+      </div>
+
+      <div class="scenario-card" data-category="discovery">
+        <div class="card-header">
+          <span class="card-icon">📜</span>
+          <span class="card-name">Session History</span>
+          <span class="card-badge discovery">Discovery</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"phiên làm việc này đã dùng những tools gì?"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">session_context({session_id: "..."})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Returns full session metadata: tool calls made, annotations recorded, duration, agent name. Complete audit trail for every AI session.</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="index.html#features">Features</a>
+      <a href="security.html">Security</a>
+      <a href="pricing.html">Pricing</a>
+        <a href="index.html#changelog">Changelog</a>
+      </div>
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <a href="https://github.com/fuze210699/milens#readme">Docs</a>
+        <a href="skills.html">Skills</a>
+        <a href="scenarios.html">Scenarios</a>
+        <a href="https://github.com/fuze210699/milens">API</a>
+      </div>
+      <div class="footer-col">
+        <h4>Connect</h4>
+        <a href="https://github.com/fuze210699/milens">GitHub</a>
+        <a href="#">Discord</a>
+        <a href="#">Twitter</a>
+        <a href="#">Blog</a>
+      </div>
+      <div class="footer-col footer-brand">
+        <div class="nav-logo"><span>◆</span> Milens</div>
+        <p>Code intelligence for the AI era. Open source. No vendor lock-in.</p>
+        <p class="footer-copy">© 2026 Milens. MIT Licensed.</p>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function() {
+  var cards = document.querySelectorAll('.scenario-card');
+  var tabBtns = document.querySelectorAll('.tab-btn');
+  var activeCategory = 'all';
+
+  function applyFilters() {
+    cards.forEach(function(card) {
+      var category = card.getAttribute('data-category') || '';
+      if (activeCategory === 'all' || category === activeCategory) {
+        card.classList.remove('hidden');
+      } else {
+        card.classList.add('hidden');
+      }
+    });
+  }
+
+  tabBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      tabBtns.forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      activeCategory = btn.getAttribute('data-category');
+      applyFilters();
+    });
+  });
+
+  applyFilters();
+
+  var menuBtn = document.getElementById('menuBtn');
+  var navLinks = document.getElementById('navLinks');
+  menuBtn.addEventListener('click', function() {
+    menuBtn.classList.toggle('open');
+    navLinks.classList.toggle('open');
+  });
+
+  navLinks.querySelectorAll('a').forEach(function(link) {
+    link.addEventListener('click', function() {
+      menuBtn.classList.remove('open');
+      navLinks.classList.remove('open');
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitHub App — Milens: Automated PR Reviews &amp; Pre-Commit Safety</title>
+  <meta name="description" content="Install the Milens GitHub App and get risk scores, dead code detection, and test impact analysis on every pull request. Free for public repositories.">
+  <link rel="canonical" href="https://milens.dev/github-app">
+  <meta property="og:title" content="Milens GitHub App — Automated PR Reviews. Pre-Commit Safety. Directly in GitHub.">
+  <meta property="og:description" content="Install the Milens GitHub App and get risk scores, dead code detection, and test impact analysis on every pull request.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://milens.dev/github-app">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Milens GitHub App — Automated PR Reviews &amp; Pre-Commit Safety">
+  <meta name="twitter:description" content="Install the Milens GitHub App and get risk scores, dead code detection, and test impact analysis on every pull request.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "Milens GitHub App",
+    "description": "Install the Milens GitHub App and get risk scores, dead code detection, and test impact analysis on every pull request.",
+    "url": "https://milens.dev/github-app",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "Milens",
+      "url": "https://milens.dev"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #7ee787;
+      --orange: #d2991d;
+      --red: #f85149;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --mesh-1: rgba(88,166,255,0.06);
+      --mesh-2: rgba(126,231,135,0.04);
+      --mesh-3: rgba(210,153,29,0.03);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      position: relative;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 10%, var(--mesh-1) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 30%, var(--mesh-2) 0%, transparent 55%),
+        radial-gradient(ellipse 70% 50% at 50% 80%, var(--mesh-3) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 90% 80%, var(--mesh-1) 0%, transparent 50%);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
+
+    /* ── Skip to Content ── */
+    .skip-link {
+      position: absolute;
+      top: -100px;
+      left: 16px;
+      background: var(--accent);
+      color: #fff;
+      padding: 8px 20px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.9em;
+      z-index: 200;
+      transition: top 0.2s;
+    }
+    .skip-link:focus { top: 10px; text-decoration: none; }
+
+    /* ── Focus Visible ── */
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      border-radius: 3px;
+    }
+
+    /* ── Reduced Motion ── */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      html { scroll-behavior: auto; }
+    }
+
+    /* ── Nav ── */
+    .nav { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; max-width: 1400px; margin: 0 auto; padding: 0 32px; }
+    .nav-logo { font-size: 1.2em; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .nav-logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 24px; }
+    .nav-links a { color: var(--muted); font-size: 0.9em; }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-links a.active { color: var(--accent); font-weight: 600; }
+    .nav-cta {
+      background: linear-gradient(135deg, var(--accent), #79b8ff);
+      box-shadow: 0 2px 10px rgba(88,166,255,0.25);
+      color: #fff !important;
+      padding: 6px 18px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.85em;
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .nav-cta:hover { box-shadow: 0 4px 16px rgba(88,166,255,0.4); text-decoration: none !important; transform: translateY(-1px); }
+
+    /* ── Hamburger ── */
+    .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 6px; flex-direction: column; gap: 5px; z-index: 110; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: var(--text); border-radius: 2px; transition: transform 0.25s, opacity 0.25s; }
+    .hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .hamburger.open span:nth-child(2) { opacity: 0; }
+    .hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    @media (max-width: 768px) {
+      .nav-links { position: fixed; top: 0; right: -100%; width: 280px; height: 100vh; background: rgba(22,27,34,0.98); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); flex-direction: column; padding: 80px 32px 32px; gap: 0; transition: right 0.3s ease; border-left: 1px solid var(--border); z-index: 105; }
+      .nav-links.open { right: 0; }
+      .nav-links a { padding: 14px 0; font-size: 1.05em; border-bottom: 1px solid var(--border); width: 100%; }
+      .nav-links a.nav-cta { margin-top: 16px; text-align: center; display: block; }
+      .hamburger { display: flex; }
+      .container { padding: 0 20px; }
+      .nav-inner { padding: 0 20px; }
+    }
+
+    /* ── Hero ── */
+    .hero { text-align: center; padding: clamp(48px, 6vw, 80px) 0 clamp(32px, 5vw, 60px); position: relative; z-index: 1; }
+    .hero h1 {
+      font-size: clamp(2em, 5vw, 3.5em);
+      color: var(--text);
+      line-height: 1.15;
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+    .hero h1 span { color: var(--accent); }
+    .hero .subtitle {
+      font-size: clamp(0.95em, 1.8vw, 1.18em);
+      color: var(--muted);
+      max-width: 780px;
+      margin: 0 auto 32px;
+      line-height: 1.6;
+    }
+    .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 32px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 24px; border-radius: var(--radius-sm);
+      font-weight: 600; font-size: clamp(0.85em, 1.4vw, 0.95em);
+      cursor: pointer; border: none; transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #79b8ff);
+      box-shadow: 0 4px 14px rgba(88,166,255,0.3);
+      color: #fff;
+    }
+    .btn-primary:hover { box-shadow: 0 6px 22px rgba(88,166,255,0.45); text-decoration: none; transform: translateY(-2px); }
+    .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .btn-outline:hover { border-color: var(--muted); text-decoration: none; transform: translateY(-2px); }
+    @media (max-width: 640px) { .hero-ctas { flex-direction: column; align-items: center; } .btn { width: 100%; justify-content: center; } }
+
+    /* ── Section Labels ── */
+    .section-label { display: block; text-transform: uppercase; letter-spacing: 0.08em; font-size: clamp(0.7em, 1.1vw, 0.78em); font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+    .section-title {
+      font-size: clamp(1.4em, 3vw, 2em);
+      color: var(--text); margin-bottom: 12px;
+    }
+    .section-subtitle { color: var(--muted); font-size: clamp(0.9em, 1.5vw, 1.05em); max-width: 680px; margin-bottom: 40px; line-height: 1.6; }
+    .section { padding: 72px 0; position: relative; z-index: 1; }
+    .section-alt { background: rgba(22,27,34,0.4); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 72px 0; position: relative; z-index: 1; }
+
+    /* ── Steps ── */
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 32px; }
+    @media (max-width: 800px) { .steps { grid-template-columns: 1fr; } }
+    .step {
+      background: rgba(22,27,34,0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 28px;
+      display: flex; gap: 18px;
+      transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
+      opacity: 0;
+      animation: fadeInUp 0.5s ease forwards;
+    }
+    .step:nth-child(1) { animation-delay: 0.05s; }
+    .step:nth-child(2) { animation-delay: 0.15s; }
+    .step:nth-child(3) { animation-delay: 0.25s; }
+    .step:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      border-color: var(--muted);
+    }
+    .step-num {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #79b8ff);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 1.1em;
+      flex-shrink: 0;
+    }
+    .step h4 { font-size: 1.08em; color: var(--text); margin-bottom: 6px; }
+    .step p { color: var(--muted); font-size: 0.9em; line-height: 1.55; }
+
+    /* ── PR Demo Terminal ── */
+    .pr-demo {
+      background: rgba(13,17,23,0.9);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin: 32px auto 0;
+      max-width: 820px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .pr-demo-bar { background: #161b22; padding: 10px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
+    .pr-demo-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .pr-demo-dot.red { background: #f85149; }
+    .pr-demo-dot.yellow { background: #d2991d; }
+    .pr-demo-dot.green { background: #7ee787; }
+    .pr-demo-bar span { color: var(--muted); font-size: 0.82em; margin-left: 8px; }
+    .pr-demo-body {
+      padding: 24px 28px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: clamp(0.72em, 1.1vw, 0.86em);
+      line-height: 1.7;
+      overflow-x: auto;
+    }
+    .pr-demo-body .pr-title { color: var(--accent); font-weight: 700; font-size: 1.1em; }
+    .pr-demo-body .pr-meta { color: var(--muted); }
+    .pr-demo-body .pr-comment { color: var(--text); margin-top: 12px; }
+    .pr-demo-body .pr-header { color: var(--green); font-weight: 700; }
+    .pr-demo-body .pr-crit { color: var(--red); font-weight: 700; }
+    .pr-demo-body .pr-high { color: var(--orange); font-weight: 700; }
+    .pr-demo-body .pr-low { color: var(--green); }
+    .pr-demo-body .pr-warn { color: var(--orange); }
+    .pr-table { margin: 8px 0 12px; display: grid; grid-template-columns: 1.5fr 0.8fr 0.7fr 1fr 1fr; gap: 0; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; font-size: 0.9em; }
+    .pr-table-cell { padding: 6px 10px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .pr-table-row-header .pr-table-cell { background: rgba(88,166,255,0.08); color: var(--accent); font-weight: 700; border-bottom: 1px solid var(--border); }
+    @media (max-width: 640px) { .pr-demo-body { font-size: 0.68em; padding: 14px 16px; } .pr-table { font-size: 0.78em; } .pr-table-cell { padding: 4px 6px; } }
+
+    /* ── Feature Cards Grid ── */
+    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    @media (max-width: 1000px) { .feature-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px) { .feature-grid { grid-template-columns: 1fr; } }
+    .feature-card {
+      background: rgba(22,27,34,0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
+      opacity: 0;
+      animation: fadeInUp 0.5s ease forwards;
+    }
+    .feature-card:nth-child(1) { animation-delay: 0.05s; }
+    .feature-card:nth-child(2) { animation-delay: 0.12s; }
+    .feature-card:nth-child(3) { animation-delay: 0.19s; }
+    .feature-card:nth-child(4) { animation-delay: 0.26s; }
+    .feature-card:nth-child(5) { animation-delay: 0.33s; }
+    .feature-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.4);
+      border-color: var(--muted);
+    }
+    .feature-card-icon { font-size: 1.6em; margin-bottom: 14px; display: block; }
+    .feature-card h3 { font-size: 1.1em; color: var(--text); margin-bottom: 8px; }
+    .feature-card p { color: var(--muted); font-size: 0.92em; line-height: 1.55; }
+    .feature-card code {
+      display: inline-block;
+      background: rgba(88,166,255,0.1);
+      color: var(--accent);
+      padding: 1px 8px;
+      border-radius: 4px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.92em;
+      margin-bottom: 8px;
+    }
+
+    /* ── Pricing ── */
+    .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    @media (max-width: 900px) { .pricing-grid { grid-template-columns: 1fr; max-width: 480px; margin: 0 auto; } }
+    .pricing-card {
+      background: rgba(22,27,34,0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px 28px;
+      display: flex; flex-direction: column;
+      transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
+    }
+    .pricing-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    .pricing-card.featured { border-color: var(--accent); box-shadow: 0 4px 20px rgba(88,166,255,0.12); }
+    .pricing-card h3 { font-size: 1.25em; color: var(--text); margin-bottom: 4px; }
+    .pricing-price { font-size: 2.6em; font-weight: 700; color: var(--text); margin: 12px 0 4px; }
+    .pricing-price span { font-size: 0.35em; font-weight: 400; color: var(--muted); }
+    .pricing-desc { color: var(--muted); font-size: 0.95em; margin-bottom: 24px; }
+    .pricing-features { list-style: none; flex: 1; margin-bottom: 28px; }
+    .pricing-features li { padding: 6px 0; font-size: 0.9em; color: var(--muted); }
+    .pricing-features li::before { content: '✓ '; color: var(--green); font-weight: 700; }
+    .pricing-card .btn { width: 100%; justify-content: center; }
+
+    /* ── CTA Banner ── */
+    .cta-banner { text-align: center; padding: 64px 0 80px; border-top: 1px solid var(--border); position: relative; z-index: 1; }
+    .cta-banner h2 { font-size: clamp(1.5em, 3.5vw, 2.2em); color: var(--text); margin-bottom: 16px; }
+    .cta-banner p { color: var(--muted); font-size: clamp(0.9em, 1.5vw, 1.1em); max-width: 640px; margin: 0 auto 28px; line-height: 1.6; }
+
+    /* ── Footer (4-column) ── */
+    .footer { border-top: 1px solid var(--border); padding: 64px 0 40px; position: relative; z-index: 1; }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 40px;
+      margin-bottom: 40px;
+    }
+    @media (max-width: 900px) { .footer-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .footer-grid { grid-template-columns: 1fr; gap: 28px; } }
+    .footer-brand .footer-logo { font-size: 1.15em; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .footer-brand .footer-logo span { color: var(--accent); }
+    .footer-brand p { color: var(--muted); font-size: 0.88em; line-height: 1.55; }
+    .footer-col h4 { font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text); font-weight: 700; margin-bottom: 14px; }
+    .footer-col a { display: block; color: var(--muted); font-size: 0.88em; padding: 4px 0; }
+    .footer-col a:hover { color: var(--text); text-decoration: none; }
+    .footer-bottom { text-align: center; border-top: 1px solid var(--border); padding-top: 28px; }
+    .footer-bottom p { color: var(--muted); font-size: 0.82em; }
+    .footer-bottom p + p { margin-top: 4px; }
+
+    /* ── Animations ── */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Tags ── */
+    .tag { display: inline-block; background: rgba(88,166,255,0.12); color: var(--accent); border: 1px solid rgba(88,166,255,0.25); border-radius: 20px; padding: 4px 12px; font-size: 0.8em; font-weight: 600; margin-left: 10px; vertical-align: middle; }
+    .tag.green { background: rgba(126,231,135,0.12); color: var(--green); border-color: rgba(126,231,135,0.25); }
+    .tag.orange { background: rgba(210,153,29,0.12); color: var(--orange); border-color: rgba(210,153,29,0.25); }
+
+    @media (max-width: 768px) { .section { padding: 48px 0; } .section-alt { padding: 48px 0; } }
+    html { scroll-behavior: smooth; }
+  </style>
+</head>
+<body>
+
+<!-- ── Skip to Content ── -->
+<a href="#main-content" class="skip-link">Skip to Content</a>
+
+<!-- ── Nav ── -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo"><span>&#9670;</span> Milens</a>
+    <button class="hamburger" id="hamburger" aria-label="Toggle menu" onclick="document.getElementById('navMenu').classList.toggle('open');this.classList.toggle('open');">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="nav-links" id="navMenu">
+      <a href="index.html">Home</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="skills.html">Skills</a>
+      <a href="scenarios.html">Scenarios</a>
+      <a href="security.html">Security</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="enterprise.html">Enterprise</a>
+      <a href="https://github.com/fuze210699/milens">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero" id="main-content">
+  <div class="container">
+    <h1>Automated PR Reviews.<br>Pre-Commit Safety.<br><span>Directly in GitHub.</span></h1>
+    <p class="subtitle">Install the Milens GitHub App and get risk scores, dead code detection, and test impact analysis on every pull request. Zero configuration. Instant insights.</p>
+    <div class="hero-ctas">
+      <a href="https://github.com/apps/milens" class="btn btn-primary">Install GitHub App</a>
+      <a href="#features" class="btn btn-outline">Explore Features</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── 3-Step Install ── -->
+<section class="section-alt" id="install">
+  <div class="container">
+    <span class="section-label">Get Started</span>
+    <h2 class="section-title">Three steps to automated PR safety.</h2>
+    <p class="section-subtitle">Install once. Every future PR gets scored, checked, and commented on automatically.</p>
+    <div class="steps">
+      <div class="step">
+        <span class="step-num">1</span>
+        <div>
+          <h4>Authorize</h4>
+          <p>Visit <a href="https://github.com/apps/milens">github.com/apps/milens</a> and click Install. Grant the necessary repository permissions — read-only for code analysis, write-access for PR comments.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step-num">2</span>
+        <div>
+          <h4>Select Repositories</h4>
+          <p>Choose which repositories to activate Milens on. You can install on all repositories or select specific ones. Toggle any repo on or off at any time.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="step-num">3</span>
+        <div>
+          <h4>Done</h4>
+          <p>Milens immediately analyzes your codebase and begins monitoring. Every PR opened or updated triggers a full risk assessment, with results posted as a comment within seconds.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PR Demo ── -->
+<section class="section" id="demo">
+  <div class="container">
+    <span class="section-label">Live Demo</span>
+    <h2 class="section-title">See a PR review in action.</h2>
+    <p class="section-subtitle">This is what your team sees on every pull request. Instant risk scores, dead code detection, and targeted recommendations.</p>
+    <div class="pr-demo">
+      <div class="pr-demo-bar">
+        <span class="pr-demo-dot red"></span><span class="pr-demo-dot yellow"></span><span class="pr-demo-dot green"></span>
+        <span>Pull Request #42</span>
+      </div>
+      <div class="pr-demo-body">
+        <span class="pr-title">PR #42 opened: "Refactor payment processing"</span><br>
+        <span class="pr-meta">by @alex-chen &bull; 3 files changed &bull; +126 &minus;48</span><br><br>
+        <span class="pr-comment"><strong style="color:var(--green);">Milens</strong> bot commented:</span><br><br>
+        <span class="pr-header">## PR Risk Assessment</span><br><br>
+        <div class="pr-table" style="display:block; overflow-x:auto;">
+          <div style="display:grid;grid-template-columns:1.5fr 0.8fr 0.7fr 1fr 1fr;min-width:520px;">
+            <div class="pr-table-cell" style="font-weight:700;color:var(--accent);">Symbol</div>
+            <div class="pr-table-cell" style="font-weight:700;color:var(--accent);">Risk</div>
+            <div class="pr-table-cell" style="font-weight:700;color:var(--accent);">Heat</div>
+            <div class="pr-table-cell" style="font-weight:700;color:var(--accent);">Dependents</div>
+            <div class="pr-table-cell" style="font-weight:700;color:var(--accent);border-right:none;">Tested</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1.5fr 0.8fr 0.7fr 1fr 1fr;min-width:520px;">
+            <div class="pr-table-cell">handlePayment</div>
+            <div class="pr-table-cell"><span class="pr-crit">CRITICAL</span></div>
+            <div class="pr-table-cell">92</div>
+            <div class="pr-table-cell">15</div>
+            <div class="pr-table-cell" style="border-right:none;"><span class="pr-crit">No &#9888;</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1.5fr 0.8fr 0.7fr 1fr 1fr;min-width:520px;">
+            <div class="pr-table-cell">checkoutRoute</div>
+            <div class="pr-table-cell"><span class="pr-high">HIGH</span></div>
+            <div class="pr-table-cell">78</div>
+            <div class="pr-table-cell">8</div>
+            <div class="pr-table-cell" style="border-right:none;"><span class="pr-low">Yes &#10003;</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1.5fr 0.8fr 0.7fr 1fr 1fr;min-width:520px;">
+            <div class="pr-table-cell">formatCurrency</div>
+            <div class="pr-table-cell"><span class="pr-low">LOW</span></div>
+            <div class="pr-table-cell">10</div>
+            <div class="pr-table-cell">0</div>
+            <div class="pr-table-cell" style="border-right:none;">No</div>
+          </div>
+        </div><br>
+        <span class="pr-meta">Summary: <span class="pr-crit">1 CRITICAL</span>, <span class="pr-high">1 HIGH</span>, <span class="pr-low">1 LOW</span></span><br>
+        <span class="pr-warn">&#9888; Recommend: Add tests for handlePayment before merging.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Features ── -->
+<section class="section-alt" id="features">
+  <div class="container">
+    <span class="section-label">Capabilities</span>
+    <h2 class="section-title">What the GitHub App does.</h2>
+    <p class="section-subtitle">Five core features that run on every PR. No setup, no YAML, no configuration files.</p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <span class="feature-card-icon">&#9889;</span>
+        <code>detect_changes</code>
+        <h3>Detect Changes on Push</h3>
+        <p>Know exactly which symbols changed. Every push triggers an automatic diff-to-symbol mapping so you see not just files, but every function, class, and method that was modified.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-card-icon">&#128269;</span>
+        <code>review_pr</code>
+        <h3>PR Risk Assessment</h3>
+        <p>Every changed symbol gets a risk score — CRITICAL, HIGH, MEDIUM, or LOW — based on its blast radius, number of dependents, and test coverage. Risky merges are flagged before they happen.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-card-icon">&#9989;</span>
+        <code>pre_commit_check</code>
+        <h3>Pre-Commit Safety Gate</h3>
+        <p>Combined safety gate before merge. Runs risk review, dead code detection, and test coverage gap analysis in one pass. Blocks high-risk merges with prescriptive recommendations.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-card-icon">&#128221;</span>
+        <code>annotate</code>
+        <h3>Auto-Annotate Changed Symbols</h3>
+        <p>Changed symbols are automatically annotated for future recall. The knowledge graph remembers every modification so future sessions can reference past changes and their outcomes.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-card-icon">&#128300;</span>
+        <code>test_impact</code>
+        <h3>Test Impact Analysis</h3>
+        <p>Know exactly which tests to run. The app maps changed symbols to affected test files so your CI runs only what matters — saving minutes per pipeline and surfacing coverage gaps.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Pricing ── -->
+<section class="section" id="pricing">
+  <div class="container">
+    <span class="section-label">Pricing</span>
+    <h2 class="section-title">Free for open source. Pro for teams.</h2>
+    <p class="section-subtitle">Public repositories are always free. Private repos start at $19 per seat per month. Enterprise adds SSO, audit logging, and rollout support.</p>
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <h3>Free</h3>
+        <div class="pricing-price">$0 <span>/ month</span></div>
+        <p class="pricing-desc">For open source maintainers and public repositories.</p>
+        <ul class="pricing-features">
+          <li>Unlimited public repositories</li>
+          <li>All 5 PR review features</li>
+          <li>detect_changes on every push</li>
+          <li>Automated PR comments</li>
+          <li>Risk score dashboard</li>
+          <li>Community support</li>
+        </ul>
+        <a href="https://github.com/apps/milens" class="btn btn-outline">Install Free</a>
+      </div>
+      <div class="pricing-card featured">
+        <h3>Pro <span class="tag green">Recommended</span></h3>
+        <div class="pricing-price">$19 <span>/ seat / month</span></div>
+        <p class="pricing-desc">For teams shipping private code with confidence.</p>
+        <ul class="pricing-features">
+          <li>Everything in Free</li>
+          <li>Unlimited private repositories</li>
+          <li>Pre-commit safety gates</li>
+          <li>Custom risk thresholds</li>
+          <li>Team analytics dashboard</li>
+          <li>Priority support (Slack/Email)</li>
+        </ul>
+        <a href="https://github.com/apps/milens" class="btn btn-primary">Start Pro</a>
+      </div>
+      <div class="pricing-card">
+        <h3>Enterprise</h3>
+        <div class="pricing-price" style="font-size:1.8em;">Custom <span>pricing</span></div>
+        <p class="pricing-desc">For organizations with compliance, SSO, and governance requirements.</p>
+        <ul class="pricing-features">
+          <li>Everything in Pro</li>
+          <li>SSO / SAML authentication</li>
+          <li>Audit logging</li>
+          <li>On-premises deployment</li>
+          <li>Custom policy packs</li>
+          <li>Dedicated support &amp; SLAs</li>
+        </ul>
+        <a href="#footer" class="btn btn-outline">Contact Sales</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA Banner ── -->
+<section class="cta-banner">
+  <div class="container">
+    <h2>Ship safer code. Every PR, every time.</h2>
+    <p>Install the GitHub App and get risk scores, dead code detection, and test impact analysis on every pull request — free for public repositories.</p>
+    <a href="https://github.com/apps/milens" class="btn btn-primary">Install GitHub App</a>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer class="footer" id="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="footer-logo"><span>&#9670;</span> Milens</div>
+        <p>Open-source AI-DOS platform. 41 MCP tools, knowledge graphs, security scanning, and closed-loop AI development. MIT licensed, zero lock-in.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="index.html">Home</a>
+        <a href="index.html#pricing">Pricing</a>
+        <a href="security.html">Security</a>
+        <a href="scenarios.html">Scenarios</a>
+      </div>
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <a href="skills.html">Skills</a>
+        <a href="platforms.html">Platforms</a>
+        <a href="compare.html">Compare</a>
+        <a href="index.html#faq">FAQ</a>
+      </div>
+      <div class="footer-col">
+        <h4>Connect</h4>
+        <a href="https://github.com/fuze210699/milens">GitHub</a>
+        <a href="https://github.com/fuze210699/milens#readme">Docs</a>
+        <a href="https://github.com/apps/milens">Enterprise</a>
+        <a href="https://github.com/fuze210699/milens/blob/main/CONTRIBUTING.md">Contribute</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>Open Source &middot; MIT Licensed &middot; No vendor lock-in</p>
+      <p>Built for the vibe coding era. Milens &mdash; AI-DOS.</p>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS tool_usage (
 
 -- Agent annotations: observations about symbols stored by agents
 CREATE TABLE IF NOT EXISTS annotations (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  id          TEXT PRIMARY KEY,
   symbol      TEXT NOT NULL,
   key         TEXT NOT NULL,
   value       TEXT NOT NULL,

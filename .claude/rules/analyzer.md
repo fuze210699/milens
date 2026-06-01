@@ -30,9 +30,9 @@ Contains 80 symbols (21 exported) across 7 files.
 
 ## Key Symbols
 - **`reviewPr`** [function] (src/analyzer/review.ts:101) — 7 refs
+- **`analyze`** [function] (src/analyzer/engine.ts:125) — 6 refs
 - **`resolveLinksWithStats`** [function] (src/analyzer/resolver.ts:35) — 5 refs
 - **`loadAliases`** [function] (src/analyzer/config.ts:10) — 4 refs
-- **`analyze`** [function] (src/analyzer/engine.ts:125) — 4 refs
 - **`enrichMetadata`** [function] (src/analyzer/enrich.ts:21) — 4 refs
 - **`ReviewResult`** [interface] (src/analyzer/review.ts:17) — 4 refs
 - **`scanFiles`** [function] (src/analyzer/scanner.ts:11) — 4 refs
@@ -47,10 +47,10 @@ Contains 80 symbols (21 exported) across 7 files.
 
 ## Entry Points
 - **`find`** [function] — 22 incoming references
-- **`resolve`** [method] — 15 incoming references
+- **`resolve`** [method] — 16 incoming references
 - **`reviewPr`** [function] — 7 incoming references
-- **`resolveLinksWithStats`** [function] — 5 incoming references
-- **`loadAliases`** [function] — 4 incoming references
+- **`analyze`** [function] — 6 incoming references
+- **`clear`** [method] — 5 incoming references
 
 ## Dependencies
 - **parser**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `extractVueScript`, `extractVueTemplateRefs` (+6 more)
@@ -61,7 +61,7 @@ Contains 80 symbols (21 exported) across 7 files.
 ## Used By
 - **root**: `loadAliases`, `analyze`, `resolve`, `clear`
 - **orchestrator**: `reviewPr`, `ReviewResult`, `SymbolRisk`
-- **server**: `reviewPr`, `resolve`, `find`
+- **server**: `reviewPr`, `analyze`, `resolve`, `find`, `clear`
 - **test**: `enrichMetadata`, `resolveLinks`, `resolveLinksWithStats`, `reviewSymbol`, `reviewPr`, `scanFiles`, `generateTestPlan`, `findCoverageGaps` (+5 more)
 - **scripts**: `resolve`
 - **parser**: `find`, `resolve`

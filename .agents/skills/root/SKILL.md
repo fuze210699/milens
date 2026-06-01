@@ -26,7 +26,7 @@ When working with code in **root/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 198 symbols (147 exported) across 13 files.
+Contains 204 symbols (153 exported) across 13 files.
 
 ## Key Symbols
 - **`CodeSymbol`** [interface] (src/types.ts:8) — 41 refs
@@ -47,7 +47,7 @@ Contains 198 symbols (147 exported) across 13 files.
 
 ## Entry Points
 - **`CodeSymbol`** [interface] — 41 incoming references
-- **`has`** [function] — 29 incoming references
+- **`has`** [function] — 30 incoming references
 - **`SymbolLink`** [interface] — 21 incoming references
 - **`isTestFile`** [function] — 11 incoming references
 - **`RawCall`** [interface] — 7 incoming references
@@ -76,7 +76,7 @@ Contains 198 symbols (147 exported) across 13 files.
 - CONTRIBUTING.md
 - DEPLOY.md
 - README.md
-- milens-generate-skills-issue.md
+- milens-upgrade.md
 - src/agents-md.ts
 - src/cli.ts
 - src/metrics.ts

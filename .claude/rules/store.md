@@ -31,7 +31,7 @@ Contains 135 symbols (15 exported) across 5 files.
 ## Key Symbols
 - **`Database`** [class] (src/store/db.ts:10) — 77 refs
 - **`AnnotationStore`** [class] (src/store/annotations.ts:10) — 19 refs
-- **`RepoRegistry`** [class] (src/store/registry.ts:18) — 9 refs
+- **`RepoRegistry`** [class] (src/store/registry.ts:18) — 13 refs
 - **`runDecayPass`** [function] (src/store/confidence.ts:85) — 6 refs
 - **`buildEmbeddingText`** [function] (src/store/vectors.ts:250) — 4 refs
 - **`TfIdfProvider`** [class] (src/store/vectors.ts:44) — 4 refs
@@ -47,7 +47,7 @@ Contains 135 symbols (15 exported) across 5 files.
 
 ## Entry Points
 - **`Database`** [class] — 77 incoming references
-- **`close`** [method] — 29 incoming references
+- **`close`** [method] — 30 incoming references
 - **`get`** [method] — 22 incoming references
 - **`AnnotationStore`** [class] — 19 incoming references
 - **`rowToSymbol`** [function] — 13 incoming references

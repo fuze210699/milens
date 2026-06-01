@@ -247,6 +247,101 @@ program
   });
 
 program
+  .command('upgrade')
+  .description('Upgrade milens: clear npx cache, rebuild index while keeping annotations/sessions/evolution data')
+  .option('-p, --path <path>', 'Repository root path (default: current directory)', '.')
+  .option('--all', 'Upgrade all indexed repositories')
+  .option('--no-clear-cache', 'Skip npx cache clearing')
+  .action(async (opts) => {
+    const { homedir: getHomedir } = await import('node:os');
+    const { existsSync: fsExists, rmSync } = await import('node:fs');
+    const { join: joinPath } = await import('node:path');
+
+    // 1. Clear npx cache
+    if (opts.clearCache !== false) {
+      const npxCache = joinPath(getHomedir(), '.npm', '_npx');
+      if (fsExists(npxCache)) {
+        try {
+          rmSync(npxCache, { recursive: true, force: true });
+          console.log('✓ Cleared npx cache');
+        } catch {
+          console.log('⚠ Could not clear npx cache (may be in use)');
+        }
+      }
+    }
+
+    // 2. Get repos to upgrade
+    const { RepoRegistry } = await import('./store/registry.js');
+    const reg = new RepoRegistry();
+
+    let entries: Array<{ rootPath: string; dbPath: string; analyzedAt?: string }> = [];
+    if (opts.all) {
+      entries = reg.listAll();
+    } else {
+      const entry = reg.findByRoot(resolve(opts.path));
+      if (entry) entries = [entry];
+    }
+
+    if (entries.length === 0) {
+      console.log('No indexed repositories found. Run `milens analyze` first.');
+      return;
+    }
+
+    // 3. For each repo, clear index tables (keep learning tables)
+    for (const entry of entries) {
+      const dbPath = entry.dbPath;
+      if (!fsExists(dbPath)) {
+        console.log(`⚠ No database at ${dbPath}, skipping ${entry.rootPath}`);
+        continue;
+      }
+
+      const { Database } = await import('./store/db.js');
+      const db = new Database(dbPath);
+
+      console.log(`\nUpgrading ${entry.rootPath}...`);
+
+      // Clear INDEX tables (rebuild fresh)
+      const indexTables = ['symbols', 'links', 'file_hashes', 'symbol_fts', 'symbol_embeddings', 'repo_meta'];
+      for (const table of indexTables) {
+        try {
+          db.connection.exec(`DELETE FROM ${table}`);
+        } catch {
+          // Table may not exist yet (e.g. symbol_embeddings)
+        }
+      }
+      console.log('  ✓ Cleared index tables');
+
+      // LEARNING tables preserved: annotations, sessions, evolution_log, tool_usage, metric_history
+      const keepTables = ['annotations', 'sessions', 'evolution_log', 'tool_usage', 'metric_history'];
+      for (const table of keepTables) {
+        try {
+          const row = db.connection.prepare(`SELECT COUNT(*) as cnt FROM ${table}`).get() as any;
+          if (row && row.cnt > 0) {
+            console.log(`  ✓ Kept ${table}: ${row.cnt} row(s)`);
+          }
+        } catch {
+          // Table may not exist
+        }
+      }
+
+      db.close();
+
+      // 4. Re-analyze
+      console.log('  Re-analyzing...');
+      const { analyze } = await import('./analyzer/engine.js');
+      await analyze({
+        rootPath: entry.rootPath,
+        dbPath: entry.dbPath,
+        force: true,
+        verbose: false,
+      });
+      console.log(`  ✓ Re-indexed ${entry.rootPath}`);
+    }
+
+    console.log('\n✓ Upgrade complete! Reload MCP server in VS Code: Cmd+Shift+P → MCP: Restart All Servers');
+  });
+
+program
   .command('dashboard')
   .description('Open usage analytics dashboard in your browser')
   .option('--port <port>', 'Port for the dashboard server', '3200')

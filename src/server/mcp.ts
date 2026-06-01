@@ -2729,7 +2729,13 @@ export async function startStdio(rootPath?: string): Promise<void> {
       const hookMgr = new HookManager();
       const hookConfig = hookMgr.loadConfig(rootPath);
       if (hookConfig.enabled && hookConfig.onFileChange) {
-        watcher = new FileWatcher({ rootPath, dbPath: entry.dbPath });
+        watcher = new FileWatcher({
+          rootPath,
+          dbPath: entry.dbPath,
+          logger: (_level, msg) => {
+            server.server.sendLoggingMessage({ level: 'info', data: msg });
+          },
+        });
         watcher.start();
       }
     }
@@ -2762,7 +2768,13 @@ export async function startHttp(port: number, rootPath?: string): Promise<void> 
       const hookMgr = new HookManager();
       const hookConfig = hookMgr.loadConfig(rootPath);
       if (hookConfig.enabled && hookConfig.onFileChange) {
-        watcher = new FileWatcher({ rootPath, dbPath: entry.dbPath });
+        watcher = new FileWatcher({
+          rootPath,
+          dbPath: entry.dbPath,
+          logger: (_level, msg) => {
+            server.server.sendLoggingMessage({ level: 'info', data: msg });
+          },
+        });
         watcher.start();
       }
     }

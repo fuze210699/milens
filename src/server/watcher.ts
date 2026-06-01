@@ -11,6 +11,13 @@ interface WatcherOptions {
   debounceMs?: number;
   /** Additional glob patterns to ignore */
   extraIgnores?: string[];
+  /** 
+   * Custom logger for MCP transport. When provided, watcher messages are
+   * sent through this callback instead of console.error (stderr).
+   * For MCP stdio transport, use server.sendLoggingMessage to send
+   * proper JSON-RPC notifications instead of raw stderr text.
+   */
+  logger?: (level: 'info' | 'warning' | 'error', message: string) => void;
 }
 
 const DEFAULT_IGNORES = [
@@ -50,12 +57,14 @@ export class FileWatcher {
   private ignores: string[];
   private running = false;
   private reindexing = false;
+  private log: (level: 'info' | 'warning' | 'error', message: string) => void;
 
   constructor(opts: WatcherOptions) {
     this.rootPath = resolve(opts.rootPath);
     this.dbPath = opts.dbPath;
     this.debounceMs = opts.debounceMs ?? 2000;
     this.ignores = [...DEFAULT_IGNORES, ...(opts.extraIgnores ?? [])];
+    this.log = opts.logger ?? ((_level, msg) => console.error(msg));
   }
 
   /** Start watching the repo root */
@@ -63,7 +72,7 @@ export class FileWatcher {
     if (this.running) return;
 
     if (!existsSync(this.dbPath)) {
-      console.log('[milens:watcher] No index found. Run `milens analyze` first.');
+      this.log('error', '[milens:watcher] No index found. Run `milens analyze` first.');
       return;
     }
 
@@ -78,13 +87,13 @@ export class FileWatcher {
       );
 
       this.watcher.on('error', (err: Error) => {
-        console.error(`[milens:watcher] Error: ${err.message}`);
+        this.log('error', `[milens:watcher] Error: ${err.message}`);
       });
 
       this.running = true;
-      console.log(`[milens:watcher] Watching ${this.rootPath} for changes (debounce: ${this.debounceMs}ms)`);
+      this.log('info', `[milens:watcher] Watching ${this.rootPath} for changes (debounce: ${this.debounceMs}ms)`);
     } catch {
-      console.log('[milens:watcher] File watching not available on this platform. Use `milens analyze --force` manually.');
+      this.log('error', '[milens:watcher] File watching not available on this platform. Use `milens analyze --force` manually.');
     }
   }
 
@@ -100,7 +109,7 @@ export class FileWatcher {
     }
     this.running = false;
     this.changedFiles.clear();
-    console.log('[milens:watcher] Stopped.');
+    this.log('info', '[milens:watcher] Stopped.');
   }
 
   /** Check if watcher is currently running */
@@ -139,7 +148,7 @@ export class FileWatcher {
       ? files.map(f => relative(this.rootPath, join(this.rootPath, f))).join(', ')
       : `${files.length} files`;
 
-    console.log(`[milens:watcher] Re-indexing ${displayFiles}...`);
+    this.log('info', `[milens:watcher] Re-indexing ${displayFiles}...`);
 
     try {
       const { analyze } = await import('../analyzer/engine.js');
@@ -154,9 +163,9 @@ export class FileWatcher {
         verbose: false,
       });
 
-      console.log(`[milens:watcher] Index updated (${files.length} file(s))`);
+      this.log('info', `[milens:watcher] Index updated (${files.length} file(s))`);
     } catch (err: any) {
-      console.log(`[milens:watcher] Re-index failed: ${err.message}`);
+      this.log('error', `[milens:watcher] Re-index failed: ${err.message}`);
     } finally {
       this.reindexing = false;
     }

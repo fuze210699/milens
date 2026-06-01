@@ -26,7 +26,7 @@ When working with code in **docs/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 129 symbols (109 exported) across 18 files.
+Contains 140 symbols (119 exported) across 19 files.
 
 ## Key Symbols
 - **`Adapter Packs`** [section] (docs/adapters.md:1) — 0 refs
@@ -42,8 +42,8 @@ Contains 129 symbols (109 exported) across 18 files.
 - **`Automated Install`** [section] (docs/adapters.md:66) — 0 refs
 - **`Profile Selection`** [section] (docs/adapters.md:74) — 0 refs
 - **`MCP Config Reference`** [section] (docs/adapters.md:86) — 0 refs
-- **`Milens Pricing`** [section] (docs/pricing.md:1) — 0 refs
-- **`Why Pay?`** [section] (docs/pricing.md:7) — 0 refs
+- **`Upgrading Milens`** [section] (docs/milens-upgrade.md:1) — 0 refs
+- **`Storage Map`** [section] (docs/milens-upgrade.md:5) — 0 refs
 
 ## Entry Points
 - **`applyFilters`** [function] — 1 incoming references
@@ -61,6 +61,7 @@ Contains 129 symbols (109 exported) across 18 files.
 - docs/github-app.html
 - docs/index.html
 - docs/learning.html
+- docs/milens-upgrade.md
 - docs/platforms.html
 - docs/pricing.html
 - docs/pricing.md

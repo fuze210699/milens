@@ -27,10 +27,10 @@ When working with code in **server/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 81 symbols (15 exported) across 4 files.
+Contains 94 symbols (16 exported) across 5 files.
 
 ## Key Symbols
-- **`HookManager`** [class] (src/server/hooks.ts:43) — 6 refs
+- **`HookManager`** [class] (src/server/hooks.ts:43) — 8 refs
 - **`HookConfig`** [interface] (src/server/hooks.ts:5) — 5 refs
 - **`defaultOnSessionStart`** [function] (src/server/hooks.ts:100) — 4 refs
 - **`defaultOnSessionEnd`** [function] (src/server/hooks.ts:164) — 4 refs
@@ -40,22 +40,22 @@ Contains 81 symbols (15 exported) across 4 files.
 - **`defaultOnPostCompact`** [function] (src/server/hooks.ts:358) — 4 refs
 - **`SessionContext`** [interface] (src/server/hooks.ts:15) — 4 refs
 - **`registerAllPrompts`** [function] (src/server/mcp-prompts.ts:637) — 4 refs
-- **`createMcpServer`** [function] (src/server/mcp.ts:369) — 4 refs
+- **`createMcpServer`** [function] (src/server/mcp.ts:370) — 4 refs
 - **`generateTestPlan`** [function] (src/server/test-plan.ts:14) — 4 refs
-- **`startStdio`** [function] (src/server/mcp.ts:2716) — 2 refs
-- **`startHttp`** [function] (src/server/mcp.ts:2724) — 2 refs
-- **`TestPlan`** [interface] (src/server/test-plan.ts:3) — 1 refs
+- **`FileWatcher`** [class] (src/server/watcher.ts:50) — 3 refs
+- **`startStdio`** [function] (src/server/mcp.ts:2717) — 2 refs
+- **`startHttp`** [function] (src/server/mcp.ts:2756) — 2 refs
 
 ## Entry Points
 - **`get`** [method] — 9 incoming references
-- **`HookManager`** [class] — 6 incoming references
-- **`loadConfig`** [method] — 5 incoming references
+- **`HookManager`** [class] — 8 incoming references
+- **`loadConfig`** [method] — 7 incoming references
 - **`HookConfig`** [interface] — 5 incoming references
 - **`defaultOnSessionStart`** [function] — 4 incoming references
 
 ## Dependencies
 - **store**: `Database`, `AnnotationStore`, `RepoRegistry`, `runDecayPass`, `getCodebaseSummary`, `recall`, `close`, `getStats` (+37 more)
-- **analyzer**: `reviewPr`, `resolve`, `find`
+- **analyzer**: `reviewPr`, `analyze`, `resolve`, `find`, `clear`
 - **parser**: `getParser`, `loadLanguage`, `ALL_LANGS`
 - **security**: `loadRules`
 - **orchestrator**: `Orchestrator`, `snapshot`, `compare`, `runAndFormat`
@@ -71,3 +71,4 @@ Contains 81 symbols (15 exported) across 4 files.
 - src/server/mcp-prompts.ts
 - src/server/mcp.ts
 - src/server/test-plan.ts
+- src/server/watcher.ts

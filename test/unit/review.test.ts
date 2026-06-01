@@ -214,7 +214,8 @@ describe('review', () => {
 
     try {
       const result = reviewPr(db, gitDir);
-      expect(result.changedFiles).toContain('src/rp-lib.test.ts');
+      expect(result.changedFiles).toContain('src/rp-lib.ts');
+      expect(result.changedFiles).not.toContain('src/rp-lib.test.ts');
       const symbolPaths = result.symbols.map(s => s.symbol.filePath);
       expect(symbolPaths).toContain('src/rp-lib.ts');
       expect(symbolPaths).not.toContain('src/rp-lib.test.ts');

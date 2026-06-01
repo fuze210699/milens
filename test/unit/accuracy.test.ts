@@ -137,4 +137,31 @@ describe('Accuracy Validation', () => {
       db.close();
     }, 30000);
   }
+
+  // Integration: verify ImportResolveCache works correctly through re-analysis
+  it('re-analyzing a project produces consistent results', async () => {
+    const rootPath = join(ACCURACY, 'ruby-project');
+    const milensDir = join(rootPath, '.milens');
+    const dbPath = join(milensDir, 'cache-test.db');
+
+    mkdirSync(milensDir, { recursive: true });
+    if (existsSync(dbPath)) {
+      try { unlinkSync(dbPath); } catch { /* ignore */ }
+    }
+    dbPaths.push(dbPath);
+
+    const aliases = loadAliases(rootPath);
+
+    // First run
+    const stats1 = await analyze({ rootPath, dbPath, force: true, aliases });
+    expect(stats1.symbolCount).toBeGreaterThan(0);
+
+    // Second run with force (clears cache internally)
+    const stats2 = await analyze({ rootPath, dbPath, force: true, aliases });
+    expect(stats2.symbolCount).toBe(stats1.symbolCount);
+
+    // Third run without force (uses cache)
+    const stats3 = await analyze({ rootPath, dbPath, force: false, aliases });
+    expect(stats3.symbolCount).toBeGreaterThanOrEqual(stats1.symbolCount);
+  }, 30000);
 });

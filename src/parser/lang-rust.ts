@@ -8,6 +8,7 @@ const spec: LangSpec = {
   wasmName: 'tree-sitter-rust',
   mroStrategy: 'none',
   importSemantics: 'named',
+  isExported: () => false, // handled by exports query (pub keyword)
   queries: {
     functions: `(function_item name: (identifier) @name) @def`,
     structs: `(struct_item name: (type_identifier) @name) @def`,

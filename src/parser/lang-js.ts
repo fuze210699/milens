@@ -6,6 +6,9 @@ const spec: LangSpec = {
   id: 'javascript',
   extensions: ['.js', '.jsx', '.mjs', '.cjs'],
   wasmName: 'tree-sitter-javascript',
+  mroStrategy: 'first-wins',
+  importSemantics: 'named',
+  isExported: () => false, // handled by exports query (export keyword)
   queries: {
     functions: `[
       (function_declaration name: (identifier) @name) @def

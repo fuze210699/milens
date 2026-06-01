@@ -30,7 +30,7 @@ interface LinkResult {
 
 const ACCURACY = join(import.meta.dirname, '..', 'fixtures', 'accuracy');
 
-const projects = ['ts-project', 'py-project', 'go-project', 'rust-project'] as const;
+const projects = ['ts-project', 'py-project', 'go-project', 'rust-project', 'js-project', 'java-project', 'php-project', 'ruby-project'] as const;
 
 function linkMatches(expected: ExpectedLink, actual: LinkResult): boolean {
   return actual.fromFile.includes(expected.fromFile) &&
@@ -115,11 +115,18 @@ describe('Accuracy Validation', () => {
       const precision = totalActual > 0 ? expectedFound / totalActual : 0;
       const recall = expected.links.length > 0 ? expectedFound / expected.links.length : 1;
 
-      // Track cross-file call links as a baseline sanity check
-      const crossFileCalls = actualLinks.filter(al =>
-        al.type === 'calls' && al.fromFile !== al.toFile
-      );
-      expect(crossFileCalls.length, `${project}: should have cross-file calls`).toBeGreaterThanOrEqual(1);
+      // Track cross-file links as a baseline sanity check
+      const hasCallLinks = expected.links.some(l => l.type === 'calls' && l.fromFile !== l.toFile);
+      if (hasCallLinks) {
+        const crossFileCalls = actualLinks.filter(al =>
+          al.type === 'calls' && al.fromFile !== al.toFile
+        );
+        expect(crossFileCalls.length, `${project}: should have cross-file calls`).toBeGreaterThanOrEqual(1);
+      } else {
+        // No call links expected — verify at least some links exist
+        const crossFileLinks = actualLinks.filter(al => al.fromFile !== al.toFile);
+        expect(crossFileLinks.length, `${project}: should have cross-file links`).toBeGreaterThanOrEqual(1);
+      }
 
       // Verify thresholds
       expect(precision, `${project}: precision`).toBeGreaterThanOrEqual(expected.minPrecision);

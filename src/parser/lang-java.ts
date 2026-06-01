@@ -8,6 +8,7 @@ const spec: LangSpec = {
   wasmName: 'tree-sitter-java',
   mroStrategy: 'first-wins',
   importSemantics: 'named',
+  isExported: () => false, // handled by exports query (public keyword)
   queries: {
     classes: `[
       (class_declaration name: (identifier) @name) @def

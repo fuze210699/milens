@@ -3,6 +3,10 @@ pub struct User {
     pub email: String,
 }
 
+pub trait Storage<T> {
+    fn store(&mut self, item: T);
+}
+
 pub struct UserRepo {
     pub users: Vec<User>,
 }
@@ -18,5 +22,11 @@ impl UserRepo {
 
     pub fn find(&self, email: &str) -> Option<&User> {
         self.users.iter().find(|u| u.email == email)
+    }
+}
+
+impl Storage<User> for UserRepo {
+    fn store(&mut self, user: User) {
+        self.users.push(user);
     }
 }

@@ -1,34 +1,14 @@
 {
-  "minPrecision": 0.3,
-  "minRecall": 0.5,
+  "minPrecision": 0.9,
+  "minRecall": 0.9,
   "links": [
-    {
-      "fromFile": "src/auth.ts",
-      "toFile": "src/models.ts",
-      "type": "calls",
-      "fromName": "registerUser",
-      "toName": "save"
-    },
-    {
-      "fromFile": "src/auth.ts",
-      "toFile": "src/models.ts",
-      "type": "calls",
-      "fromName": "_top",
-      "toName": "UserRepository"
-    },
-    {
-      "fromFile": "src/auth.ts",
-      "toFile": "src/models.ts",
-      "type": "imports",
-      "fromName": "_top",
-      "toName": "UserRepository"
-    },
-    {
-      "fromFile": "src/auth.ts",
-      "toFile": "src/models.ts",
-      "type": "imports",
-      "fromName": "_top",
-      "toName": "User"
-    }
+    {"fromFile":"auth.ts","toFile":"models.ts","type":"imports","fromName":"_top","toName":"UserRepository"},
+    {"fromFile":"auth.ts","toFile":"models.ts","type":"imports","fromName":"_top","toName":"User"},
+    {"fromFile":"auth.ts","toFile":"models.ts","type":"calls","fromName":"_top","toName":"UserRepository"},
+    {"fromFile":"auth.ts","toFile":"models.ts","type":"calls","fromName":"registerUser","toName":"save"},
+    {"fromFile":"auth.ts","toFile":"models.ts","type":"calls","fromName":"registerUser","toName":"User"},
+    {"fromFile":"models.ts","toFile":"models.ts","type":"calls","fromName":"save","toName":"User"},
+    {"fromFile":"models.ts","toFile":"models.ts","type":"contains","fromName":"UserRepository","toName":"save"},
+    {"fromFile":"models.ts","toFile":"models.ts","type":"contains","fromName":"UserRepository","toName":"findByEmail"}
   ]
 }

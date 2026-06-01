@@ -1,34 +1,28 @@
 {
-  "minPrecision": 0.3,
-  "minRecall": 0.5,
+  "minPrecision": 0.9,
+  "minRecall": 0.9,
   "links": [
-    {
-      "fromFile": "service.py",
-      "toFile": "models.py",
-      "type": "calls",
-      "fromName": "register",
-      "toName": "save"
-    },
-    {
-      "fromFile": "service.py",
-      "toFile": "models.py",
-      "type": "calls",
-      "fromName": "register",
-      "toName": "User"
-    },
-    {
-      "fromFile": "service.py",
-      "toFile": "models.py",
-      "type": "imports",
-      "fromName": "_top",
-      "toName": "User"
-    },
-    {
-      "fromFile": "service.py",
-      "toFile": "models.py",
-      "type": "imports",
-      "fromName": "_top",
-      "toName": "UserRepo"
-    }
+    {"fromFile":"admin.py","toFile":"service.py","type":"imports","fromName":"_top","toName":"UserService"},
+    {"fromFile":"admin.py","toFile":"models.py","type":"imports","fromName":"_top","toName":"User"},
+    {"fromFile":"service.py","toFile":"models.py","type":"imports","fromName":"_top","toName":"User"},
+    {"fromFile":"service.py","toFile":"models.py","type":"imports","fromName":"_top","toName":"UserRepo"},
+    {"fromFile":"admin.py","toFile":"models.py","type":"calls","fromName":"ban_user","toName":"User"},
+    {"fromFile":"admin.py","toFile":"models.py","type":"calls","fromName":"ban_user","toName":"save"},
+    {"fromFile":"admin.py","toFile":"service.py","type":"calls","fromName":"register_admin","toName":"register"},
+    {"fromFile":"service.py","toFile":"models.py","type":"calls","fromName":"__init__","toName":"UserRepo"},
+    {"fromFile":"service.py","toFile":"models.py","type":"calls","fromName":"register","toName":"User"},
+    {"fromFile":"service.py","toFile":"models.py","type":"calls","fromName":"register","toName":"save"},
+    {"fromFile":"models.py","toFile":"models.py","type":"calls","fromName":"save","toName":"User"},
+    {"fromFile":"admin.py","toFile":"models.py","type":"calls","fromName":"register_admin","toName":"User"},
+    {"fromFile":"admin.py","toFile":"service.py","type":"extends","fromName":"AdminService","toName":"UserService"},
+    {"fromFile":"admin.py","toFile":"admin.py","type":"contains","fromName":"AdminService","toName":"ban_user"},
+    {"fromFile":"admin.py","toFile":"admin.py","type":"contains","fromName":"AdminService","toName":"register_admin"},
+    {"fromFile":"models.py","toFile":"models.py","type":"contains","fromName":"User","toName":"__init__"},
+    {"fromFile":"models.py","toFile":"models.py","type":"contains","fromName":"User","toName":"display"},
+    {"fromFile":"models.py","toFile":"models.py","type":"contains","fromName":"UserRepo","toName":"__init__"},
+    {"fromFile":"models.py","toFile":"models.py","type":"contains","fromName":"UserRepo","toName":"save"},
+    {"fromFile":"models.py","toFile":"models.py","type":"contains","fromName":"UserRepo","toName":"find"},
+    {"fromFile":"service.py","toFile":"service.py","type":"contains","fromName":"UserService","toName":"__init__"},
+    {"fromFile":"service.py","toFile":"service.py","type":"contains","fromName":"UserService","toName":"register"}
   ]
 }

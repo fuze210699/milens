@@ -18,6 +18,7 @@ interface ResolutionInput {
   callResultBindings?: RawCallResultBinding[];
   resolvedImportPaths: Map<string, string>; // raw module path → resolved file path
   perFileImportSemantics?: Map<string, 'named' | 'wildcard-leaf' | 'wildcard-transitive' | 'namespace'>; // per-file import semantics
+  perFileMroStrategy?: Map<string, 'first-wins' | 'c3' | 'ruby-mixin' | 'none'>; // per-file MRO strategy
 }
 
 export interface ResolutionResult {
@@ -183,24 +184,37 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
   }
 
   // Build heritage ancestor map for MRO-aware method resolution
-  // childName → Set of ancestor type names (extends chain)
-  const heritageAncestors = new Map<string, Set<string>>();
+  // childName → ordered ancestor type names (C3 linearization or ruby-mixin order)
+  // Gather direct parent links per child
+  const directParentsPerChild = new Map<string, string[]>();
   for (const h of input.heritage) {
-    let ancestors = heritageAncestors.get(h.childName);
-    if (!ancestors) {
-      ancestors = new Set();
-      heritageAncestors.set(h.childName, ancestors);
+    let parents = directParentsPerChild.get(h.childName);
+    if (!parents) {
+      parents = [];
+      directParentsPerChild.set(h.childName, parents);
     }
-    ancestors.add(h.parentName);
+    parents.push(h.parentName);
   }
-  // Propagate transitive ancestors (1-hop)
-  for (const [childName, ancestors] of heritageAncestors) {
-    for (const ancestor of [...ancestors]) {
-      const transitive = heritageAncestors.get(ancestor);
-      if (transitive) {
-        for (const t of transitive) ancestors.add(t);
-      }
+
+  // Compute C3-ordered ancestor list for each class (topologically sorted, no duplicates)
+  const heritageAncestors = new Map<string, string[]>();
+  const classMroStrategy = new Map<string, 'first-wins' | 'c3' | 'ruby-mixin' | 'none'>();
+
+  // Determine MRO strategy per child class (from file-level strategy)
+  for (const [childName] of directParentsPerChild) {
+    // Find the file containing this child's heritage declaration
+    const heritageEntry = input.heritage.find(h => h.childName === childName);
+    if (heritageEntry) {
+      const strategy = input.perFileMroStrategy?.get(heritageEntry.filePath) ?? 'first-wins';
+      classMroStrategy.set(childName, strategy);
     }
+  }
+
+  // Compute ordered ancestor lists per strategy
+  for (const [childName, directParents] of directParentsPerChild) {
+    const strategy = classMroStrategy.get(childName) ?? 'first-wins';
+    const ancestors = computeC3Linearization(childName, directParents, directParentsPerChild, strategy);
+    heritageAncestors.set(childName, ancestors);
   }
 
   // ── Resolve imports ──
@@ -454,7 +468,7 @@ function narrowByReceiver(
   importedNamesPerFile: Map<string, Map<string, string>>,
   symbolsByFile: Map<string, CodeSymbol[]>,
   typeBindingsPerFile: Map<string, Map<string, Array<{ typeName: string; scope?: string; line: number }>>>,
-  heritageAncestors?: Map<string, Set<string>>,
+  heritageAncestors?: Map<string, string[]>,
 ): { symbol: CodeSymbol; confidence: number } | null {
   const receiver = call.receiver!;
 
@@ -529,7 +543,7 @@ function narrowByTypeBinding(
   symbolById: Map<string, CodeSymbol>,
   typeBindingsPerFile: Map<string, Map<string, Array<{ typeName: string; scope?: string; line: number }>>>,
   callEnclosingId?: string,
-  heritageAncestors?: Map<string, Set<string>>,
+  heritageAncestors?: Map<string, string[]>,
 ): { symbol: CodeSymbol; confidence: number } | null {
   const fileBindings = typeBindingsPerFile.get(filePath);
   if (!fileBindings) return null;
@@ -569,13 +583,151 @@ function narrowByTypeBinding(
   return null;
 }
 
+// ── C3 Linearization Algorithm ──
+// Computes the ordered method resolution chain for a class.
+// Python uses proper C3 merge; Ruby uses prepend → include → superclass order.
+
+function computeC3Linearization(
+  childName: string,
+  directParents: string[],
+  parentMap: Map<string, string[]>,
+  strategy: 'first-wins' | 'c3' | 'ruby-mixin' | 'none',
+): string[] {
+  if (strategy === 'none') return [];
+
+  // Build full graph of all ancestors (BFS to gather all nodes)
+  const allNodes = new Set<string>();
+  const queue = [...directParents];
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    if (allNodes.has(node)) continue;
+    allNodes.add(node);
+    const nodeParents = parentMap.get(node);
+    if (nodeParents) queue.push(...nodeParents);
+  }
+
+  // C3 linearization: L(C) = [C] + merge(L(B1), L(B2), ..., [B1, B2, ...])
+  if (strategy === 'c3') {
+    return computeC3Order(directParents, parentMap, allNodes);
+  }
+
+  // Ruby mixin: prepend (by convention: heritage type=implements) → include (extends) → superclass
+  // For simplicity: reverse direct parents order → first parent is highest priority
+  if (strategy === 'ruby-mixin') {
+    // In Ruby, modules included later override earlier; prepend reverses order
+    // Direct parents are in declaration order; reverse for mixin semantics
+    const ordered = computeC3Order(directParents, parentMap, allNodes);
+    return ordered.reverse();
+  }
+
+  // first-wins: DFS pre-order, retain first occurrence
+  if (strategy === 'first-wins') {
+    return computeFirstWinsOrder(directParents, parentMap);
+  }
+
+  return [];
+}
+
+/** Proper C3 merge algorithm: merge linearizations preserving order */
+function computeC3Order(
+  directParents: string[],
+  parentMap: Map<string, string[]>,
+  allNodes: Set<string>,
+): string[] {
+  // Build linearization for each parent recursively
+  const linearizations: string[][] = [];
+  for (const p of directParents) {
+    const pParents = parentMap.get(p) ?? [];
+    const pAllNodes = new Set<string>();
+    const q = [...pParents];
+    while (q.length > 0) {
+      const n = q.shift()!;
+      if (pAllNodes.has(n)) continue;
+      pAllNodes.add(n);
+      const np = parentMap.get(n);
+      if (np) q.push(...np);
+    }
+    // Recursively compute parent's C3 order
+    if (pParents.length > 0) {
+      linearizations.push(computeC3Order(pParents, parentMap, pAllNodes));
+    }
+  }
+
+  // L = merge(L1, L2, ..., Lk, [B1, B2, ..., Bk])
+  const lists = [...linearizations, [...directParents]];
+  return c3Merge(lists);
+}
+
+/** C3 merge: pick a head that appears in no tail, recurse */
+function c3Merge(lists: string[][]): string[] {
+  const result: string[] = [];
+
+  while (lists.some(l => l.length > 0)) {
+    let picked: string | null = null;
+    let pickedIdx = -1;
+
+    for (let i = 0; i < lists.length; i++) {
+      const head = lists[i][0];
+      if (head === undefined) continue;
+
+      // Check: does head appear in any tail (position > 0) of any list?
+      let isGood = true;
+      for (let j = 0; j < lists.length; j++) {
+        if (lists[j].slice(1).includes(head)) {
+          isGood = false;
+          break;
+        }
+      }
+
+      if (isGood) {
+        picked = head;
+        pickedIdx = i;
+        break;
+      }
+    }
+
+    if (picked === null) break; // Cannot resolve (should not happen in practice)
+
+    result.push(picked);
+
+    // Remove head from all lists
+    for (let i = 0; i < lists.length; i++) {
+      lists[i] = lists[i].filter(h => h !== picked);
+    }
+  }
+
+  return result;
+}
+
+/** First-wins: DFS pre-order, retain first occurrence of each node */
+function computeFirstWinsOrder(
+  directParents: string[],
+  parentMap: Map<string, string[]>,
+): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  function visit(name: string) {
+    if (seen.has(name)) return;
+    seen.add(name);
+    result.push(name);
+    const parents = parentMap.get(name);
+    if (parents) {
+      for (const p of parents) visit(p);
+    }
+  }
+
+  for (const p of directParents) visit(p);
+  return result;
+}
+
 // ── MRO-aware method resolution via type hierarchy ──
 
 function resolveMethodByType(
   candidates: CodeSymbol[],
   typeName: string,
   symbolById: Map<string, CodeSymbol>,
-  heritageAncestors?: Map<string, Set<string>>,
+  heritageAncestors?: Map<string, string[]>,
 ): CodeSymbol | undefined {
   // Direct match: method's parent class name matches the type
   let method = candidates.find(c => {

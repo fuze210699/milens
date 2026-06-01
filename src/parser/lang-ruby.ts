@@ -9,6 +9,7 @@ const spec: LangSpec = {
   allTopLevelExported: true,
   mroStrategy: 'ruby-mixin',
   importSemantics: 'wildcard-leaf',
+  isExported: (sym) => !sym.name.startsWith('_'),
   queries: {
     classes: `(class name: (constant) @name) @def`,
     modules: `(module name: (constant) @name) @def`,

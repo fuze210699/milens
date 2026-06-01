@@ -1,20 +1,13 @@
 {
-  "minPrecision": 0.3,
-  "minRecall": 0.5,
+  "minPrecision": 0.8,
+  "minRecall": 0.8,
   "links": [
-    {
-      "fromFile": "src/main.rs",
-      "toFile": "src/models.rs",
-      "type": "calls",
-      "fromName": "register",
-      "toName": "save"
-    },
-    {
-      "fromFile": "src/main.rs",
-      "toFile": "src/models.rs",
-      "type": "calls",
-      "fromName": "register",
-      "toName": "User"
-    }
+    {"fromFile":"admin.rs","toFile":"admin.rs","type":"calls","fromName":"new","toName":"new"},
+    {"fromFile":"admin.rs","toFile":"models.rs","type":"calls","fromName":"manage","toName":"save"},
+    {"fromFile":"main.rs","toFile":"models.rs","type":"calls","fromName":"register","toName":"save"},
+    {"fromFile":"models.rs","toFile":"models.rs","type":"calls","fromName":"new","toName":"new"},
+    {"fromFile":"models.rs","toFile":"models.rs","type":"calls","fromName":"find","toName":"find"},
+    {"fromFile":"admin.rs","toFile":"models.rs","type":"calls","fromName":"manage","toName":"User"},
+    {"fromFile":"main.rs","toFile":"models.rs","type":"calls","fromName":"register","toName":"User"}
   ]
 }

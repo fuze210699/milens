@@ -9,6 +9,7 @@ const spec: LangSpec = {
   allTopLevelExported: true,
   mroStrategy: 'c3',
   importSemantics: 'namespace',
+  isExported: (sym) => !sym.name.startsWith('_') && sym.kind !== 'module',
   queries: {
     functions: `[
       (module (function_definition name: (identifier) @name) @def)

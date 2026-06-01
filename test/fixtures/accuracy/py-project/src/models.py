@@ -3,6 +3,9 @@ class User:
         self.name: str = name
         self.email: str = email
 
+    def display(self) -> str:
+        return f"{self.name} <{self.email}>"
+
 
 class UserRepo:
     def __init__(self):

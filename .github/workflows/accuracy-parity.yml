@@ -4,8 +4,9 @@ on: [push, pull_request]
 jobs:
   parity:
     strategy:
+      fail-fast: false
       matrix:
-        language: [ts, py, go, rust]
+        language: [ts, js, py, go, rust, java, php, ruby]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,9 +24,16 @@ jobs:
           npx milens analyze -p "$PROJECT_ROOT" --force
 
       - name: Run accuracy tests
-        run: npx vitest run test/unit/accuracy.test.ts --reporter=json
+        id: accuracy
+        run: npx vitest run test/unit/accuracy.test.ts --reporter=json | tee accuracy-result.json
+        continue-on-error: true
 
-      - name: Check thresholds
+      - name: Enforce thresholds
         run: |
-          # Precision >= 90%, Recall >= 80% thresholds validated within test
-          echo "Accuracy thresholds enforced by vitest assertions"
+          if grep -q '"numFailedTests":0' accuracy-result.json; then
+            echo "✅ All accuracy thresholds met for ${{ matrix.language }}"
+          else
+            echo "❌ Accuracy thresholds NOT met for ${{ matrix.language }}"
+            cat accuracy-result.json
+            exit 1
+          fi

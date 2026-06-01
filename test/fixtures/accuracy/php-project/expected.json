@@ -1,0 +1,18 @@
+{
+  "minPrecision": 0.8,
+  "minRecall": 0.8,
+  "links": [
+    {"fromFile":"admin.php","toFile":"service.php","type":"calls","fromName":"adminRegister","toName":"register"},
+    {"fromFile":"service.php","toFile":"models.php","type":"calls","fromName":"__construct","toName":"UserRepository"},
+    {"fromFile":"service.php","toFile":"models.php","type":"calls","fromName":"register","toName":"User"},
+    {"fromFile":"service.php","toFile":"models.php","type":"calls","fromName":"register","toName":"save"},
+    {"fromFile":"admin.php","toFile":"service.php","type":"extends","fromName":"AdminService","toName":"UserService"},
+    {"fromFile":"models.php","toFile":"models.php","type":"implements","fromName":"UserRepository","toName":"Repository"},
+    {"fromFile":"admin.php","toFile":"admin.php","type":"contains","fromName":"AdminService","toName":"adminRegister"},
+    {"fromFile":"models.php","toFile":"models.php","type":"contains","fromName":"User","toName":"__construct"},
+    {"fromFile":"models.php","toFile":"models.php","type":"contains","fromName":"UserRepository","toName":"save"},
+    {"fromFile":"models.php","toFile":"models.php","type":"contains","fromName":"UserRepository","toName":"findByEmail"},
+    {"fromFile":"service.php","toFile":"service.php","type":"contains","fromName":"UserService","toName":"__construct"},
+    {"fromFile":"service.php","toFile":"service.php","type":"contains","fromName":"UserService","toName":"register"}
+  ]
+}

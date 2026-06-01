@@ -9,6 +9,7 @@ import { extractVueScript, extractVueTemplateRefs } from '../parser/lang-vue.js'
 import { extractHtmlScripts, extractHtmlRefs } from '../parser/lang-html.js';
 import { extractMarkdown } from '../parser/lang-md.js';
 import { resolveLinks, resolveLinksWithStats } from './resolver.js';
+import { resolveWithScopes, diffResolutions } from './scope-resolver.js';
 import { enrichMetadata } from './enrich.js';
 import { isTestFile } from '../utils.js';
 import { Database } from '../store/db.js';
@@ -312,10 +313,14 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
 
   // Phase 5: Resolve cross-file links
   const perFileImportSemantics = new Map<string, 'named' | 'wildcard-leaf' | 'wildcard-transitive' | 'namespace'>();
+  const perFileMroStrategy = new Map<string, 'first-wins' | 'c3' | 'ruby-mixin' | 'none'>();
   for (const [, group] of langGroups) {
     for (const file of group) {
       if (file.spec.importSemantics) {
         perFileImportSemantics.set(file.relativePath, file.spec.importSemantics);
+      }
+      if (file.spec.mroStrategy) {
+        perFileMroStrategy.set(file.relativePath, file.spec.mroStrategy);
       }
     }
   }
@@ -332,6 +337,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     callResultBindings: allCallResultBindings,
     resolvedImportPaths,
     perFileImportSemantics,
+    perFileMroStrategy,
   });
   const links = resolution.links;
   if (opts.verbose) {
@@ -341,6 +347,33 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     }
     if (resolution.externalImports > 0 || resolution.externalCalls > 0) {
       console.log(`[link] ✓ ${resolution.externalImports} external imports, ${resolution.externalCalls} external calls (expected)`);
+    }
+  }
+
+  // Phase 5.5: Dual-path resolution — compare legacy vs scope-based
+  {
+    const scopeResolution = resolveWithScopes({
+      symbolsByFile,
+      allSymbols,
+      imports: allImports,
+      calls: allCalls,
+      heritage: allHeritage,
+      reExports: allReExports,
+      typeBindings: allTypeBindings,
+      assignmentBindings: allAssignmentBindings,
+      returnTypes: allReturnTypes,
+      callResultBindings: allCallResultBindings,
+      resolvedImportPaths,
+      perFileImportSemantics,
+      perFileMroStrategy,
+      treeCache,
+    });
+    const diffs = diffResolutions(resolution, scopeResolution);
+    if (opts.verbose) {
+      const matchPct = resolution.links.length > 0
+        ? ((resolution.links.length - diffs.length) / resolution.links.length * 100).toFixed(1)
+        : '0.0';
+      console.log(`[dual] Legacy: ${resolution.links.length} links, Scope: ${scopeResolution.links.length} links, Diff: ${diffs.length} (${matchPct}% match)`);
     }
   }
 

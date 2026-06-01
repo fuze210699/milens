@@ -5,6 +5,10 @@ type User struct {
 	Email string
 }
 
+type Saver interface {
+	Save(user User)
+}
+
 type UserRepo struct {
 	users []User
 }

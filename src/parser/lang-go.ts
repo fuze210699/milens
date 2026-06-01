@@ -9,6 +9,7 @@ const spec: LangSpec = {
   uppercaseExported: true,
   mroStrategy: 'first-wins',
   importSemantics: 'wildcard-leaf',
+  isExported: (sym) => sym.name[0] === sym.name[0].toUpperCase() && /[A-Z]/.test(sym.name[0]),
   queries: {
     functions: `(function_declaration name: (identifier) @name) @def`,
     variables: `[

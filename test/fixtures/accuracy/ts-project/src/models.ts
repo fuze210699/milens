@@ -4,7 +4,12 @@ export interface User {
   email: string;
 }
 
-export class UserRepository {
+export interface Repository<T> {
+  save(item: T): void;
+  findByEmail(email: string): T | undefined;
+}
+
+export class UserRepository implements Repository<User> {
   private users: User[] = [];
 
   save(user: User): void {

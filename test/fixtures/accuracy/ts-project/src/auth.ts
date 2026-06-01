@@ -1,5 +1,4 @@
-import { UserRepository } from './models.js';
-import type { User } from './models.js';
+import { UserRepository, type User } from './models.js';
 
 const repo = new UserRepository();
 

@@ -8,6 +8,7 @@ const spec: LangSpec = {
   wasmName: 'tree-sitter-tsx',
   mroStrategy: 'first-wins',
   importSemantics: 'named',
+  isExported: () => false, // handled by exports query (export keyword)
   queries: {
     functions: `[
       (function_declaration name: (identifier) @name) @def

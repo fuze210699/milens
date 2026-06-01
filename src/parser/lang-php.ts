@@ -8,6 +8,7 @@ const spec: LangSpec = {
   wasmName: 'tree-sitter-php',
   mroStrategy: 'first-wins',
   importSemantics: 'wildcard-leaf',
+  isExported: () => false, // handled by exports query (public keyword)
   queries: {
     functions: `[
       (function_definition name: (name) @name) @def

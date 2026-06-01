@@ -774,22 +774,184 @@
   </main>
 
   <script>
-    // Tab navigation
     const navItems = document.querySelectorAll('.nav-item[data-tab]');
     const tabContents = document.querySelectorAll('.tab-content');
     const toolbarTitle = document.getElementById('toolbar-title');
+    const statusEl = document.getElementById('connection-status');
+
+    function setStatus(text, connected) {
+      statusEl.textContent = text;
+      const dot = statusEl.previousElementSibling;
+      if (dot) dot.style.background = connected ? 'var(--success)' : 'var(--danger)';
+    }
 
     navItems.forEach(item => {
       item.addEventListener('click', () => {
         navItems.forEach(n => n.classList.remove('active'));
         tabContents.forEach(t => t.classList.remove('active'));
-
         item.classList.add('active');
-        const tabId = item.getAttribute('data-tab');
-        document.getElementById('tab-' + tabId).classList.add('active');
+        document.getElementById('tab-' + item.getAttribute('data-tab')).classList.add('active');
         toolbarTitle.textContent = item.textContent.trim();
+        loadTab(item.getAttribute('data-tab'));
       });
     });
+
+    function loadTab(tab) {
+      switch (tab) {
+        case 'overview': loadOverview(); break;
+        case 'domains': loadDomains(); break;
+        case 'learning': loadLearning(); break;
+        case 'metrics': loadMetrics(); break;
+        case 'security': loadSecurity(); break;
+        case 'settings': loadSettings(); break;
+      }
+    }
+
+    async function loadOverview() {
+      try {
+        setStatus('Loading...', false);
+        const [status, heat] = await Promise.all([
+          window.milens.getStatus(),
+          window.milens.getHeat()
+        ]);
+
+        document.querySelector('#tab-overview .card-grid').innerHTML = `
+          <div class="card"><div class="card-title">Total Symbols</div><div class="card-value">${status.symbols}</div><div class="card-sub">Functions, classes, interfaces</div></div>
+          <div class="card"><div class="card-title">Total Links</div><div class="card-value">${status.links}</div><div class="card-sub">Cross-file references</div></div>
+          <div class="card"><div class="card-title">Files Indexed</div><div class="card-value">${status.files}</div><div class="card-sub">Source files tracked</div></div>
+          <div class="card"><div class="card-title">Coverage</div><div class="card-value">${status.files > 0 ? Math.round(status.symbols / Math.max(status.files,1) * 10) : '--'}</div><div class="card-sub">Avg symbols per file</div></div>
+        `;
+
+        document.getElementById('stat-symbols').textContent = status.symbols;
+        document.getElementById('stat-files').textContent = status.files;
+        document.getElementById('stat-links').textContent = status.links;
+        document.getElementById('stat-last').textContent = status.lastAnalysis;
+        document.getElementById('stat-dbsize').textContent = (status.dbsize / 1024).toFixed(1) + ' KB';
+
+        if (heat && heat.length > 0) {
+          let heatHTML = '<div class="section-title">Top Symbols by Heat</div><table class="table"><thead><tr><th>Symbol</th><th>File</th><th>Role</th><th>Heat</th></tr></thead><tbody>';
+          heat.forEach(h => {
+            heatHTML += `<tr><td><strong>${h.name}</strong></td><td>${h.file_path}</td><td>${h.role || '--'}</td><td>${h.heat}</td></tr>`;
+          });
+          heatHTML += '</tbody></table>';
+          document.querySelector('#tab-overview .empty-state').innerHTML = heatHTML;
+        }
+
+        setStatus('Connected', true);
+      } catch (e) {
+        setStatus('Error: ' + e.message, false);
+      }
+    }
+
+    async function loadDomains() {
+      try {
+        const domains = await window.milens.getDomains();
+        const tbody = document.querySelector('#tab-domains table tbody');
+        if (domains.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px;">No domain data available.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = domains.map(d => `
+          <tr>
+            <td>${d.domain}</td>
+            <td>${d.file_count}</td>
+            <td>${d.symbol_count}</td>
+            <td>${d.link_count || '--'}</td>
+            <td>${d.cohesion || '--'}</td>
+          </tr>
+        `).join('');
+      } catch (e) { console.error(e); }
+    }
+
+    async function loadLearning() {
+      try {
+        const annotations = await window.milens.getAnnotations();
+        const tbody = document.querySelector('#tab-learning table tbody');
+        if (annotations.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px;">No annotations recorded yet.</td></tr>';
+          return;
+        }
+        const high = annotations.filter(a => a.confidence >= 0.8).length;
+        const med = annotations.filter(a => a.confidence >= 0.5 && a.confidence < 0.8).length;
+        const low = annotations.filter(a => a.confidence < 0.5).length;
+        const total = annotations.length;
+
+        const confCard = document.querySelector('#tab-learning .card .stat-row');
+        if (confCard && confCard.parentElement) {
+          confCard.parentElement.innerHTML = `
+            <div class="stat-row"><span class="stat-label">High confidence (≥ 0.8)</span><span class="stat-value">${high}</span><div class="progress-bar" style="width:120px;"><div class="progress-fill success" style="width:${(high/total*100)||0}%;"></div></div></div>
+            <div class="stat-row"><span class="stat-label">Medium confidence (0.5-0.79)</span><span class="stat-value">${med}</span><div class="progress-bar" style="width:120px;"><div class="progress-fill warning" style="width:${(med/total*100)||0}%;"></div></div></div>
+            <div class="stat-row"><span class="stat-label">Low confidence (< 0.5)</span><span class="stat-value">${low}</span><div class="progress-bar" style="width:120px;"><div class="progress-fill danger" style="width:${(low/total*100)||0}%;"></div></div></div>
+          `;
+        }
+
+        tbody.innerHTML = annotations.map(a => `
+          <tr>
+            <td>${a.symbol}</td>
+            <td><span class="badge badge-info">${a.key}</span></td>
+            <td>${a.confidence.toFixed(2)}</td>
+            <td>${a.updated_at || a.created_at}</td>
+          </tr>
+        `).join('');
+      } catch (e) { console.error(e); }
+    }
+
+    async function loadMetrics() {
+      try {
+        const m = await window.milens.getMetrics();
+        const toolAct = await window.milens.getToolActivity();
+
+        const ter = m.tokensSaved > 0 ? (m.tokensSaved / Math.max(m.tokensOut, 1)).toFixed(2) : '--';
+        const toolCalls = m.toolCalls || 0;
+        const deadCode = m.deadCode || 0;
+        const exportedSymbols = m.exportedSymbols || 0;
+
+        document.querySelectorAll('#tab-metrics .metric-card .value').forEach((el, i) => {
+          const values = [
+            ter, toolCalls, '--',
+            deadCode, exportedSymbols, m.annotations || '--', m.sessions || '--'
+          ];
+          if (values[i] !== undefined) el.textContent = values[i];
+        });
+
+        if (toolAct && toolAct.length > 0) {
+          let taHTML = '<div class="section-title">Tool Activity</div><table class="table"><thead><tr><th>Tool</th><th>Calls</th><th>Tokens Saved</th></tr></thead><tbody>';
+          toolAct.forEach(t => {
+            taHTML += `<tr><td>${t.tool}</td><td>${t.count}</td><td>${t.saved}</td></tr>`;
+          });
+          taHTML += '</tbody></table>';
+          document.querySelector('#tab-metrics .chart-placeholder').outerHTML = taHTML;
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    async function loadSecurity() {
+      try {
+        const findings = await window.milens.getSecurity();
+        const tbody = document.querySelector('#tab-security table tbody');
+        if (findings.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px;">No security findings.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = findings.map(f => `
+          <tr>
+            <td>${f.symbol}</td>
+            <td><span class="badge badge-${f.confidence > 0.8 ? 'critical' : f.confidence > 0.5 ? 'high' : 'medium'}">${f.confidence > 0.8 ? 'CRITICAL' : f.confidence > 0.5 ? 'HIGH' : 'MEDIUM'}</span></td>
+            <td>${f.file_path}</td>
+            <td>${f.start_line}</td>
+            <td>--</td>
+          </tr>
+        `).join('');
+      } catch (e) { console.error(e); }
+    }
+
+    function loadSettings() {
+      document.querySelector('#tab-settings .stat-row .stat-value').textContent = 'D:\\project\\milens\\.milens\\milens.db';
+      document.querySelectorAll('#tab-settings .stat-row .stat-value')[1].textContent = 'Connected';
+    }
+
+    // initial load
+    loadOverview();
   </script>
 </body>
 </html>

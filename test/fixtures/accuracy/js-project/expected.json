@@ -1,0 +1,19 @@
+{
+  "minPrecision": 0.9,
+  "minRecall": 0.9,
+  "links": [
+    {"fromFile":"app.js","toFile":"calculator.js","type":"imports","fromName":"_top","toName":"Calculator"},
+    {"fromFile":"app.js","toFile":"calculator.js","type":"imports","fromName":"_top","toName":"createCalc"},
+    {"fromFile":"extend.js","toFile":"calculator.js","type":"imports","fromName":"_top","toName":"Calculator"},
+    {"fromFile":"app.js","toFile":"calculator.js","type":"calls","fromName":"_top","toName":"Calculator"},
+    {"fromFile":"app.js","toFile":"calculator.js","type":"calls","fromName":"compute","toName":"add"},
+    {"fromFile":"app.js","toFile":"calculator.js","type":"calls","fromName":"compute","toName":"multiply"},
+    {"fromFile":"app.js","toFile":"calculator.js","type":"calls","fromName":"useFactory","toName":"createCalc"},
+    {"fromFile":"app.js","toFile":"calculator.js","type":"calls","fromName":"useFactory","toName":"add"},
+    {"fromFile":"calculator.js","toFile":"calculator.js","type":"calls","fromName":"createCalc","toName":"Calculator"},
+    {"fromFile":"extend.js","toFile":"calculator.js","type":"extends","fromName":"AdvancedCalc","toName":"Calculator"},
+    {"fromFile":"calculator.js","toFile":"calculator.js","type":"contains","fromName":"Calculator","toName":"add"},
+    {"fromFile":"calculator.js","toFile":"calculator.js","type":"contains","fromName":"Calculator","toName":"multiply"},
+    {"fromFile":"extend.js","toFile":"extend.js","type":"contains","fromName":"AdvancedCalc","toName":"divide"}
+  ]
+}

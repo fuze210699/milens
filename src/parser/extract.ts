@@ -11,6 +11,8 @@ export interface LangSpec {
   uppercaseExported?: boolean;   // Go: uppercase first letter = exported
   mroStrategy?: 'first-wins' | 'c3' | 'ruby-mixin' | 'none'; // Method resolution order for inheritance
   importSemantics?: 'named' | 'wildcard-leaf' | 'wildcard-transitive' | 'namespace'; // How imports expose symbols
+  /** Determine whether a symbol is exported (overrides allTopLevelExported/uppercaseExported) */
+  isExported?: (symbol: CodeSymbol) => boolean;
   queries: {
     functions?: string;
     classes?: string;
@@ -339,15 +341,22 @@ export function extractFromTree(
     if (exportedNames.has(sym.name)) sym.exported = true;
   }
 
+  // Per-language export detection via isExported callback (preferred)
+  if (spec.isExported) {
+    for (const sym of symbols) {
+      if (spec.isExported(sym)) sym.exported = true;
+    }
+  }
+
   // Languages like Python: all top-level symbols are exported when no explicit __all__
-  if (spec.allTopLevelExported && exportedNames.size === 0) {
+  if (spec.allTopLevelExported && exportedNames.size === 0 && !spec.isExported) {
     for (const sym of symbols) {
       if (!sym.name.startsWith('_') && sym.kind !== 'module') sym.exported = true;
     }
   }
 
   // Go convention: uppercase first letter = exported
-  if (spec.uppercaseExported) {
+  if (spec.uppercaseExported && !spec.isExported) {
     for (const sym of symbols) {
       if (sym.name[0] && sym.name[0] === sym.name[0].toUpperCase() && /[A-Z]/.test(sym.name[0])) {
         sym.exported = true;

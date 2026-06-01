@@ -1,13 +1,11 @@
 {
-  "minPrecision": 0.3,
-  "minRecall": 0.5,
+  "minPrecision": 0.8,
+  "minRecall": 0.8,
   "links": [
-    {
-      "fromFile": "src/main.go",
-      "toFile": "src/models/user.go",
-      "type": "calls",
-      "fromName": "Register",
-      "toName": "Save"
-    }
+    {"fromFile":"admin.go","toFile":"models/user.go","type":"calls","fromName":"AdminRegister","toName":"Save"},
+    {"fromFile":"main.go","toFile":"models/user.go","type":"calls","fromName":"Register","toName":"Save"},
+    {"fromFile":"admin.go","toFile":"admin.go","type":"calls","fromName":"NewAdminService","toName":"AdminService"},
+    {"fromFile":"main.go","toFile":"main.go","type":"calls","fromName":"NewUserService","toName":"UserService"},
+    {"fromFile":"models/user.go","toFile":"models/user.go","type":"calls","fromName":"Find","toName":"User"}
   ]
 }

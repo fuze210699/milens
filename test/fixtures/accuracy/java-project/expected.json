@@ -1,0 +1,16 @@
+{
+  "minPrecision": 0.8,
+  "minRecall": 0.8,
+  "links": [
+    {"fromFile":"Models.java","toFile":"Models.java","type":"calls","fromName":"findByEmail","toName":"getEmail"},
+    {"fromFile":"Service.java","toFile":"Models.java","type":"calls","fromName":"UserService","toName":"UserRepository"},
+    {"fromFile":"Service.java","toFile":"Models.java","type":"calls","fromName":"register","toName":"User"},
+    {"fromFile":"Service.java","toFile":"Models.java","type":"calls","fromName":"register","toName":"save"},
+    {"fromFile":"Models.java","toFile":"Models.java","type":"contains","fromName":"User","toName":"User"},
+    {"fromFile":"Models.java","toFile":"Models.java","type":"contains","fromName":"User","toName":"getName"},
+    {"fromFile":"Models.java","toFile":"Models.java","type":"contains","fromName":"User","toName":"getEmail"},
+    {"fromFile":"Models.java","toFile":"Models.java","type":"contains","fromName":"UserRepository","toName":"save"},
+    {"fromFile":"Models.java","toFile":"Models.java","type":"contains","fromName":"UserRepository","toName":"findByEmail"},
+    {"fromFile":"Service.java","toFile":"Service.java","type":"contains","fromName":"UserService","toName":"register"}
+  ]
+}

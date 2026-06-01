@@ -233,7 +233,7 @@
 <section class="hero section" id="main-content">
   <div class="container">
     <h1>Milens <span>in Action</span></h1>
-    <p class="subtitle">From one-command onboarding to enterprise multi-agent pipelines — see how Milens transforms development at every scale. 10 workflow stories + 24 tactical scenarios.</p>
+    <p class="subtitle">From one-command onboarding to enterprise multi-agent pipelines — see how Milens transforms development at every scale. 17 Workflow Stories + 36 tactical scenarios.</p>
     <div class="hero-stats">
       <div class="stat-badge"><strong>15</strong> Workflow Stories</div>
       <div class="stat-badge"><strong>36</strong> Tool Scenarios</div>
@@ -612,9 +612,9 @@
           <span class="story-arrow">→</span>
           <span class="story-step">serve --http --port 3100</span>
           <span class="story-arrow">→</span>
-          <span class="story-step dim">41 tools over localhost MCP</span>
+          <span class="story-step dim">42 tools over localhost MCP</span>
         </div>
-        <div class="story-outcome"><strong>Outcome:</strong> All 41 tools work completely offline. Knowledge graph stored in local SQLite. Tree-sitter runs as WASM — no native binaries. MCP server binds 127.0.0.1 only. No API keys, no cloud dependency, no telemetry. Defense-grade code intelligence without defense-grade complexity.</div>
+        <div class="story-outcome"><strong>Outcome:</strong> All 42 tools work completely offline. Knowledge graph stored in local SQLite. Tree-sitter runs as WASM — no native binaries. MCP server binds 127.0.0.1 only. No API keys, no cloud dependency, no telemetry. Defense-grade code intelligence without defense-grade complexity.</div>
       </div>
     </div>
 
@@ -649,7 +649,7 @@
       <div class="story-num blue">15</div>
       <div>
         <div class="story-top">
-          <span class="story-title">60% Token Savings = $1,000s Saved Monthly</span>
+          <span class="story-title">Reduced Token Usage = $1,000s Saved Monthly</span>
           <div class="story-tags">
             <span class="story-tag scale">Any Scale</span>
             <span class="story-tag team">Cost-Aware</span>
@@ -668,7 +668,45 @@
           <span class="story-arrow">→</span>
           <span class="story-step dim">$1000s saved/month</span>
         </div>
-        <div class="story-outcome"><strong>Outcome:</strong> Compact format <code>name [kind] file:line</code> vs raw code blocks. Detail levels L0/L1/L2 control output size. <code>overview</code> combines 3 tools in 1 call (saves 2 round trips). <code>smart_context</code> filters by intent. For a team making 200 tool calls/day, 60% token savings = real budget impact. Your CFO will love this page.</div>
+        <div class="story-outcome"><strong>Outcome:</strong> Compact format <code>name [kind] file:line</code> vs raw code blocks. Detail levels L0/L1/L2 control output size. <code>overview</code> combines 3 tools in 1 call (saves 2 round trips). <code>smart_context</code> filters by intent. For a team making 200 tool calls/day, Reduced Token Usage = real budget impact. Your CFO will love this page.</div>
+      </div>
+    </div>
+
+    <!-- Story 16: Clean Uninstall -->
+    <div class="story-card" data-category="all">
+      <div class="story-number">16</div>
+      <div class="story-body">
+        <h3>Clean Uninstall — Remove Every Trace</h3>
+        <p>You're done with milens on a project and want full cleanup. Not just npm uninstall — injected blocks, generated files, hooks, cron, registry entries, MCP configs, env vars.</p>
+        <div class="story-flow">
+          <span class="story-step">milens uninstall</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">Scans 11 trace categories</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">Interactive removal</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">Final verification scan</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> <code>milens uninstall</code> scans injected blocks, generated files, git hooks, cron entries, Windows tasks, databases, registry, MCP configs, deps, env vars, and manual references. <code>--dry-run</code> previews without deleting. <code>--scan-only</code> detects only. One command, zero traces left.</div>
+      </div>
+    </div>
+
+    <!-- Story 17: 12-Language Accuracy -->
+    <div class="story-card" data-category="all">
+      <div class="story-number">17</div>
+      <div class="story-body">
+        <h3>12-Language Accuracy — Precision/Recall Validation</h3>
+        <p>You maintain a multi-language codebase (TypeScript, Python, Ruby, Vue). You need to know how accurate milens's symbol detection is for each language before trusting it in production.</p>
+        <div class="story-flow">
+          <span class="story-step">8 accuracy fixtures</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">expected.json per project</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">analyze() → precision/recall</span>
+          <span class="story-arrow">→</span>
+          <span class="story-step">Validated per language</span>
+        </div>
+        <div class="story-outcome"><strong>Outcome:</strong> Ruby detects constants, instance/class variables, type bindings, Rails DSL. Vue SFC parses Composition API + AST template + scoped CSS. CSS extracts class/id/keyframes/media queries. HTML uses tree-sitter + form/link detection. Cross-language linking: HTML class → CSS symbol. 8 test projects validate precision/recall across all 12 languages.</div>
       </div>
     </div>
 
@@ -1196,6 +1234,34 @@
         <div class="card-tool">session_context({session_id: "..."})</div>
         <div class="card-result-label">What happens</div>
         <div class="card-result">Returns full session metadata: tool calls made, annotations recorded, duration, agent name. Complete audit trail for every AI session.</div>
+      </div>
+
+      <div class="scenario-card" data-category="review">
+        <div class="card-header">
+          <span class="card-icon">📋</span>
+          <span class="card-name">Symbol-Level PR Review</span>
+          <span class="card-badge review">Code Review</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"review cai PR nay, nhung dung flag nhung symbol khong thay doi"</div>
+        <div class="card-tool-label">Tool</div>
+        <div class="card-tool">review_pr({ref: "main"})</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Symbol-level diff via git show — compares old vs new commit symbols, not entire files. Cross-file impact tracks downstream callers. Fixture/test files excluded. Internal implementation details deprioritized. Only actually changed symbols flagged.</div>
+      </div>
+
+      <div class="scenario-card" data-category="architecture">
+        <div class="card-header">
+          <span class="card-icon">🧹</span>
+          <span class="card-name">Clean Uninstall</span>
+          <span class="card-badge architecture">Architecture</span>
+        </div>
+        <div class="card-says">You say</div>
+        <div class="card-quote">"xoa het milens traces trong project nay"</div>
+        <div class="card-tool-label">CLI</div>
+        <div class="card-tool">milens uninstall<br>milens uninstall --dry-run</div>
+        <div class="card-result-label">What happens</div>
+        <div class="card-result">Scans 11 trace categories: injected blocks, generated files, git hooks, cron, Windows tasks, databases, registry, MCP configs, deps, env vars, manual refs. Interactive wizard or auto-remove with --dry-run to preview.</div>
       </div>
 
     </div>

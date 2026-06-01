@@ -338,6 +338,30 @@
 <section class="timeline" id="timeline">
   <div class="container">
 
+    <!-- v0.6.6 -->
+    <div class="timeline-entry">
+      <div class="timeline-badge">
+        <span class="version">v0.6.6</span>
+        <span class="date">June 2026</span>
+      </div>
+      <div class="timeline-card">
+        <h3><span class="version-dot"></span> 12-Language Accuracy Boost, Symbol-Level PR Review &amp; Uninstall</h3>
+        <ul>
+          <li class="new">Ruby: constants, instance/class variables, type bindings, attr_accessor → virtual methods, Rails DSL (has_many, belongs_to, scope, before_action), private/protected export detection</li>
+          <li class="new">Vue SFC: Composition API (defineProps/defineEmits child symbols), AST-based template parsing with tree-sitter-html, scoped CSS extraction</li>
+          <li class="new">CSS: class/ID selectors, keyframes, media queries, naming convention (.class, #id prefix), cross-language HTML class → CSS symbol linking</li>
+          <li class="new">HTML: tree-sitter element/attribute extraction, form/link/a/img detection, cross-language class → CSS resolution</li>
+          <li class="new">Symbol-level PR review: <code>review_pr</code> uses git show to diff old vs new commit symbols instead of entire files. Cross-file impact tracking flags downstream callers. Fixture/test files excluded.</li>
+          <li class="new">Scope-based resolver: new <code>scope-resolver.ts</code> running parallel to legacy resolver with parity checking</li>
+          <li class="new">Type bindings &amp; MRO: C3 linearization, first-wins, ruby-mixin strategies. Type inference from constructors across 8 languages.</li>
+          <li class="new">Uninstall command: <code>milens uninstall</code> scans 11 trace categories (injected blocks, generated files, hooks, cron, database, registry, MCP configs, deps, env vars). Interactive wizard + <code>--dry-run</code> / <code>--scan-only</code>.</li>
+          <li class="new">8 accuracy fixtures with expected.json for precision/recall validation across 12 languages</li>
+          <li class="new">42 MCP tools (up from 41), 628 tests across 35 test files</li>
+          <li>Agent guidance: refreshed skills generator, AGENTS.md templates, adapter configs for all 7 editors</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- v0.6.5 -->
     <div class="timeline-entry">
       <div class="timeline-badge">
@@ -348,11 +372,11 @@
         <h3><span class="version-dot"></span> CLI Workflows, Orchestration &amp; Expanded Test Coverage</h3>
         <ul>
           <li class="new">7 CLI workflow commands: <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">tdd</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">review</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">plan</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">onboard</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">security-scan</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">refactor</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">handoff</code></li>
-          <li class="new">14 new test files: 554 tests with 58% coverage (up from 168 tests, 23% coverage)</li>
+          <li class="new">14 new test files: 554 tests with 58% coverage</li>
           <li class="new">Enhanced orchestrator: <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">orchestrate()</code> with snapshot persistence and structured action plans</li>
           <li class="new"><code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">compare_impact</code> tool for regression detection — snapshot and compare blast radius graphs before and after edits</li>
           <li class="new">Coverage thresholds in vitest.config.ts; CI/CD: milens-ci-test.yml workflow</li>
-          <li>41 MCP tools in full profile (up from 33); 7 sub-agent prompts; 50+ security rules</li>
+          <li>42 MCP tools in full profile; 7 sub-agent prompts; 50+ security rules</li>
           <li>Improved orchestrator with snapshot persistence for compare_impact workflows</li>
         </ul>
       </div>
@@ -368,7 +392,7 @@
         <h3><span class="version-dot"></span> GitHub App &amp; Automation Pipeline</h3>
         <ul>
           <li class="new">GitHub App with PR review automation: automatic risk assessment comments on every pull request with per-symbol scores, heat maps, and test coverage indicators</li>
-          <li class="new">41 MCP tools total — up from 33 in v0.5.0, including semantic search, test impact, pre-commit check, dead code detection, and route analysis</li>
+          <li class="new">42 MCP tools total, including semantic search, test impact, pre-commit check, dead code detection, and route analysis</li>
           <li class="new">Hook system: <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">onSessionStart</code>, <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">onSessionEnd</code>, and <code style="background:rgba(126,231,135,0.08);padding:1px 8px;border-radius:3px;">onPreCommit</code> hooks for automated workflows triggered by agent lifecycle events</li>
           <li class="new">Learning &amp; Evolution pipeline: annotations across sessions, recall of past learnings, and auto-promotion of critical findings to permanent knowledge</li>
           <li>Security scan upgraded: dependency audit with 34 CVE checks across npm, Python, Rust, Go, and Java ecosystems</li>
@@ -418,7 +442,7 @@
     <div class="footer-grid">
       <div class="footer-brand">
         <div class="footer-logo"><span>&#9670;</span> Milens</div>
-        <p>Open-source AI-DOS platform. 41 MCP tools, knowledge graphs, security scanning, and closed-loop AI development. MIT licensed, zero lock-in.</p>
+        <p>Open-source AI-DOS platform. 42 MCP tools, knowledge graphs, security scanning, and closed-loop AI development. MIT licensed, zero lock-in.</p>
       </div>
       <div class="footer-col">
         <h4>Product</h4>

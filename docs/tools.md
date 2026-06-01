@@ -42,9 +42,11 @@ Milens exposes **41 MCP tools** for AI coding agents. All tools accept an option
 
 ## Review & Risk Assessment
 
+`review_pr` uses **symbol-level diff** to only flag truly changed symbols. Uses `git show` to compare old vs new file content, extracts symbol names, and scores only added/removed symbols. Also tracks **cross-file impact** — when a high-risk symbol changes, its downstream callers are flagged. See [Review docs](review.md) for details.
+
 | Tool | Input | Output |
 |---|---|---|
-| `review_pr` | `{ref: "HEAD"}` | `[symbol]: risk (LOW/MEDIUM/HIGH/CRITICAL) + score` |
+| `review_pr` | `{ref: "HEAD"}` | `[symbol]: risk (LOW/MEDIUM/HIGH/CRITICAL) + score + reasons` |
 | `review_symbol` | `{name: "handlePayment"}` | `role + heat + dependents + test status + risk level + recommendation` |
 | `codebase_summary` | `{}` | `domains + top hubs + test coverage + annotations count` |
 

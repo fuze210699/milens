@@ -9,6 +9,8 @@ export interface LangSpec {
   wasmName: string;
   allTopLevelExported?: boolean; // Python: all top-level symbols exported when __all__ absent
   uppercaseExported?: boolean;   // Go: uppercase first letter = exported
+  mroStrategy?: 'first-wins' | 'c3' | 'ruby-mixin' | 'none'; // Method resolution order for inheritance
+  importSemantics?: 'named' | 'wildcard-leaf' | 'wildcard-transitive' | 'namespace'; // How imports expose symbols
   queries: {
     functions?: string;
     classes?: string;
@@ -278,7 +280,7 @@ export function extractFromTree(
   // ── Extract symbol definitions ──
 
   const seenSymbolKeys = new Set<string>();
-  for (const { key, kind } of SYMBOL_QUERY_TYPES) {
+    for (const { key, kind } of SYMBOL_QUERY_TYPES) {
     const queryStr = spec.queries[key];
     if (!queryStr) continue;
 
@@ -286,6 +288,10 @@ export function extractFromTree(
       const name = captureText(match, 'name');
       const defNode = captureNode(match, 'def');
       if (!name || !defNode) continue;
+
+      // Filter: if query captures @_attr (Ruby attr_reader/writer/accessor), verify method name
+      const attrCapture = captureText(match, '_attr');
+      if (attrCapture && attrCapture !== 'attr_reader' && attrCapture !== 'attr_writer' && attrCapture !== 'attr_accessor') continue;
 
       // Skip duplicate: same name+line already captured with a higher-priority kind
       const symKey = `${name}:${defNode.startPosition.row + 1}`;

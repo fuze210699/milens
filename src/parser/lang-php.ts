@@ -6,6 +6,8 @@ const spec: LangSpec = {
   id: 'php',
   extensions: ['.php'],
   wasmName: 'tree-sitter-php',
+  mroStrategy: 'first-wins',
+  importSemantics: 'wildcard-leaf',
   queries: {
     functions: `[
       (function_definition name: (name) @name) @def
@@ -53,6 +55,14 @@ const spec: LangSpec = {
           (use_declaration (name) @parent)
         )
       ) @def
+    ]`,
+    exports: `[
+      (method_declaration (visibility_modifier) name: (name) @name)
+      (class_declaration name: (name) @name)
+      (interface_declaration name: (name) @name)
+      (trait_declaration name: (name) @name)
+      (function_definition name: (name) @name)
+      (const_declaration (const_element (name) @name))
     ]`,
   },
   resolveImport(raw, _fromFile, root, aliases) {

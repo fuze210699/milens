@@ -6,6 +6,8 @@ const spec: LangSpec = {
   id: 'typescript',
   extensions: ['.ts', '.tsx'],
   wasmName: 'tree-sitter-tsx',
+  mroStrategy: 'first-wins',
+  importSemantics: 'named',
   queries: {
     functions: `[
       (function_declaration name: (identifier) @name) @def

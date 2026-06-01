@@ -7,6 +7,8 @@ const spec: LangSpec = {
   extensions: ['.py'],
   wasmName: 'tree-sitter-python',
   allTopLevelExported: true,
+  mroStrategy: 'c3',
+  importSemantics: 'namespace',
   queries: {
     functions: `[
       (module (function_definition name: (identifier) @name) @def)
@@ -50,6 +52,17 @@ const spec: LangSpec = {
       name: (identifier) @child
       superclasses: (argument_list (identifier) @parent)
     ) @def`,
+    typeBindings: `[
+      (assignment left: (identifier) @var type: (type (identifier) @type))
+      (typed_parameter (identifier) @var type: (type (identifier) @type))
+      (typed_default_parameter name: (identifier) @var type: (type (identifier) @type))
+      (function_definition parameters: (parameters (typed_parameter (identifier) @var type: (type (identifier) @type))))
+      (function_definition parameters: (parameters (typed_default_parameter name: (identifier) @var type: (type (identifier) @type))))
+    ]`,
+    returnTypes: `[
+      (function_definition name: (identifier) @name return_type: (type (identifier) @returnType))
+      (decorated_definition definition: (function_definition name: (identifier) @name return_type: (type (identifier) @returnType)))
+    ]`,
   },
   resolveImport(raw, fromFile, root, _aliases) {
     // Handle relative imports: leading dots

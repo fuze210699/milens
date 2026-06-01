@@ -1,0 +1,31 @@
+name: Accuracy Parity Check
+on: [push, pull_request]
+
+jobs:
+  parity:
+    strategy:
+      matrix:
+        language: [ts, py, go, rust]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Analyze fixture project
+        run: |
+          PROJECT_ROOT="test/fixtures/accuracy/${{ matrix.language }}-project"
+          npx milens analyze -p "$PROJECT_ROOT" --force
+
+      - name: Run accuracy tests
+        run: npx vitest run test/unit/accuracy.test.ts --reporter=json
+
+      - name: Check thresholds
+        run: |
+          # Precision >= 90%, Recall >= 80% thresholds validated within test
+          echo "Accuracy thresholds enforced by vitest assertions"

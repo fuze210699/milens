@@ -7,6 +7,8 @@ const spec: LangSpec = {
   extensions: ['.go'],
   wasmName: 'tree-sitter-go',
   uppercaseExported: true,
+  mroStrategy: 'first-wins',
+  importSemantics: 'wildcard-leaf',
   queries: {
     functions: `(function_declaration name: (identifier) @name) @def`,
     variables: `[
@@ -63,6 +65,19 @@ const spec: LangSpec = {
           (type_identifier) @parent
         )
       )) @def
+    ]`,
+    typeBindings: `[
+      (var_declaration (var_spec name: (identifier) @var type: (type_identifier) @type))
+      (const_declaration (const_spec name: (identifier) @var type: (type_identifier) @type))
+      (short_var_declaration left: (identifier) @var right: (composite_literal type: (type_identifier) @type))
+      (field_declaration name: (field_identifier) @var type: (type_identifier) @type)
+      (parameter_declaration name: (identifier) @var type: (type_identifier) @type)
+    ]`,
+    returnTypes: `[
+      (function_declaration name: (identifier) @name result: (type_identifier) @returnType)
+      (function_declaration name: (identifier) @name result: (pointer_type (type_identifier) @returnType))
+      (method_declaration name: (field_identifier) @name result: (type_identifier) @returnType)
+      (method_declaration name: (field_identifier) @name result: (pointer_type (type_identifier) @returnType))
     ]`,
   },
   resolveImport(raw, _fromFile, root, _aliases) {

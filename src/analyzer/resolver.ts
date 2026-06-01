@@ -17,6 +17,7 @@ interface ResolutionInput {
   returnTypes?: RawReturnType[];
   callResultBindings?: RawCallResultBinding[];
   resolvedImportPaths: Map<string, string>; // raw module path → resolved file path
+  perFileImportSemantics?: Map<string, 'named' | 'wildcard-leaf' | 'wildcard-transitive' | 'namespace'>; // per-file import semantics
 }
 
 export interface ResolutionResult {
@@ -59,6 +60,18 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     }
     for (const { name } of imp.names) {
       fileImports.set(name, targetFile);
+    }
+    // Wildcard-leaf semantics: expand wildcard import to include all exported symbols
+    const semantics = input.perFileImportSemantics?.get(imp.filePath);
+    if (imp.isWildcard && semantics === 'wildcard-leaf') {
+      const targetSymbols = input.symbolsByFile.get(targetFile);
+      if (targetSymbols) {
+        for (const sym of targetSymbols.filter(s => s.exported)) {
+          if (!fileImports.has(sym.name)) {
+            fileImports.set(sym.name, targetFile);
+          }
+        }
+      }
     }
   }
 
@@ -169,6 +182,27 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     }
   }
 
+  // Build heritage ancestor map for MRO-aware method resolution
+  // childName → Set of ancestor type names (extends chain)
+  const heritageAncestors = new Map<string, Set<string>>();
+  for (const h of input.heritage) {
+    let ancestors = heritageAncestors.get(h.childName);
+    if (!ancestors) {
+      ancestors = new Set();
+      heritageAncestors.set(h.childName, ancestors);
+    }
+    ancestors.add(h.parentName);
+  }
+  // Propagate transitive ancestors (1-hop)
+  for (const [childName, ancestors] of heritageAncestors) {
+    for (const ancestor of [...ancestors]) {
+      const transitive = heritageAncestors.get(ancestor);
+      if (transitive) {
+        for (const t of transitive) ancestors.add(t);
+      }
+    }
+  }
+
   // ── Resolve imports ──
   for (const imp of input.imports) {
     const targetFile = input.resolvedImportPaths.get(`${imp.filePath}::${imp.modulePath}`);
@@ -264,7 +298,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
 
     // ── Receiver-aware narrowing (highest priority for member calls) ──
     if (call.receiver) {
-      const narrowed = narrowByReceiver(call, candidates, symbolById, symbolByName, importedNamesPerFile, input.symbolsByFile, typeBindingsPerFile);
+      const narrowed = narrowByReceiver(call, candidates, symbolById, symbolByName, importedNamesPerFile, input.symbolsByFile, typeBindingsPerFile, heritageAncestors);
       if (narrowed) {
         if (narrowed.confidence >= MIN_LINK_CONFIDENCE) {
           links.push(makeLink(call.enclosingSymbolId, narrowed.symbol.id, 'calls', narrowed.confidence, call.line));
@@ -420,6 +454,7 @@ function narrowByReceiver(
   importedNamesPerFile: Map<string, Map<string, string>>,
   symbolsByFile: Map<string, CodeSymbol[]>,
   typeBindingsPerFile: Map<string, Map<string, Array<{ typeName: string; scope?: string; line: number }>>>,
+  heritageAncestors?: Map<string, Set<string>>,
 ): { symbol: CodeSymbol; confidence: number } | null {
   const receiver = call.receiver!;
 
@@ -436,7 +471,7 @@ function narrowByReceiver(
   // Strategy 1b: this.field.method() → look up field's type from type bindings
   if (receiver.startsWith('this.') || receiver.startsWith('self.')) {
     const fieldName = receiver.slice(receiver.indexOf('.') + 1);
-    const match = narrowByTypeBinding(fieldName, call.filePath, candidates, symbolById, typeBindingsPerFile, call.enclosingSymbolId);
+    const match = narrowByTypeBinding(fieldName, call.filePath, candidates, symbolById, typeBindingsPerFile, call.enclosingSymbolId, heritageAncestors);
     if (match) return match;
   }
 
@@ -456,7 +491,7 @@ function narrowByReceiver(
 
   // Strategy 2b: receiver is a variable with a known type binding (e.g. const db = new Database())
   {
-    const match = narrowByTypeBinding(receiver, call.filePath, candidates, symbolById, typeBindingsPerFile, call.enclosingSymbolId);
+    const match = narrowByTypeBinding(receiver, call.filePath, candidates, symbolById, typeBindingsPerFile, call.enclosingSymbolId, heritageAncestors);
     if (match) return match;
   }
 
@@ -494,6 +529,7 @@ function narrowByTypeBinding(
   symbolById: Map<string, CodeSymbol>,
   typeBindingsPerFile: Map<string, Map<string, Array<{ typeName: string; scope?: string; line: number }>>>,
   callEnclosingId?: string,
+  heritageAncestors?: Map<string, Set<string>>,
 ): { symbol: CodeSymbol; confidence: number } | null {
   const fileBindings = typeBindingsPerFile.get(filePath);
   if (!fileBindings) return null;
@@ -525,14 +561,42 @@ function narrowByTypeBinding(
     typeName = moduleLevelEntry?.typeName ?? entries[0].typeName;
   }
 
-  // Find candidate whose parent class name matches the resolved type
-  const method = candidates.find(c => {
-    const parent = c.parentId ? symbolById.get(c.parentId) : null;
-    return parent?.name === typeName;
-  });
+  // Find candidate whose parent class name matches the resolved type,
+  // including ancestors via MRO (heritage chain)
+  const method = resolveMethodByType(candidates, typeName, symbolById, heritageAncestors);
   if (method) return { symbol: method, confidence: 0.93 };
 
   return null;
+}
+
+// ── MRO-aware method resolution via type hierarchy ──
+
+function resolveMethodByType(
+  candidates: CodeSymbol[],
+  typeName: string,
+  symbolById: Map<string, CodeSymbol>,
+  heritageAncestors?: Map<string, Set<string>>,
+): CodeSymbol | undefined {
+  // Direct match: method's parent class name matches the type
+  let method = candidates.find(c => {
+    const parent = c.parentId ? symbolById.get(c.parentId) : null;
+    return parent?.name === typeName;
+  });
+  if (method) return method;
+
+  // Walk ancestor chain via heritage map
+  if (heritageAncestors && heritageAncestors.has(typeName)) {
+    const ancestors = heritageAncestors.get(typeName)!;
+    for (const ancestorName of ancestors) {
+      method = candidates.find(c => {
+        const parent = c.parentId ? symbolById.get(c.parentId) : null;
+        return parent?.name === ancestorName;
+      });
+      if (method) return method;
+    }
+  }
+
+  return undefined;
 }
 
 // ── Proximity scoring for ambiguous calls ──

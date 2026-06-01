@@ -1,0 +1,34 @@
+{
+  "minPrecision": 0.3,
+  "minRecall": 0.5,
+  "links": [
+    {
+      "fromFile": "src/auth.ts",
+      "toFile": "src/models.ts",
+      "type": "calls",
+      "fromName": "registerUser",
+      "toName": "save"
+    },
+    {
+      "fromFile": "src/auth.ts",
+      "toFile": "src/models.ts",
+      "type": "calls",
+      "fromName": "_top",
+      "toName": "UserRepository"
+    },
+    {
+      "fromFile": "src/auth.ts",
+      "toFile": "src/models.ts",
+      "type": "imports",
+      "fromName": "_top",
+      "toName": "UserRepository"
+    },
+    {
+      "fromFile": "src/auth.ts",
+      "toFile": "src/models.ts",
+      "type": "imports",
+      "fromName": "_top",
+      "toName": "User"
+    }
+  ]
+}

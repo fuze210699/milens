@@ -6,6 +6,8 @@ const spec: LangSpec = {
   id: 'java',
   extensions: ['.java'],
   wasmName: 'tree-sitter-java',
+  mroStrategy: 'first-wins',
+  importSemantics: 'named',
   queries: {
     classes: `[
       (class_declaration name: (identifier) @name) @def
@@ -43,6 +45,15 @@ const spec: LangSpec = {
         name: (identifier) @child
         (super_interfaces (type_list (type_identifier) @parent))
       ) @def
+    ]`,
+    exports: `[
+      (class_declaration (modifiers "public") name: (identifier) @name)
+      (class_declaration (modifiers "public" "static") name: (identifier) @name)
+      (class_declaration (modifiers "public" "abstract") name: (identifier) @name)
+      (interface_declaration (modifiers "public") name: (identifier) @name)
+      (enum_declaration (modifiers "public") name: (identifier) @name)
+      (record_declaration (modifiers "public") name: (identifier) @name)
+      (method_declaration (modifiers "public") name: (identifier) @name)
     ]`,
   },
   resolveImport(raw, _fromFile, root, _aliases) {

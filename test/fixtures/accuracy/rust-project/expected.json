@@ -1,0 +1,20 @@
+{
+  "minPrecision": 0.3,
+  "minRecall": 0.5,
+  "links": [
+    {
+      "fromFile": "src/main.rs",
+      "toFile": "src/models.rs",
+      "type": "calls",
+      "fromName": "register",
+      "toName": "save"
+    },
+    {
+      "fromFile": "src/main.rs",
+      "toFile": "src/models.rs",
+      "type": "calls",
+      "fromName": "register",
+      "toName": "User"
+    }
+  ]
+}

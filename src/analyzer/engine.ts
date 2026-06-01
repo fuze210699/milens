@@ -17,6 +17,17 @@ import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, Raw
 import type Parser from 'web-tree-sitter';
 import type { LangSpec } from '../parser/extract.js';
 
+// ── Cross-phase Tree Cache ──
+// Caches parsed syntax trees between parse and resolution phases
+// so scope-based resolvers can re-use trees without re-parsing.
+const treeCache = new Map<string, Parser.Tree>();
+export function getCachedTree(filePath: string): Parser.Tree | undefined {
+  return treeCache.get(filePath);
+}
+export function clearTreeCache(): void {
+  treeCache.clear();
+}
+
 // ── Async batch file reader ──
 // Reads multiple files concurrently with concurrency limit to avoid fd exhaustion
 const READ_CONCURRENCY = 32;
@@ -300,6 +311,14 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   }
 
   // Phase 5: Resolve cross-file links
+  const perFileImportSemantics = new Map<string, 'named' | 'wildcard-leaf' | 'wildcard-transitive' | 'namespace'>();
+  for (const [, group] of langGroups) {
+    for (const file of group) {
+      if (file.spec.importSemantics) {
+        perFileImportSemantics.set(file.relativePath, file.spec.importSemantics);
+      }
+    }
+  }
   const resolution = resolveLinksWithStats({
     symbolsByFile,
     allSymbols,
@@ -312,6 +331,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     returnTypes: allReturnTypes,
     callResultBindings: allCallResultBindings,
     resolvedImportPaths,
+    perFileImportSemantics,
   });
   const links = resolution.links;
   if (opts.verbose) {
@@ -434,6 +454,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   }
 
   clearQueryCache();
+  clearTreeCache();
   db.close();
   return stats;
 }
@@ -511,6 +532,7 @@ async function parseFile(
   }
 
   const tree = parser.parse(code);
+  treeCache.set(filePath, tree);
   const result = extractFromTree(tree, lang, spec, filePath);
 
   // Adjust line numbers for Vue offset

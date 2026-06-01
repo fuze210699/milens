@@ -6,6 +6,8 @@ const spec: LangSpec = {
   id: 'rust',
   extensions: ['.rs'],
   wasmName: 'tree-sitter-rust',
+  mroStrategy: 'none',
+  importSemantics: 'named',
   queries: {
     functions: `(function_item name: (identifier) @name) @def`,
     structs: `(struct_item name: (type_identifier) @name) @def`,
@@ -35,10 +37,30 @@ const spec: LangSpec = {
       (call_expression function: (field_expression value: (_) @receiver field: (field_identifier) @callee)) @def
       (macro_invocation macro: (identifier) @callee) @def
     ]`,
-    heritage: `(impl_item
-      trait: (type_identifier) @parent
-      type: (type_identifier) @child
-    ) @def`,
+    heritage: `[
+      (impl_item
+        trait: (type_identifier) @parent
+        type: (type_identifier) @child
+      ) @def
+      (impl_item
+        type: (type_identifier) @child
+        body: (declaration_list
+          (function_item name: (identifier) @name)
+        )
+      )
+    ]`,
+    typeBindings: `[
+      (let_declaration pattern: (identifier) @var type: (type_identifier) @type)
+      (let_declaration pattern: (identifier) @var value: (call_expression function: (identifier) @callee))
+      (parameter_declaration pattern: (identifier) @var type: (type_identifier) @type)
+      (const_item name: (identifier) @var type: (type_identifier) @type)
+      (static_item name: (identifier) @var type: (type_identifier) @type)
+      (field_declaration name: (field_identifier) @var type: (type_identifier) @type)
+    ]`,
+    returnTypes: `[
+      (function_item name: (identifier) @name return_type: (type_identifier) @returnType)
+      (function_item name: (identifier) @name return_type: (generic_type type: (type_identifier) @returnType))
+    ]`,
     exports: `[
       (function_item (visibility_modifier) name: (identifier) @name) @_def
       (struct_item (visibility_modifier) name: (type_identifier) @name) @_def

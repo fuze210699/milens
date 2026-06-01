@@ -1,0 +1,13 @@
+{
+  "minPrecision": 0.3,
+  "minRecall": 0.5,
+  "links": [
+    {
+      "fromFile": "src/main.go",
+      "toFile": "src/models/user.go",
+      "type": "calls",
+      "fromName": "Register",
+      "toName": "Save"
+    }
+  ]
+}

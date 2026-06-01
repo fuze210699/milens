@@ -7,12 +7,15 @@ const spec: LangSpec = {
   extensions: ['.rb', '.rake'],
   wasmName: 'tree-sitter-ruby',
   allTopLevelExported: true,
+  mroStrategy: 'ruby-mixin',
+  importSemantics: 'wildcard-leaf',
   queries: {
     classes: `(class name: (constant) @name) @def`,
     modules: `(module name: (constant) @name) @def`,
     methods: `[
       (method name: (identifier) @name) @def
       (singleton_method name: (identifier) @name) @def
+      (call method: (identifier) @_attr arguments: (argument_list (simple_symbol (identifier) @name))) @def
     ]`,
     imports: `(call
       method: (identifier) @_req

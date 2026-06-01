@@ -22,6 +22,7 @@ import { loadRules } from '../security/rules.js';
 import { HookManager, defaultOnSessionStart, defaultOnSessionEnd, defaultOnPreCommit, defaultOnFileChange, defaultOnPreCompact, defaultOnPostCompact } from './hooks.js';
 import { Orchestrator } from '../orchestrator/orchestrator.js';
 import { FileWatcher } from './watcher.js';
+import { reviewPr } from '../analyzer/review.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_VERSION: string = process.env.MILENS_VERSION ?? JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8')).version;
@@ -1830,37 +1831,22 @@ export function createMcpServer(rootPath?: string): McpServer {
     { ref: z.string().optional().default('HEAD'), repo: z.string().optional() },
     async ({ ref, repo }) => {
       const { db, root } = getDb(repo);
-      let changedFiles: string[] = [];
-      try {
-        const { execSync } = await import('node:child_process');
-        const diff = execSync(`git diff --name-only ${ref}`, { cwd: root, encoding: 'utf-8' }).trim();
-        changedFiles = diff ? diff.split('\n').filter(Boolean) : [];
-      } catch {}
-      if (changedFiles.length === 0) {
+      const result = reviewPr(db, root, ref);
+      if (result.changedFiles.length === 0) {
         return { content: [{ type: 'text' as const, text: 'No changed files detected.' }] };
       }
       const allAffected: any[] = [];
-      for (const file of changedFiles) {
-        const syms = db.getSymbolsByFile(file);
-        if (syms.length === 0) continue;
-        for (const sym of syms) {
-          const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-          const depsCount = incoming.length;
-          const heat = sym.heat ?? 0;
-          const hasTest = db.getSymbolTestCoverage(sym.id);
-          const score = Math.round((heat / 100) * 40 + Math.min(depsCount / 10, 1) * 35 + (hasTest ? 0 : 25));
-          let level = 'LOW';
-          if (score > 75) level = 'CRITICAL';
-          else if (score > 50) level = 'HIGH';
-          else if (score > 25) level = 'MEDIUM';
-          allAffected.push({ symbol: sym.name, kind: sym.kind, file: sym.filePath, heat, dependents: depsCount, hasTest, riskScore: score, riskLevel: level });
-        }
+      for (const s of result.symbols) {
+        allAffected.push({
+          symbol: s.symbol.name, kind: s.symbol.kind, file: s.symbol.filePath,
+          heat: s.symbol.heat ?? 0, dependents: s.dependents,
+          hasTest: s.tested, riskScore: s.riskScore, riskLevel: s.riskLevel,
+        });
       }
-      allAffected.sort((a, b) => b.riskScore - a.riskScore);
       const summary = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
       for (const a of allAffected) (summary as any)[a.riskLevel]++;
       const lines = [`PR Risk Assessment (vs ${ref}):\n`];
-      lines.push(`${changedFiles.length} changed files, ${allAffected.length} affected symbols\n`);
+      lines.push(`${result.changedFiles.length} changed files, ${allAffected.length} affected symbols\n`);
       for (const a of allAffected.slice(0, 30)) {
         lines.push(`  ${a.symbol} [${a.kind}] ${a.file} — heat:${a.heat} deps:${a.dependents} test:${a.hasTest ? 'yes' : 'no'} → ${a.riskLevel}(${a.riskScore})`);
       }

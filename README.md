@@ -193,6 +193,8 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 
 | Command | Description |
 |---|---|
+| `clean` | Remove index for a repository |
+| `uninstall` | Full cleanup: injected blocks, generated files, hooks, cron, database |
 | `evolve` | Promote high-confidence annotations to rules/skills |
 | `hooks` | Session lifecycle hook management |
 

@@ -247,6 +247,209 @@ program
   });
 
 program
+  .command('uninstall')
+  .description('Remove all milens traces from a project: injected blocks, generated files, hooks, cron, database')
+  .option('-p, --path <path>', 'Project root path', '.')
+  .option('--dry-run', 'Only scan and report, do not remove anything', false)
+  .option('--purge', 'Remove all ~/.milens/ global data', false)
+  .option('-y, --yes', 'Auto-confirm all interactive prompts', false)
+  .option('--keep-agents', 'Do not remove milens block from AGENTS.md')
+  .option('--keep-configs', 'Skip MCP config cleanup prompts')
+  .option('--scan-only', 'Only scan and report, no interactive mode')
+  .action(async (opts) => {
+    const rootPath = resolve(opts.path);
+    const { uninstall, removeMcpEntry, removePackageDep, removeEnvVars, formatUninstallOutput } = await import('./uninstall.js');
+
+    if (opts.dryRun || opts.scanOnly) {
+      const result = uninstall({
+        rootPath,
+        dryRun: !!opts.dryRun,
+        purge: !!opts.purge,
+        skipConfirm: true,
+        keepAgents: !!opts.keepAgents,
+        keepConfigs: !!opts.keepConfigs,
+        scanOnly: !!opts.scanOnly,
+      });
+      console.log(formatUninstallOutput(result, !!opts.dryRun, !!opts.scanOnly));
+      return;
+    }
+
+    // ── Step 1: Scan ──
+    console.log('╔══════════════════════════════════════════╗');
+    console.log('║  Milens Uninstall                       ║');
+    console.log('║  Step 1/4: Scanning project...          ║');
+    console.log('╚══════════════════════════════════════════╝');
+    console.log();
+
+    // Run initial scan
+    const initialScan = uninstall({
+      rootPath,
+      dryRun: false,
+      purge: !!opts.purge,
+      skipConfirm: true,
+      keepAgents: !!opts.keepAgents,
+      keepConfigs: !!opts.keepConfigs,
+      scanOnly: true,
+    });
+
+    // Collect all items for display
+    const allScanned: string[] = [];
+    for (const item of initialScan.autoRemoved) {
+      allScanned.push(`${item.file} (${item.action})`);
+    }
+    for (const item of initialScan.interactiveItems) {
+      allScanned.push(`${item.file} (${item.detail})`);
+    }
+    for (const item of initialScan.manualReview) {
+      allScanned.push(`${item.file}:${item.line} (mentions milens)`);
+    }
+
+    if (allScanned.length === 0) {
+      console.log('  No milens traces found. Nothing to uninstall.');
+      return;
+    }
+
+    console.log(`  Found ${allScanned.length} milens traces in:`);
+    for (const s of allScanned) {
+      console.log(`    ${s}`);
+    }
+    console.log();
+
+    // ── Step 2: Auto-remove ──
+    console.log('╔══════════════════════════════════════════╗');
+    console.log('║  Step 2/4: Auto-removing...             ║');
+    console.log('╚══════════════════════════════════════════╝');
+    console.log();
+
+    // Run auto-remove (without interactive items)
+    const autoResult = uninstall({
+      rootPath,
+      dryRun: false,
+      purge: !!opts.purge,
+      skipConfirm: true,
+      keepAgents: !!opts.keepAgents,
+      keepConfigs: !!opts.keepConfigs,
+      scanOnly: false,
+    });
+
+    // Show only auto-removed items
+    for (const item of autoResult.autoRemoved) {
+      console.log(`  ✓ ${item.file} — ${item.action}`);
+    }
+    console.log();
+
+    // ── Step 3: Interactive ──
+    if (!opts.yes && !opts.scanOnly) {
+      const interactiveItems = initialScan.interactiveItems;
+      if (interactiveItems.length > 0) {
+        console.log('╔══════════════════════════════════════════╗');
+        console.log('║  Step 3/4: Interactive cleanup          ║');
+        console.log('╚══════════════════════════════════════════╝');
+        console.log();
+
+        const { createInterface } = await import('node:readline');
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        const ask = (q: string): Promise<string> => new Promise(resolve => rl.question(q, resolve));
+
+        for (const item of interactiveItems) {
+          switch (item.type) {
+            case 'mcp-config': {
+              if (opts.keepConfigs) {
+                console.log(`  ⊝ ${item.file} — skipped (--keep-configs)`);
+                break;
+              }
+              const editorInfo = item.editor ? ` (${item.editor})` : '';
+              console.log(`  ⚠ ${item.file}${editorInfo} contains milens entry:`);
+              console.log(`     ${item.detail}`);
+              const answer = await ask('     Remove this entry? [Y/n]: ');
+              if (answer.trim().toLowerCase() !== 'n') {
+                const removed = removeMcpEntry(rootPath, item.file);
+                console.log(`  ✓ ${item.file} — ${removed ? 'entry removed' : 'could not remove'}`);
+              } else {
+                console.log(`  ⊝ ${item.file} — kept`);
+              }
+              break;
+            }
+            case 'dependency': {
+              console.log(`  ⚠ ${item.file} — ${item.detail}`);
+              const answer = await ask('     Run `npm uninstall milens`? [Y/n]: ');
+              if (answer.trim().toLowerCase() !== 'n') {
+                const result = removePackageDep(rootPath);
+                console.log(`  ✓ ${result || 'done'}`);
+              } else {
+                console.log(`  ⊝ ${item.file} — kept dependency`);
+              }
+              break;
+            }
+            case 'env-var': {
+              const envFile = item.file;
+              console.log(`  ⚠ ${envFile} — ${item.detail}`);
+              const answer = await ask('     Remove these env vars? [Y/n]: ');
+              if (answer.trim().toLowerCase() !== 'n') {
+                const result = removeEnvVars(rootPath, envFile);
+                console.log(`  ✓ ${result || 'done'}`);
+              } else {
+                console.log(`  ⊝ ${envFile} — kept`);
+              }
+              break;
+            }
+          }
+          console.log();
+        }
+
+        rl.close();
+      }
+    }
+
+    // ── Step 4: Report ──
+    const finalScan = uninstall({
+      rootPath,
+      dryRun: true,
+      purge: false,
+      skipConfirm: true,
+      keepAgents: !!opts.keepAgents,
+      keepConfigs: false,
+      scanOnly: true,
+    });
+
+    console.log('╔══════════════════════════════════════════╗');
+    console.log('║  Step 4/4: Manual review report         ║');
+    console.log('╚══════════════════════════════════════════╝');
+    console.log();
+
+    if (finalScan.manualReview.length > 0) {
+      console.log('  These files mention "milens" — please review manually:');
+      console.log();
+      for (const ref of finalScan.manualReview.slice(0, 20)) {
+        console.log(`  ${ref.file}:${ref.line}`);
+        console.log(`    | ${ref.match}`);
+        console.log(`    |`);
+      }
+      if (finalScan.manualReview.length > 20) {
+        console.log(`  ... and ${finalScan.manualReview.length - 20} more references`);
+      }
+    } else {
+      console.log('  No manual references remaining.');
+    }
+
+    console.log();
+    console.log(`  Tip: Run \`grep -rn "milens" . --exclude-dir={node_modules,.git,dist}\``);
+    console.log(`       to find any remaining traces.`);
+    console.log();
+
+    // ── Summary ──
+    console.log('╔══════════════════════════════════════════════════════════╗');
+    console.log('║                  Uninstall Complete                     ║');
+    console.log('╠══════════════════════════════════════════════════════════╣');
+    console.log(`║  Auto-removed:  ${String(autoResult.autoRemoved.length).padEnd(3)} items${' '.repeat(33)}║`);
+    console.log(`║  Manual review: ${String(finalScan.manualReview.length).padEnd(3)} files remaining${' '.repeat(26)}║`);
+    console.log('║                                                         ║');
+    console.log(`║  💡 npm uninstall -g milens     ← remove global install ║`);
+    console.log(`║  💡 milens uninstall --purge    ← purge ~/.milens/ data ║`);
+    console.log('╚══════════════════════════════════════════════════════════╝');
+  });
+
+program
   .command('upgrade')
   .description('Upgrade milens: clear npx cache, rebuild index while keeping annotations/sessions/evolution data')
   .option('-p, --path <path>', 'Repository root path (default: current directory)', '.')

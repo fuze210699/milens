@@ -1103,7 +1103,25 @@ program
         const preCommitContent = `#!/bin/bash
 # Auto-installed by milens init
 echo "Milens: Pre-commit check..."
-npx milens workflow review --path . 2>&1 || true
+
+OUTPUT=$(npx milens workflow review --path . 2>&1)
+echo "$OUTPUT"
+
+# Block commit if CRITICAL risk detected
+if echo "$OUTPUT" | grep -q "CRITICAL"; then
+  echo ""
+  echo "❌ COMMIT BLOCKED: Critical risk detected."
+  echo "   Run 'milens workflow review' to see details."
+  echo "   To override: git commit --no-verify"
+  exit 1
+fi
+
+# Warn if HIGH risk but don't block
+if echo "$OUTPUT" | grep -q "HIGH"; then
+  echo ""
+  echo "⚠️  WARNING: High risk changes detected. Consider adding tests."
+fi
+
 echo "Milens: Done."
 `;
         writeFileSync(resolve(hooksDir, 'pre-commit'), preCommitContent);

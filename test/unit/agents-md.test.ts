@@ -8,7 +8,7 @@ describe('AGENTS.md Generator', () => {
     const md = generateAgentsMd(db, '/test/project');
     expect(md).toContain('# Project:');
     expect(md).toContain('## Codebase Summary');
-    expect(md).toContain('## Session Startup');
+    expect(md).toContain('## Session Lifecycle');
     expect(md).toContain('codebase_summary');
     db.close();
   });

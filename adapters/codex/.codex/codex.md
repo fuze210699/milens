@@ -1,29 +1,44 @@
 # Milens — Code Intelligence for Codex
 
-Milens provides deep code intelligence for this project via MCP. Connect it in your Codex configuration:
+## ⚠️ BEFORE ANYTHING ELSE
 
-```json
-{
-  "mcpServers": {
-    "milens": {
-      "command": "npx",
-      "args": ["milens", "serve"],
-      "env": { "MILENS_PROFILE": "standard" }
-    }
-  }
-}
-```
+This project is indexed by **milens**. You have MCP tools that are faster and more accurate than reading files directly.
 
-## Core Tools (use first)
+**HARD RULE: Use milens tools BEFORE built-in search/read tools.**
 
-| Tool | When to use |
+| Situation | Built-in approach (❌) | Milens approach (✅) |
+|---|---|---|
+| Understand a function | Read 3-10 files | `mcp_milens_overview({name: "X"})` — 1 call |
+| Find references | grep in files | `mcp_milens_grep({pattern: "X"})` — searches everything |
+| Check edit safety | Hope nothing breaks | `mcp_milens_impact({target: "X"})` — exact blast radius |
+| Start working | Read README, explore files | `mcp_milens_codebase_summary()` — 500 token overview |
+| Before commit | `git diff` manually | `mcp_milens_detect_changes()` — symbols + risk scores |
+
+**If you skip milens tools, you're wasting tokens and risking breaking changes.**
+
+## ⭐ Core Tools (Use Every Session)
+
+| Tool | Purpose |
 |---|---|
-| `mcp_milens_overview` | First look at any symbol you need to understand or edit — combines context, impact, and text search |
-| `mcp_milens_edit_check` | Before editing any function/class/method — shows callers and export status |
-| `mcp_milens_impact` | Check blast radius — what breaks if this symbol changes |
-| `mcp_milens_query` | Find code symbols by name (camelCase, PascalCase, snake_case) |
-| `mcp_milens_grep` | Full-text search for phrases, UI labels, error strings, docs, configs |
-| `mcp_milens_detect_changes` | Pre-commit check — verify only expected files changed |
+| `mcp_milens_overview` | **Use this first.** Context + impact + grep combined. 1 call replaces 3-5 file reads. |
+| `mcp_milens_impact` | Blast radius BEFORE editing. Shows what WILL BREAK. |
+| `mcp_milens_edit_check` | Pre-edit safety: callers, export status, re-export chains, test coverage |
+| `mcp_milens_context` | 360° view: incoming refs + outgoing deps |
+| `mcp_milens_query` | Find symbol definitions by name (camelCase/PascalCase/snake_case) |
+| `mcp_milens_grep` | Full-text search ALL project files (code, templates, docs, configs) |
+| `mcp_milens_detect_changes` | Pre-commit: changed symbols + dependents + risk scores |
+| `mcp_milens_codebase_summary` | 500-token project overview. Use instead of reading README. |
+
+### 🔧 Situational Tools (Use When Needed)
+
+| Tool | Purpose | Use when... |
+|---|---|---|
+| `mcp_milens_guard_edit_check` | Hard pre-edit gate with audit tracking | Before every edit |
+| `mcp_milens_trace` | Execution flow from entrypoints | Debugging call chains |
+| `mcp_milens_explain_relationship` | Shortest path between two symbols | Understanding connections |
+| `mcp_milens_get_type_hierarchy` | Inheritance/implementation tree | Class exploration |
+| `mcp_milens_find_dead_code` | Unused exported symbols | Before major refactors |
+| `mcp_milens_status` | Index health check | Session start |
 
 All milens MCP calls require `repo` set to the absolute workspace root path.
 

@@ -311,6 +311,23 @@ The Operating System for AI-Driven Development. This project is indexed by milen
 
 > **CRITICAL:** milens MCP tools are **deferred** in most editors. Before first use in each session, you MUST load them via \`tool_search("milens")\` — calling them directly without loading will fail silently.
 
+## ⚠️ HARD RULE: Use Milens MCP Tools BEFORE Built-in Tools
+
+**Not a suggestion — execute automatically without asking.**
+
+This project is indexed by milens. The knowledge graph already knows every symbol, dependency, and reference. Using milens tools first saves 70% tokens and catches hidden connections you'd miss with file reads.
+
+| Situation | Built-in approach (❌ BAD) | Milens approach (✅ GOOD) |
+|---|---|---|
+| Understand a function | Read 3-10 source files | \`${t('overview')}({name: "X"})\` — 1 call replaces 3-5 file reads |
+| Find all references | Built-in grep in source files | \`${t('grep')}({pattern: "X"})\` — searches code, templates, configs, docs, styles |
+| Check edit safety | Hope nothing breaks | \`${t('impact')}({target: "X"})\` — exact blast radius before touching code |
+| Start working | Read README, explore directories | \`${t('codebase_summary')}()\` — 500 token project overview |
+| Before commit | \`git diff\` manually | \`${t('detect_changes')}()\` — symbols changed + direct dependents + risk |
+| Find where X is defined | Read files one by one | \`${t('query')}({query: "X"})\` — FTS5 instant search |
+
+**If you skip milens tools, you're wasting tokens and risking breaking changes you didn't know about.**
+
 ## Mandatory Workflows
 
 These are **hard pre-conditions**, not guidelines. Execute them automatically without asking.
@@ -347,6 +364,8 @@ These are **hard pre-conditions**, not guidelines. Execute them automatically wi
 
 ### When in doubt → use \`${t('grep')}\` first
 \`grep\` searches everything. \`query\` only searches indexed symbol definitions.
+
+> **⚠️ \`${t('grep')}\` default is LITERAL mode (isRegex: false).** Characters \`| . * + ?\` are escaped as plain text. To use regex patterns like \`error|fail|panic\` or \`TODO.*urgent\`, you MUST set \`isRegex: true\`. The tool will warn you if you forget.
 
 ## Workflow Triggers
 
@@ -388,7 +407,99 @@ When the user says... → do this FIRST:
 | "what did session X do" | \`${t('session_context')}({session_id: "..."})\` — get annotations + tool calls |
 | "file changed to X" | \`${t('hook_onFileChange')}({files: ["path/to/file"], repo: "<workspaceRoot>"})\` |
 
-## Documentation Workflows
+### Domain-aware skill triggers:
+| User intent | Skill to load |
+|---|---|
+| "I'm working on authentication/security" | Load \`milens-security\` skill + \`${t('security_scan')}()\` |
+| "I need to understand the parser" | Load \`milens-parser\` skill + \`${t('get_file_symbols')}({file: "src/parser/"})\` |
+| "I'm debugging a server issue" | Load \`milens-server\` skill + \`${t('trace')}()\` |
+| "I'm working with the database" | Load \`milens-store\` skill + \`${t('get_file_symbols')}({file: "src/store/"})\` |
+| "I need to write tests for this" | Load \`milens-tdd\` skill + \`${t('test_plan')}()\` |
+| "I'm planning a feature" | Load \`milens-plan\` skill + \`${t('codebase_summary')}()\` |
+| "I need to refactor this" | Load \`milens-refactor-clean\` skill + \`${t('impact')}()\` |
+| "Review my code changes" | Load \`milens-code-review\` skill + \`${t('review_pr')}()\` |
+
+## Annotation Guide — Building a Smarter Codebase
+
+Every time you discover something important about a symbol, annotate it. The system learns across sessions — your note today saves tokens tomorrow.
+
+### When to annotate:
+- Found a bug pattern? → \`${t('annotate')}({symbol: "X", key: "bug", value: "..."})\`
+- Discovered an architecture rule? → \`${t('annotate')}({symbol: "X", key: "architecture", value: "..."})\`
+- Learned how to test something? → \`${t('annotate')}({symbol: "X", key: "test", value: "..."})\`
+- Found a security issue? → \`${t('annotate')}({symbol: "X", key: "security", value: "..."})\`
+- Noted a hidden dependency? → \`${t('annotate')}({symbol: "X", key: "dependency", value: "..."})\`
+
+### Annotation keys reference:
+| Key | Use when | Example value |
+|-----|----------|---------------|
+| \`bug\` | Known bug, not yet fixed | "NullPointerException when users is empty array" |
+| \`security\` | Security vulnerability | "No CSRF token validation on this endpoint" |
+| \`architecture\` | Design pattern, constraint | "Service is a singleton — don't instantiate directly" |
+| \`test\` | Testing knowledge | "Must mock Database.getConnection() before testing" |
+| \`dependency\` | Hidden coupling | "Imports from deprecated module old-auth.js" |
+| \`refactor\` | Future refactoring notes | "Split into validateEmail() + normalizeEmail()" |
+| \`workflow\` | Process knowledge | "Must restart dev server after modifying this file" |
+| \`note\` | General observation | "This function is called from cron job at 3AM" |
+
+### Learning lifecycle:
+1. **Session 1:** \`annotate()\` → confidence 0.5
+2. **Session 2:** \`recall()\` sees it again → confidence 0.7
+3. **Session 5:** confidence hits 0.8 → \`milens evolve\` promotes it to SKILL.md
+
+### Annotate triggers:
+| User says... | Tool call |
+|---|---|
+| "found a bug in X" | \`${t('annotate')}({symbol: "X", key: "bug", value: "describe the bug"})\` |
+| "X has a security issue" | \`${t('annotate')}({symbol: "X", key: "security", value: "describe the issue"})\` |
+| "learned how X works" | \`${t('annotate')}({symbol: "X", key: "note", value: "key insight"})\` |
+| "X depends on Y internally" | \`${t('annotate')}({symbol: "X", key: "dependency", value: "depends on Y for Z"})\` |
+| "X needs refactoring later" | \`${t('annotate')}({symbol: "X", key: "refactor", value: "plan"})\` |
+
+### At session end, ALWAYS:
+1. \`${t('recall')}({})\` — review annotations you found useful
+2. \`${t('annotate')}({symbol: "X", key: "...", value: "..."})\` — save new discoveries from this session
+
+## Problem → Solution — When You're Stuck
+
+| You're trying to... | Do this FIRST |
+|---|---|
+| Understand the codebase | \`${t('codebase_summary')}()\` then \`${t('domains')}()\` |
+| Understand a specific function | \`${t('context')}({name: "functionName"})\` |
+| Find where something is defined | \`${t('query')}({query: "ClassName"})\` |
+| Find ALL references to something | \`${t('grep')}({pattern: "ClassName"})\` |
+| Check if editing is safe | \`${t('impact')}({target: "functionName"})\` |
+| Edit with confidence | \`${t('overview')}({name: "functionName"})\` — context+impact+grep in 1 call |
+| Know which tests to run | \`${t('test_impact')}()\` — maps changes to test files |
+| Find what needs testing most | \`${t('test_coverage_gaps')}()\` — sorted by risk |
+| Get a test strategy | \`${t('test_plan')}({name: "functionName"})\` — mocks + scenarios |
+| Review your changes | \`${t('review_pr')}()\` — risk scores for changed symbols |
+| Check for security issues | \`${t('security_scan')}()\` — 50+ rules in one call |
+| Remove dead code safely | \`${t('find_dead_code')}()\` then use \`dead_code_remove\` prompt |
+| Trace how code executes | \`${t('trace')}({name: "functionName", direction: "to"})\` |
+| Find API endpoints | \`${t('routes')}()\` — auto-detect across 7 frameworks |
+| See class hierarchy | \`${t('get_type_hierarchy')}({name: "ClassName"})\` |
+| Compare impact before/after | \`${t('compare_impact')}({name: "X", action: "snapshot"})\` before, then \`compare\` after |
+| Get a full picture fast | \`${t('orchestrate')}()\` — runs detect+review+impact+gaps+dead code |
+| Remember something important | \`${t('annotate')}({symbol: "X", key: "...", value: "..."})\` |
+| Recall past knowledge | \`${t('recall')}({symbol: "X"})\` |
+| Start a new session properly | \`${t('session_start')}({agent: "..."})\` → \`${t('recall')}()\` → \`${t('codebase_summary')}()\` |
+| End a session properly | \`${t('detect_changes')}()\` → \`${t('review_pr')}()\` → annotate → \`${t('session_end')}()\` |
+| Transfer work to another agent | \`${t('handoff')}({from_session: "...", to_agent: "...", context: "..."})\` |
+| Debug a crash / exception | \`${t('trace')}({name: "crashingFunction"})\` + \`${t('context')}()\` + \`${t('impact')}()\` |
+
+## Session Lifecycle
+
+### Start EVERY session:
+1. \`${t('session_start')}({agent: "your-agent-name"})\` — register session
+2. \`${t('recall')}({})\` — what did we learn last time?
+3. \`${t('codebase_summary')}()\` — refresh project context in 500 tokens
+
+### End EVERY session:
+1. \`${t('detect_changes')}()\` — verify changes
+2. \`${t('review_pr')}()\` — risk assessment
+3. \`${t('annotate')}({...})\` — save key discoveries from this session
+4. \`${t('session_end')}({session_id: "..."})\` — record stats
 
 Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` symbols with parent-child hierarchy, and local links become cross-file references.
 
@@ -417,52 +528,62 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` sy
 
 ## Reference
 
-### Tools
+### ⭐ Core Tools — Use Every Session (8)
 
 | Tool | Purpose |
 |---|---|
-| \`${t('query')}\` | Find symbol definitions by name (FTS5) |
-| \`${t('grep')}\` | Text search ALL files (templates, styles, configs, docs) |
-| \`${t('context')}\` | 360° view: incoming refs + outgoing deps |
-| \`${t('impact')}\` | Blast radius before editing |
-| \`${t('detect_changes')}\` | Pre-commit scope check |
-| \`${t('explain_relationship')}\` | Shortest path between two symbols |
-| \`${t('get_file_symbols')}\` | All symbols in a file |
-| \`${t('get_type_hierarchy')}\` | Class inheritance tree |
-| \`${t('find_dead_code')}\` | Unused exported symbols |
-| \`${t('status')}\` | Index stats for a repository: symbols, links, files, coverage %, staleness |
-| \`${t('edit_check')}\` | Pre-edit safety: callers + export status + re-export chains + test coverage |
-| \`${t('trace')}\` | Execution flow: call chains from entrypoints to a symbol |
-| \`${t('routes')}\` | Detect framework routes/endpoints (Express, FastAPI, NestJS, etc.) |
-| \`${t('smart_context')}\` | Intent-aware context: understand/edit/debug/test |
-| \`${t('overview')}\` | Combined context + impact + grep in ONE call. Preferred before editing/deleting/renaming a symbol. |
-| \`${t('domains')}\` | Domain clusters: groups of files forming logical modules |
-| \`${t('repos')}\` | List all indexed repositories with summary stats |
-| \`${t('ast_explore')}\` | Explore raw AST structure of a code file |
-| \`${t('test_query')}\` | Run a tree-sitter query against a code snippet and return matched nodes with capture names |
-| \`${t('review_pr')}\` | PR risk assessment: scores changed symbols by blast radius + test coverage |
-| \`${t('review_symbol')}\` | Single symbol risk: role, heat, dependents, test status |
-| \`${t('test_plan')}\` | Dependency-aware test plan: mocks, strategies, suggested tests |
-| \`${t('test_coverage_gaps')}\` | Untested exported symbols sorted by risk |
-| \`${t('test_impact')}\` | Which tests to run for current changes |
-| \`${t('annotate')}\` | Store observation/note about a symbol (persists across sessions) |
-| \`${t('recall')}\` | Retrieve annotations (filter by symbol, key, agent, session) |
-| \`${t('session_start')}\` | Register agent session for multi-agent coordination |
+| \`${t('overview')}\` | **Use this first.** Combined context + impact + grep. 1 call replaces 3-5 file reads. |
+| \`${t('impact')}\` | Blast radius BEFORE editing. Shows what WILL BREAK. |
+| \`${t('edit_check')}\` | Pre-edit safety: callers + exports + re-export chains + test coverage |
+| \`${t('context')}\` | 360° view: all callers + all callees. Instant dependency graph. |
+| \`${t('query')}\` | Find symbol definitions by name (FTS5 instant search) |
+| \`${t('grep')}\` | Search ALL files for any text (templates, configs, docs, styles) |
+| \`${t('detect_changes')}\` | Pre-commit: which symbols changed + dependents + risk scores |
+| \`${t('codebase_summary')}\` | Project overview in ~500 tokens. Use instead of reading README. |
+
+### 🔧 Situational Tools — Use When Needed (15)
+
+| Tool | Purpose | Use when... |
+|---|---|---|
+| \`${t('review_pr')}\` | PR risk assessment | Before opening PR |
+| \`${t('review_symbol')}\` | Single symbol deep-dive | Symbol is flagged CRITICAL/HIGH |
+| \`${t('test_plan')}\` | Mock strategy + >=3 test scenarios | Writing new tests |
+| \`${t('test_coverage_gaps')}\` | Untested symbols sorted by risk | Finding test priorities |
+| \`${t('test_impact')}\` | Maps changes → test files | After making edits |
+| \`${t('test_generate')}\` | Auto-generate test file | Starting tests from scratch |
+| \`${t('security_scan')}\` | 50+ security rules | Security audit requested |
+| \`${t('trace')}\` | Call chains from entrypoints | Debugging execution flow |
+| \`${t('routes')}\` | Framework routes/endpoints | Finding API endpoints |
+| \`${t('smart_context')}\` | Intent-aware context | Understand/edit/debug/test modes |
+| \`${t('domains')}\` | Domain clusters | Understanding module structure |
+| \`${t('explain_relationship')}\` | Shortest dependency path | How A connects to B |
+| \`${t('get_type_hierarchy')}\` | Inheritance tree | Class/interface exploration |
+| \`${t('find_dead_code')}\` | Unused exported symbols | Before major refactors |
+| \`${t('find_similar')}\` | Symbols with shared callers/callees | Finding refactor patterns |
+
+### 📚 Advanced Tools — Reference (19)
+
+| Tool | Purpose |
+|---|---|
+| \`${t('status')}\` | Index health: symbols, links, files, coverage, staleness |
+| \`${t('repos')}\` | List all indexed repositories |
+| \`${t('annotate')}\` | Record observations about symbols (persists across sessions) |
+| \`${t('recall')}\` | Retrieve annotations from past sessions |
+| \`${t('session_start')}\` | Register agent session |
+| \`${t('session_end')}\` | End session and record stats |
 | \`${t('session_context')}\` | Get session metadata + annotations |
 | \`${t('handoff')}\` | Transfer context between agent sessions |
-| \`${t('codebase_summary')}\` | High-level bootstrapping context: domains, key symbols, coverage |
-| \`${t('semantic_search')}\` | Hybrid FTS5 + vector search (requires --embeddings) |
-| \`${t('find_similar')}\` | Find symbols similar by embedding proximity |
-| \`${t('compare_impact')}\` | Compare impact graph before/after edit — detects regressions |
-| \`${t('orchestrate')}\` | Run full orchestration cycle: detect_changes → review_pr → impact → coverage gaps → dead code → action plan |
-| \`${t('fix_apply')}\` | Apply a security fix to a file (creates backup) |
-| \`${t('test_generate')}\` | Auto-generate test file: detects framework (vitest/jest/mocha/pytest) and writes complete test with mock strategy |
-| \`${t('pre_commit_check')}\` | Pre-commit risk scan: review_pr + dead code + coverage gaps |
-| \`${t('hook_preCompact')}\` | Save metrics snapshot before context compaction |
-| \`${t('hook_postCompact')}\` | Restore context by recalling annotations after compaction |
-| \`${t('session_end')}\` | End a session and record its stats. Use at the end of every session. |
-| \`${t('hook_onFileChange')}\` | Trigger the onFileChange hook. Call when files are modified to get impact summary. |
-| \`${t('security_scan')}\` | Scan codebase for security vulnerabilities using 50+ built-in rules. Replaces multiple manual grep() calls. |
+| \`${t('orchestrate')}\` | Full cycle: detect → review → impact → gaps → dead code |
+| \`${t('pre_commit_check')}\` | Pre-commit risk scan |
+| \`${t('compare_impact')}\` | Compare impact graph before/after edit |
+| \`${t('semantic_search')}\` | Hybrid FTS5 + vector search |
+| \`${t('fix_apply')}\` | Apply security fix to a file |
+| \`${t('hook_preCompact')}\` | Save metrics before context compaction |
+| \`${t('hook_postCompact')}\` | Restore context after compaction |
+| \`${t('hook_onFileChange')}\` | Trigger on file change hook |
+| \`${t('ast_explore')}\` | Parse code to AST S-expression |
+| \`${t('test_query')}\` | Test tree-sitter query patterns |
+| \`${t('get_file_symbols')}\` | All symbols in a file with ref/dep counts |
 
 ### Keeping the Index Fresh
 

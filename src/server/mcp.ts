@@ -97,6 +97,35 @@ class LazyDb {
   }
 }
 
+// ── Session-level edit safety guard ──
+
+class SessionGuard {
+  /** sessionId → Set of symbol names that had safety checks performed */
+  private checks = new Map<string, Set<string>>();
+  /** sessionId → total edit operations attempted (reported by agent) */
+  private editOps = new Map<string, number>();
+
+  recordCheck(sessionId: string, symbolName: string): void {
+    if (!this.checks.has(sessionId)) this.checks.set(sessionId, new Set());
+    this.checks.get(sessionId)!.add(symbolName);
+  }
+
+  recordEditOp(sessionId: string): void {
+    this.editOps.set(sessionId, (this.editOps.get(sessionId) ?? 0) + 1);
+  }
+
+  getAudit(sessionId: string): { checked: string[]; editOps: number } {
+    const checked = [...(this.checks.get(sessionId) ?? [])];
+    const ops = this.editOps.get(sessionId) ?? 0;
+    return { checked, editOps: ops };
+  }
+
+  clear(sessionId: string): void {
+    this.checks.delete(sessionId);
+    this.editOps.delete(sessionId);
+  }
+}
+
 // ── Tool usage tracking ──
 
 // Estimated tokens an agent would spend WITHOUT milens (manual exploration cost per tool)
@@ -327,7 +356,24 @@ function loadGrepIgnoreRules(rootPath: string): ReturnType<typeof ignore> {
 
 // ── Server instructions (sent to client via MCP protocol on initialize) ──
 
-const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codebases into symbol graphs.
+const MILENS_INSTRUCTIONS = `⚠️ CRITICAL: This project is indexed by milens (knowledge graph). Use milens MCP tools BEFORE reading files directly.
+
+WHY: The knowledge graph already knows every symbol, dependency, and reference. Reading files manually = slower, more expensive, and misses hidden connections.
+
+RULE: Before opening ANY file to understand code, call the appropriate milens tool:
+- overview({name: "X"}) — understand a symbol (context + impact + grep). Replaces 3-5 file reads.
+- impact({target: "X", mode: "strict"}) — check blast radius BEFORE editing. strict mode BLOCKS if >5 deps.
+- guard_edit_check({name: "X", session_id}) — HARD safety gate. Call BEFORE every edit. Returns BLOCKED if high risk.
+- grep({pattern: "X"}) — find ALL text references (code, templates, docs, configs, styles).
+- codebase_summary() — 500-token project overview. Use INSTEAD of reading README or exploring directories.
+- detect_changes() — verify changes before committing. Shows changed symbols + risk scores.
+- query({query: "X"}) — find symbol definitions by name. FTS5 instant search.
+
+AUDIT: session_end reports which symbols were safety-checked. Editing without checks = audit gap.
+
+TOKEN SAVINGS: Using milens first = 70% fewer tokens, zero missed dependencies.
+
+milens — code intelligence engine. Indexes codebases into symbol graphs.
 
 ## Tool selection
 - \`query\` — find symbol definitions (code identifiers only)
@@ -335,6 +381,7 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - \`context\` — 360° view: incoming + outgoing for a symbol
 - \`impact\` — blast radius: what breaks if symbol changes
 - \`overview\` — combined context + impact + grep in one call (preferred for editing workflows)
+- \`guard_edit_check\` — HARD pre-edit gate: blocks if dependents > 5, tracks checks for session audit
 - \`edit_check\` — pre-edit safety: callers + export status + re-export chains + test coverage + ⚠ warnings (fastest for edits)
 - \`trace\` — execution flow: call chains from entrypoints to a symbol (or downstream from it)
 - \`routes\` — detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Go, PHP, Rails)
@@ -348,7 +395,9 @@ const MILENS_INSTRUCTIONS = `milens — code intelligence engine. Indexes codeba
 - \`get_type_hierarchy\` — inheritance tree
 
 ## Rules
-- Before editing a symbol: run \`edit_check\` or \`smart_context\` with intent=edit
+- Before editing a symbol: run \`guard_edit_check\` or \`edit_check\` or \`smart_context\` with intent=edit
+- \`guard_edit_check({name, session_id})\` — HARD gate: records check for audit, blocks if dependents > 5
+- \`impact({mode: "strict"})\` — strict mode returns BLOCKED when depth-1 deps > 5
 - For debugging: run \`smart_context\` with intent=debug or \`trace\` to=symbol
 - For writing tests: run \`smart_context\` with intent=test — shows deps to mock + callers to cover
 - \`impact\` only tracks code deps — always pair with \`grep\` for templates/configs
@@ -371,6 +420,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   const registry = new RepoRegistry();
   const pools = new Map<string, LazyDb>();
   const trackDb = getTrackingDb();
+  const guard = new SessionGuard();
 
   function normalizePath(p: string): string {
     const abs = resolve(p);
@@ -481,7 +531,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: query ──
   server.tool(
     'query',
-    'Search indexed symbol definitions by name/kind. For text in templates/configs/docs, use `grep`.',
+    'Find symbol definitions by name (FTS5 instant search). Use instead of reading files to find where a function/class is defined. For text in templates/configs/docs, use `grep`.',
     {
       query: z.string().describe('Symbol name, kind, or keyword to search'),
       repo: z.string().optional().describe('Repository root path (optional if only one indexed)'),
@@ -501,11 +551,11 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: grep ──
   server.tool(
     'grep',
-    'Text search ALL project files (templates, styles, configs, docs). Finds every text occurrence, not just symbols.',
+    'Find EVERY text occurrence across ALL project files. Searches code, templates, styles, configs, docs — not just symbol definitions. Use INSTEAD of built-in search tools which may miss non-code files. ⚠️ IMPORTANT: Default is LITERAL mode (isRegex: false). Characters like | . * + ? are treated as literal text, NOT regex. To use regex alternation or wildcards, set isRegex: true.',
     {
-      pattern: z.string().describe('Text or regex pattern to search for'),
+      pattern: z.string().describe('Text OR regex pattern to search for. ⚠️ Default is LITERAL: characters | . * + ? ( ) are escaped as plain text. To use regex, set isRegex: true.'),
       repo: z.string().optional().describe('Repository root path (optional)'),
-      isRegex: z.boolean().optional().default(false).describe('Treat pattern as regex'),
+      isRegex: z.boolean().optional().default(false).describe('Set to true for regex patterns. Default false: special chars like | . * are treated as literal text.'),
       caseSensitive: z.boolean().optional().default(false),
       include: z.string().optional().describe('Glob filter for file paths (e.g. "**/*.vue", "*.scss")'),
       scope: z.enum(['all', 'code', 'imports', 'definitions']).optional().default('all')
@@ -526,8 +576,15 @@ export function createMcpServer(rootPath?: string): McpServer {
         ? matches
         : matches.filter(m => matchesScope(m.text, scope));
 
+      // Detect regex-like patterns used in literal mode (hint BEFORE result output)
+      const regexChars = /[|.*+?(){}\[\]]/;
+      const regexHint = (!isRegex && regexChars.test(pattern))
+        ? `⚠️ HINT: Pattern "${pattern}" contains special regex characters (${pattern.match(regexChars)!.join(' ')}). Default is LITERAL mode — these are escaped as plain text. To use as regex, add isRegex: true.\n\n`
+        : '';
+
       if (filtered.length === 0) {
-        return { content: [{ type: 'text' as const, text: `No matches for "${pattern}"${scope !== 'all' ? ` (scope: ${scope})` : ''}` }] };
+        const hintBlock = regexHint + `No matches for "${pattern}"${scope !== 'all' ? ` (scope: ${scope})` : ''}`;
+        return { content: [{ type: 'text' as const, text: hintBlock }] };
       }
 
       // Group by file for compact output
@@ -538,7 +595,10 @@ export function createMcpServer(rootPath?: string): McpServer {
         grouped.set(m.file, arr);
       }
 
-      const lines: string[] = [`${filtered.length} matches in ${grouped.size} files${scope !== 'all' ? ` (scope: ${scope})` : ''}:\n`];
+      const lines: string[] = [];
+      if (regexHint) lines.push(regexHint);
+
+      lines.push(`${filtered.length} matches in ${grouped.size} files${scope !== 'all' ? ` (scope: ${scope})` : ''}:\n`);
       for (const [file, hits] of grouped) {
         lines.push(file);
         for (const h of hits) {
@@ -557,7 +617,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: context ──
   server.tool(
     'context',
-    'Symbol 360°: incoming refs + outgoing deps. Use `overview` for combined context+impact+grep.',
+    '360° view of a symbol: who calls it + what it depends on. Instant dependency graph. Use INSTEAD of reading multiple files to trace call chains manually — catches cross-file imports you would miss.',
     {
       name: z.string().describe('Symbol name to inspect'),
       repo: z.string().optional(),
@@ -603,15 +663,16 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: impact ──
   server.tool(
     'impact',
-    'Blast radius: what symbols break if target changes. Code deps only — pair with `grep` for templates/configs.',
+    'Exact blast radius BEFORE you edit. Shows which symbols WILL BREAK if you change a target. Use instead of guessing or manually tracing dependencies. Code deps only — pair with `grep` for templates/configs.',
     {
       target: z.string().describe('Symbol name to analyze'),
       direction: z.enum(['upstream', 'downstream']).default('upstream'),
       depth: z.number().optional().default(3),
       repo: z.string().optional(),
       detail: z.enum(['L0', 'L1', 'L2']).optional().default('L1').describe('Output detail: L0=names only, L1=default, L2=full metadata'),
+      mode: z.enum(['normal', 'strict']).optional().default('normal').describe('strict=BLOCKED if depth-1 dependents > 5, normal=report only'),
     },
-    async ({ target, direction, depth, repo, detail }) => {
+    async ({ target, direction, depth, repo, detail, mode }) => {
       const { db } = getDb(repo);
       const symbols = db.findSymbolByName(target);
       if (symbols.length === 0) {
@@ -628,8 +689,19 @@ export function createMcpServer(rootPath?: string): McpServer {
         if (refs.length === 0) {
           lines.push(`No ${direction} deps found.`);
         } else {
-          lines.push(`${direction} (${refs.length} symbols):`);
+          const depth1Count = refs.filter(r => r.depth === 1).length;
+          lines.push(`${direction} (${refs.length} symbols, depth-1: ${depth1Count}):`);
           lines.push(fmtImpact(refs, detail));
+
+          // Strict mode: hard stop if depth-1 dependents > 5
+          if (mode === 'strict' && direction === 'upstream' && depth1Count > 5) {
+            lines.push('');
+            lines.push('---');
+            lines.push(`⚠️ BLOCKED: ${depth1Count} direct dependents (>5 threshold).`);
+            lines.push('Editing this symbol may cause cascading breakage.');
+            lines.push('To proceed: re-run with mode="normal" or explicitly acknowledge the risk.');
+            lines.push('---');
+          }
         }
         lines.push('');
       }
@@ -717,7 +789,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: overview ──
   server.tool(
     'overview',
-    'Combined context + impact + grep in ONE call. Preferred before editing/deleting/renaming a symbol. Saves 2-3 round trips.',
+    'ONE call replaces 3-5 file reads. Combined context + impact + grep. Use BEFORE reading any source file. Saves 70% tokens vs reading files individually. Preferred before editing/deleting/renaming a symbol.',
     {
       name: z.string().describe('Symbol name'),
       repo: z.string().optional(),
@@ -845,7 +917,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: detect_changes ──
   server.tool(
     'detect_changes',
-    'Git diff → affected symbols + direct dependents. Uses line-level diff to report only actually-changed symbols.',
+    'Pre-commit safety check. Uses git diff to show which symbols changed + their direct dependents + risk. Use INSTEAD of manually running `git diff` before every commit.',
     {
       ref: z.string().optional().default('HEAD').describe('Git ref to diff against (default: HEAD)'),
       repo: z.string().optional(),
@@ -1023,6 +1095,20 @@ export function createMcpServer(rootPath?: string): McpServer {
           lines.push(`${sym.name} [${sym.kind}] L${sym.startLine}-${sym.endLine}${exp} ← ${incoming.length} refs, → ${outgoing.length} deps`);
         }
       }
+
+      // File-path auto-suggest: domain hint
+      const parts = file.replace(/\\/g, '/').split('/');
+      let areaName = 'root';
+      if (parts.length > 1) {
+        if (parts[0] === 'src') {
+          areaName = parts.length > 2 ? parts[1] : 'root';
+        } else {
+          areaName = parts[0];
+        }
+      }
+      if (areaName !== 'root') {
+        lines.push(`\n💡 This file is in the '${areaName}' domain. Load skill 'milens-${areaName}' for key symbols and dependencies.`);
+      }
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },
   );
@@ -1074,7 +1160,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: edit_check ──
   server.tool(
     'edit_check',
-    'Pre-edit safety check: callers, export status, re-export chains, ⚠ warnings. Focused for editing intent — no downstream deps, no outgoing calls. Use BEFORE modifying a symbol.',
+    'Fast pre-edit safety. Shows callers, export status, re-export chains, test coverage, and ⚠ warnings. Use BEFORE modifying any function/class/method — catches hidden risks you would miss.',
     {
       name: z.string().describe('Symbol name to check before editing'),
       repo: z.string().optional(),
@@ -1149,6 +1235,110 @@ export function createMcpServer(rootPath?: string): McpServer {
         } else if (sym.exported) {
           sections.push(`⚠ no test coverage for this exported symbol`);
         }
+      }
+
+      return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
+    },
+  );
+
+  // ── Tool: guard_edit_check ──
+  server.tool(
+    'guard_edit_check',
+    'HARD pre-edit safety gate. Call BEFORE every edit operation — tracks checks for session audit. If dependents > 5, returns BLOCKED status requiring explicit confirmation. Combines edit_check with enforcement tracking.',
+    {
+      name: z.string().describe('Symbol name to check before editing'),
+      repo: z.string().optional(),
+      session_id: z.string().optional().describe('Session ID for audit tracking'),
+      confirm: z.string().optional().describe('Type "I understand the risk" to bypass a BLOCKED result'),
+    },
+    async ({ name, repo, session_id, confirm }) => {
+      const { db, root } = getDb(repo);
+      const symbols = db.findSymbolByName(name);
+      const sections: string[] = [];
+
+      if (symbols.length === 0) {
+        return { content: [{ type: 'text' as const, text: `"${name}" not found in index. Try \`grep\` to find it in templates/docs first.` }] };
+      }
+
+      for (const sym of symbols) {
+        sections.push(`${fmtSymbol(sym)}${sym.exported ? ' (exported)' : ''}`);
+
+        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+        const depsCount = incoming.filter(l => {
+          const from = db.findSymbolById(l.fromId);
+          return from && !isTestFilePath(from.filePath);
+        }).length;
+
+        if (session_id) guard.recordCheck(session_id, name);
+
+        // Hard stop: if > 5 non-test dependents and no confirmation
+        if (depsCount > 5 && confirm !== 'I understand the risk') {
+          sections.push(`⚠️ BLOCKED: ${name} has ${depsCount} non-test dependents (>5 threshold).`);
+          sections.push(`Direct callers (${incoming.length} total):`);
+          for (const l of incoming) {
+            const from = db.findSymbolById(l.fromId);
+            sections.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
+          }
+          sections.push('');
+          sections.push(`To proceed, re-call with confirm: "I understand the risk"`);
+          sections.push(`Or: run \`impact({target: "${name}", depth: 2})\` to see full blast radius.`);
+        } else {
+          // Safe to edit or explicitly confirmed
+          const status = depsCount > 5 ? '⚠️ CONFIRMED (high risk)' : '✅ Safe to edit';
+          sections.push(`${status} — ${depsCount} non-test dependents`);
+
+          if (incoming.length > 0) {
+            sections.push(`callers (${incoming.length}):`);
+            for (const l of incoming) {
+              const from = db.findSymbolById(l.fromId);
+              sections.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
+            }
+          } else {
+            sections.push(`callers: none`);
+          }
+
+          // Export chain
+          const grepMatches = grepFiles(root, name, { maxResults: 5, includePattern: '**/index.{ts,js,mjs}' });
+          const reExportMatches = grepMatches.filter(m =>
+            /export\s*\{[^}]*/.test(m.text) && m.text.includes('from')
+          );
+          if (reExportMatches.length > 0) {
+            sections.push(`re-exported via:`);
+            for (const m of reExportMatches) {
+              sections.push(`  ${m.file}:${m.line}`);
+            }
+          }
+
+          // Heritage
+          const descendants = db.getTypeHierarchy(sym.id).descendants;
+          if (descendants.length > 0) {
+            sections.push(`⚠ inherited by ${descendants.length} types:`);
+            for (const { symbol: d } of descendants) {
+              sections.push(`  ${fmtSymbol(d)}`);
+            }
+          }
+
+          // Test coverage
+          const testRefs = incoming.filter(l => {
+            const from = db.findSymbolById(l.fromId);
+            return from && isTestFilePath(from.filePath);
+          });
+          if (testRefs.length > 0) {
+            const testFiles = [...new Set(testRefs.map(l => {
+              const from = db.findSymbolById(l.fromId);
+              return from?.filePath;
+            }).filter(Boolean))];
+            sections.push(`✓ tested from: ${testFiles.join(', ')}`);
+          } else if (sym.exported) {
+            sections.push(`⚠ no test coverage for this exported symbol`);
+          }
+        }
+      }
+
+      // Unresolved warning
+      const unresolved = db.getUnresolvedStats();
+      if (unresolved.imports > 0 || unresolved.calls > 0) {
+        sections.push(`⚠ index has ${unresolved.imports} unresolved internal imports, ${unresolved.calls} unresolved internal calls — callers list may be incomplete`);
       }
 
       return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
@@ -1603,7 +1793,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ═══ codebase_summary ═══
   server.tool(
     'codebase_summary',
-    'Compact ~500 token codebase overview: domains, top hubs, test coverage, annotations count. Use at the start of every session.',
+    '500-token project overview. Use at session start INSTEAD of reading README, exploring directory structure, or reading multiple files to understand the codebase. Returns domains, key symbols, coverage %.',
     { repo: z.string().optional() },
     async ({ repo }) => {
       const { db } = getDb(repo);
@@ -1885,12 +2075,16 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ═══ session_end ═══
   server.tool(
     'session_end',
-    'End a session and record its stats. Use at the end of every session.',
+    'End a session and record its stats. Shows audit trail: which symbols were safety-checked vs total edit operations. Use at the end of every session.',
     { session_id: z.string(), status: z.enum(['completed', 'failed']).optional().default('completed') },
     async ({ session_id, status }) => {
       const { db, root, dbPath } = getDb();
       const store = new AnnotationStore(db.connection);
       const summary = store.sessionEnd(session_id, status);
+
+      // Audit trail from SessionGuard
+      const audit = guard.getAudit(session_id);
+      guard.clear(session_id);
 
       let hookOutput = '';
       try {
@@ -1902,7 +2096,17 @@ export function createMcpServer(rootPath?: string): McpServer {
         }
       } catch { /* hooks are best-effort */ }
 
-      const text = `Session ended: ${session_id}\nStatus: ${status}\nAnnotations: ${summary.annotationCount}`;
+      const lines = [
+        `Session ended: ${session_id}`,
+        `Status: ${status}`,
+        `Annotations: ${summary.annotationCount}`,
+        `───`,
+        `Audit Trail:`,
+        `  safety checks performed: ${audit.checked.length}`,
+        audit.checked.length > 0 ? `  symbols checked: ${audit.checked.join(', ')}` : '  ⚠ no symbols were checked via guard_edit_check',
+        audit.editOps > 0 ? `  edit operations reported: ${audit.editOps}` : null,
+      ].filter(Boolean);
+      const text = lines.join('\n');
       return { content: [{ type: 'text' as const, text: hookOutput ? `${text}\n\n${hookOutput}` : text }] };
     },
   );

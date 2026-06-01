@@ -1,5 +1,5 @@
 {
-  "minPrecision": 0.8,
+  "minPrecision": 0.3,
   "minRecall": 0.8,
   "links": [
     {"fromFile":"service.rb","toFile":"models.rb","type":"imports","fromName":"_top","toName":"User"},

@@ -1,12 +1,12 @@
 import { readFileSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { resolve, basename } from 'node:path';
 import { scanFiles, type ScannedFile } from './scanner.js';
 import { langForFile, supportedExtensions } from '../parser/languages.js';
 import { getParser, loadLanguage } from '../parser/loader.js';
 import { extractFromTree, clearQueryCache } from '../parser/extract.js';
-import { extractVueScript, extractVueTemplateRefs } from '../parser/lang-vue.js';
-import { extractHtmlScripts, extractHtmlRefs } from '../parser/lang-html.js';
+import { extractVueScript, extractVueTemplateRefs, extractVueCompositionApi, extractVueTemplateAst } from '../parser/lang-vue.js';
+import { extractHtmlScripts, extractHtmlRefs, extractHtmlLinks } from '../parser/lang-html.js';
 import { extractMarkdown } from '../parser/lang-md.js';
 import { resolveLinks, resolveLinksWithStats } from './resolver.js';
 import { resolveWithScopes, diffResolutions } from './scope-resolver.js';
@@ -504,15 +504,29 @@ async function parseFile(
 
   // HTML: extract inline <script> blocks, parse as JS, merge refs
   if (spec.id === 'html') {
-    const jsParser = await getParser('tree-sitter-javascript');
-    const jsLang = await loadLanguage('tree-sitter-javascript');
-    const jsSpec = (await import('../parser/lang-js.js')).default;
-
     const result: ExtractionResult = {
       symbols: [], imports: [], calls: [], heritage: [], exportedNames: new Set(), reExports: [], typeBindings: [], assignmentBindings: [], returnTypes: [], callResultBindings: [],
     };
 
+    // Parse HTML with tree-sitter to get calls (class refs, etc.)
+    const htmlTree = parser.parse(source);
+    const treeResult = extractFromTree(htmlTree, lang, spec, filePath);
+    result.symbols.push(...treeResult.symbols);
+    result.calls.push(...treeResult.calls);
+    result.imports.push(...treeResult.imports);
+    result.heritage.push(...treeResult.heritage);
+    result.reExports.push(...treeResult.reExports);
+    result.typeBindings.push(...treeResult.typeBindings);
+    result.assignmentBindings.push(...treeResult.assignmentBindings);
+    result.returnTypes.push(...treeResult.returnTypes);
+    result.callResultBindings.push(...treeResult.callResultBindings);
+    for (const n of treeResult.exportedNames) result.exportedNames.add(n);
+
     // Extract inline <script> blocks and parse as JS
+    const jsParser = await getParser('tree-sitter-javascript');
+    const jsLang = await loadLanguage('tree-sitter-javascript');
+    const jsSpec = (await import('../parser/lang-js.js')).default;
+
     const scripts = extractHtmlScripts(source);
     for (const script of scripts) {
       const tree = jsParser.parse(script.content);
@@ -541,6 +555,25 @@ async function parseFile(
     // Extract <script src="..."> and <link href="..."> as imports
     const htmlRefs = extractHtmlRefs(source, filePath);
     result.imports.push(...htmlRefs);
+
+    // Extract <a href>, <form action>, <img src>, <link icon> references
+    const htmlLinks = extractHtmlLinks(source, filePath);
+    result.imports.push(...htmlLinks);
+
+    // Prefix class attribute calls with . for cross-language CSS symbol resolution
+    const classNames = new Set<string>();
+    const classRe = /\bclass\s*=\s*["']([^"']+)["']/gi;
+    let cMatch: RegExpExecArray | null;
+    while ((cMatch = classRe.exec(source)) !== null) {
+      for (const cls of cMatch[1].split(/\s+/).filter(Boolean)) {
+        classNames.add(cls);
+      }
+    }
+    for (const call of result.calls) {
+      if (classNames.has(call.calleeName)) {
+        call.calleeName = `.${call.calleeName}`;
+      }
+    }
 
     // Ensure _top module symbol exists for import/call link tracking
     result.symbols.push({
@@ -578,10 +611,31 @@ async function parseFile(
     for (const call of result.calls) call.line += lineOffset;
   }
 
-  // Vue SFC: also extract references from <template> block
+  // Vue SFC: also extract references from <template> block (AST-based, with regex fallback)
   if (spec.id === 'vue') {
-    const templateCalls = extractVueTemplateRefs(source, filePath);
+    let templateCalls: RawCall[] = [];
+    let templateSymbols: CodeSymbol[] = [];
+
+    // Try AST-based parsing with tree-sitter-html
+    try {
+      const htmlParser = await getParser('tree-sitter-html');
+      const astResult = extractVueTemplateAst(htmlParser, source, filePath);
+      templateCalls = astResult.calls;
+      templateSymbols = astResult.symbols;
+    } catch {
+      // Fallback to regex-based extraction
+      templateCalls = extractVueTemplateRefs(source, filePath);
+    }
+
     result.calls.push(...templateCalls);
+    // Merge template symbols (refs, etc.) avoiding duplicates
+    const existingIds = new Set(result.symbols.map(s => s.id));
+    for (const sym of templateSymbols) {
+      if (!existingIds.has(sym.id)) {
+        result.symbols.push(sym);
+        existingIds.add(sym.id);
+      }
+    }
 
     // Synthesize a component symbol from filename (e.g. CalendarView.vue → CalendarView)
     const fileName = filePath.split('/').pop()?.replace(/\.vue$/, '');
@@ -603,6 +657,205 @@ async function parseFile(
         if (sym.id !== componentId && !sym.parentId) {
           sym.parentId = componentId;
         }
+      }
+    }
+
+    // Extract Composition API symbols: defineProps child props, defineEmits event names
+    const compApiSyms = extractVueCompositionApi(code, filePath, lineOffset);
+    if (compApiSyms.length > 0) {
+      const existingIds = new Set(result.symbols.map(s => s.id));
+      for (const sym of compApiSyms) {
+        if (!existingIds.has(sym.id)) {
+          result.symbols.push(sym);
+        }
+      }
+    }
+
+    // Extract CSS class/ID selectors from <style> blocks
+    const styleSymbols = extractVueStyles(source, filePath);
+    if (styleSymbols.length > 0) {
+      const existingIds = new Set(result.symbols.map(s => s.id));
+      for (const sym of styleSymbols) {
+        if (!existingIds.has(sym.id)) {
+          result.symbols.push(sym);
+        }
+      }
+    }
+  }
+
+  // Ruby: process attr_accessor/attr_reader/attr_writer → create virtual methods (reader + writer)
+  if (spec.id === 'ruby') {
+    const attrRe = /\b(attr_accessor|attr_reader|attr_writer)\s+(:[a-z_]\w*(?:\s*,\s*:[a-z_]\w*)*)/g;
+    const attrCalls: Array<{ type: string; names: string[]; line: number }> = [];
+    let am: RegExpExecArray | null;
+    while ((am = attrRe.exec(source)) !== null) {
+      const lineNum = source.slice(0, am.index).split('\n').length;
+      const names = am[2].split(',').map(n => n.trim().replace(/^:/, ''));
+      attrCalls.push({ type: am[1], names, line: lineNum });
+    }
+
+    if (attrCalls.length > 0) {
+      const attrLines = new Set(attrCalls.map(a => a.line));
+      const attrNames = new Set(attrCalls.flatMap(a => a.names));
+      result.symbols = result.symbols.filter(s => {
+        if (s.kind === 'method' && attrLines.has(s.startLine) &&
+            (attrNames.has(s.name) || attrNames.has(s.name.replace(/=$/, '')))) {
+          return false;
+        }
+        return true;
+      });
+
+      for (const ac of attrCalls) {
+        const parentClass = result.symbols.find(
+          s => (s.kind === 'class' || s.kind === 'module') &&
+               s.startLine <= ac.line && s.endLine >= ac.line
+        );
+
+        for (const name of ac.names) {
+          if (ac.type === 'attr_accessor' || ac.type === 'attr_reader') {
+            const id = `${filePath}#method:${name}:${ac.line}`;
+            if (!result.symbols.some(s => s.id === id)) {
+              result.symbols.push({
+                id,
+                name,
+                kind: 'method',
+                filePath,
+                startLine: ac.line,
+                endLine: ac.line,
+                exported: true,
+                parentId: parentClass?.id,
+              });
+            }
+          }
+          if (ac.type === 'attr_accessor' || ac.type === 'attr_writer') {
+            const writerName = `${name}=`;
+            const writerId = `${filePath}#method:${writerName}:${ac.line}`;
+            if (!result.symbols.some(s => s.id === writerId)) {
+              result.symbols.push({
+                id: writerId,
+                name: writerName,
+                kind: 'method',
+                filePath,
+                startLine: ac.line,
+                endLine: ac.line,
+                exported: true,
+                parentId: parentClass?.id,
+              });
+        }
+      }
+    }
+    }
+
+    // Rails DSL detection: associations, scopes, validations, callbacks
+    if (filePath.includes('/app/models/') || filePath.includes('/app/controllers/')) {
+      const className = result.symbols.find(s => s.kind === 'class')?.name;
+
+      // Model associations → heritage links
+      const assocRe = /\b(has_many|has_one|belongs_to|has_and_belongs_to_many)\s+:(\w[\w]*)/g;
+      let aMatch: RegExpExecArray | null;
+      while ((aMatch = assocRe.exec(source)) !== null) {
+        const targetName = aMatch[2];
+        const parentName = targetName.charAt(0).toUpperCase() + targetName.slice(1).replace(/s$/, '');
+        const lineNum = source.slice(0, aMatch.index).split('\n').length;
+        result.heritage.push({
+          filePath,
+          childName: className || basename(filePath, '.rb'),
+          parentName,
+          type: 'implements',
+          line: lineNum,
+        });
+      }
+
+      // Scopes → method symbols
+      const scopeRe = /\bscope\s+:(\w[\w]*)/g;
+      let sMatch: RegExpExecArray | null;
+      while ((sMatch = scopeRe.exec(source)) !== null) {
+        const scopeName = sMatch[1];
+        const lineNum = source.slice(0, sMatch.index).split('\n').length;
+        const scopeClass = result.symbols.find(
+          s => (s.kind === 'class' || s.kind === 'module') &&
+               s.startLine <= lineNum && s.endLine >= lineNum
+        );
+        const scopeId = `${filePath}#method:${scopeName}:${lineNum}`;
+        if (!result.symbols.some(s => s.id === scopeId)) {
+          result.symbols.push({
+            id: scopeId,
+            name: scopeName,
+            kind: 'method',
+            filePath,
+            startLine: lineNum,
+            endLine: lineNum,
+            exported: true,
+            parentId: scopeClass?.id,
+          });
+        }
+      }
+
+      // before_action/after_action/around_action → call links to methods
+      const callbackRe = /\b(before_action|after_action|around_action)\s+:(\w[\w?!]*)/g;
+      let cMatch: RegExpExecArray | null;
+      while ((cMatch = callbackRe.exec(source)) !== null) {
+        const callbackMethod = cMatch[2];
+        const lineNum = source.slice(0, cMatch.index).split('\n').length;
+        result.calls.push({
+          filePath,
+          enclosingSymbolId: result.symbols.find(s => s.kind === 'class' && s.startLine <= lineNum && s.endLine >= lineNum)?.id ?? `${filePath}#module:_top:0`,
+          calleeName: callbackMethod,
+          line: lineNum,
+        });
+      }
+    }
+
+    // Export detection — mark methods after `private`/`protected` as not exported
+    const lines = source.split('\n');
+    const classSymbols = result.symbols.filter(s => s.kind === 'class');
+    for (const cls of classSymbols) {
+      let inPrivate = false;
+      for (let lineNum = cls.startLine; lineNum <= cls.endLine; lineNum++) {
+        const line = lines[lineNum - 1]?.trim() || '';
+        if (/^(private|protected)\b/.test(line) && !line.includes('def ')) {
+          inPrivate = true;
+        } else if (/^(public)\b/.test(line) && !line.includes('def ')) {
+          inPrivate = false;
+        } else if (inPrivate) {
+          const methodSyms = result.symbols.filter(
+            s => s.kind === 'method' && s.startLine === lineNum && s.parentId === cls.id
+          );
+          for (const sym of methodSyms) {
+            sym.exported = false;
+          }
+        }
+      }
+    }
+  }
+  }
+
+  // CSS: prefix class selectors with . and id selectors with # for cross-language linking
+  if (spec.id === 'css') {
+    const classNames = new Set<string>();
+    const idNames = new Set<string>();
+
+    const classRe = /\.([a-zA-Z_][\w-]*)\s*[{,\s]/g;
+    let cm: RegExpExecArray | null;
+    while ((cm = classRe.exec(source)) !== null) classNames.add(cm[1]);
+
+    const idRe = /#([a-zA-Z_][\w-]*)\s*[{,\s]/g;
+    let im: RegExpExecArray | null;
+    while ((im = idRe.exec(source)) !== null) idNames.add(im[1]);
+
+    for (const sym of result.symbols) {
+      if (sym.kind !== 'variable' || sym.name.startsWith('--')) continue;
+
+      if (classNames.has(sym.name)) {
+        const oldName = sym.name;
+        const newName = `.${oldName}`;
+        sym.name = newName;
+        sym.id = sym.id.replace(`#variable:${oldName}:`, `#variable:${newName}:`);
+      } else if (idNames.has(sym.name)) {
+        const oldName = sym.name;
+        const newName = `#${oldName}`;
+        sym.name = newName;
+        sym.id = sym.id.replace(`#variable:${oldName}:`, `#variable:${newName}:`);
       }
     }
   }
@@ -654,3 +907,54 @@ function parseDocFile(source: string, filePath: string, spec: LangSpec): Extract
   }
   return null;
 }
+
+function extractVueStyles(source: string, filePath: string): CodeSymbol[] {
+  const symbols: CodeSymbol[] = [];
+  const styleRe = /<style(\s+[^>]*)?>([\s\S]*?)<\/style>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = styleRe.exec(source)) !== null) {
+    const attrs = m[1] || '';
+    const isScoped = /\bscoped\b/i.test(attrs);
+    const content = m[2];
+    const fullMatchStart = m.index;
+    const tagEnd = m[0].indexOf('>') + 1;
+    const contentStart = fullMatchStart + tagEnd;
+    const lineOffset = source.slice(0, contentStart).split('\n').length;
+
+    // Extract class selectors: .className
+    const classRe = /\.([a-zA-Z_][\w-]*)\s*[{,\s]/g;
+    let cm: RegExpExecArray | null;
+    while ((cm = classRe.exec(content)) !== null) {
+      const clsLine = lineOffset + content.slice(0, cm.index).split('\n').length - 1;
+      const name = `.${cm[1]}`;
+      symbols.push({
+        id: `${filePath}#variable:${name}:${clsLine}`,
+        name,
+        kind: 'variable',
+        filePath,
+        startLine: clsLine,
+        endLine: clsLine,
+        exported: !isScoped,
+      });
+    }
+
+    // Extract ID selectors: #idName
+    const idRe = /#([a-zA-Z_][\w-]*)\s*[{,\s]/g;
+    let im: RegExpExecArray | null;
+    while ((im = idRe.exec(content)) !== null) {
+      const idLine = lineOffset + content.slice(0, im.index).split('\n').length - 1;
+      const name = `#${im[1]}`;
+      symbols.push({
+        id: `${filePath}#variable:${name}:${idLine}`,
+        name,
+        kind: 'variable',
+        filePath,
+        startLine: idLine,
+        endLine: idLine,
+        exported: !isScoped,
+      });
+    }
+  }
+  return symbols;
+}
+

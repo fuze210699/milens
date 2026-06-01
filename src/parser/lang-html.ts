@@ -7,7 +7,12 @@ const spec: LangSpec = {
   id: 'html',
   extensions: ['.html', '.htm'],
   wasmName: 'tree-sitter-html',
-  queries: {}, // HTML extraction done via regex helpers in engine.ts
+  queries: {
+    calls: `(element
+      (start_tag
+        (attribute (attribute_name) (quoted_attribute_value (attribute_value) @callee)))
+    ) @def`,
+  },
   resolveImport(raw, fromFile, root, aliases) {
     // Check aliases first
     let aliased = false;
@@ -81,6 +86,43 @@ export function extractHtmlRefs(source: string, filePath: string): RawImport[] {
           isWildcard: true,
           line: i + 1,
         });
+      }
+    }
+  }
+
+  return imports;
+}
+
+/**
+ * Extract form actions, anchor hrefs, img/src/source assets, and link icons.
+ */
+export function extractHtmlLinks(source: string, filePath: string): RawImport[] {
+  const imports: RawImport[] = [];
+  const lines = source.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Match any attribute value prefixed by common tag+attribute patterns
+    const patterns = [
+      /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["']/i,
+      /<form\b[^>]*\baction\s*=\s*["']([^"']+)["']/i,
+      /<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i,
+      /<source\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i,
+      /<link\b[^>]*\brel\s*=\s*["'](?:icon|shortcut icon|apple-touch-icon)["'][^>]*\bhref\s*=\s*["']([^"']+)["']/i,
+      /<link\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*\brel\s*=\s*["'](?:icon|shortcut icon|apple-touch-icon)["']/i,
+    ];
+    for (const re of patterns) {
+      const m = line.match(re);
+      if (m && !m[1].startsWith('#') && !m[1].startsWith('javascript:')) {
+        imports.push({
+          filePath,
+          modulePath: m[1],
+          names: [],
+          isDefault: false,
+          isWildcard: true,
+          line: i + 1,
+        });
+        break;
       }
     }
   }

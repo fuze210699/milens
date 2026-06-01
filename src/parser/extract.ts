@@ -16,6 +16,7 @@ export interface LangSpec {
   queries: {
     functions?: string;
     classes?: string;
+    constants?: string;
     methods?: string;
     interfaces?: string;
     enums?: string;
@@ -236,6 +237,7 @@ function findEnclosing(spans: Span[], line: number): string | undefined {
 const SYMBOL_QUERY_TYPES: ReadonlyArray<{ key: keyof LangSpec['queries']; kind: SymbolKind }> = [
   { key: 'functions', kind: 'function' },
   { key: 'classes', kind: 'class' },
+  { key: 'constants', kind: 'variable' },
   { key: 'methods', kind: 'method' },
   { key: 'interfaces', kind: 'interface' },
   { key: 'enums', kind: 'enum' },

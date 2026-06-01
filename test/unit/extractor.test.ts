@@ -3,11 +3,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getParser, loadLanguage } from '../../src/parser/loader.js';
 import { extractFromTree } from '../../src/parser/extract.js';
-import { extractVueScript, extractVueTemplateRefs } from '../../src/parser/lang-vue.js';
+import { extractVueScript, extractVueTemplateRefs, extractVueCompositionApi } from '../../src/parser/lang-vue.js';
 import tsSpec from '../../src/parser/lang-ts.js';
 import pySpec from '../../src/parser/lang-py.js';
 import goSpec from '../../src/parser/lang-go.js';
 import vueSpec from '../../src/parser/lang-vue.js';
+import rubySpec from '../../src/parser/lang-ruby.js';
 
 const FIXTURES = join(import.meta.dirname, '..', 'fixtures');
 
@@ -192,5 +193,91 @@ describe('Vue extractor', () => {
     expect(calleeNames).toContain('canEdit');
     // Template interpolations
     expect(calleeNames).toContain('displayName');
+  });
+
+  it('extracts Composition API defineProps child symbols', () => {
+    const scriptContent = `const props = defineProps<{ name: string; age?: number }>();`;
+    const syms = extractVueCompositionApi(scriptContent, 'Test.vue', 10);
+    const names = syms.map(s => s.name);
+    expect(names).toContain('name');
+    expect(names).toContain('age');
+    // Child props should have parentId pointing to the props variable
+    const child = syms.find(s => s.name === 'name');
+    expect(child!.parentId).toContain('props');
+  });
+
+  it('extracts Composition API defineEmits event names from array', () => {
+    const scriptContent = `const emit = defineEmits(['update:modelValue', 'change']);`;
+    const syms = extractVueCompositionApi(scriptContent, 'Test.vue', 5);
+    const names = syms.map(s => s.name);
+    expect(names).toContain('update:modelValue');
+    expect(names).toContain('change');
+  });
+});
+
+describe('Ruby extractor', () => {
+  it('extracts constants from Ruby', async () => {
+    const source = `MAX_USERS = 100`;
+    const parser = await getParser(rubySpec.wasmName);
+    const lang = await loadLanguage(rubySpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, rubySpec, 'consts.rb');
+
+    const constSym = result.symbols.find(s => s.name === 'MAX_USERS');
+    expect(constSym).toBeDefined();
+    expect(constSym!.kind).toBe('variable');
+  });
+
+  it('extracts instance and class variables', async () => {
+    const source = `
+class Counter
+  @@count = 0
+
+  def initialize
+    @value = 0
+  end
+end
+`;
+    const parser = await getParser(rubySpec.wasmName);
+    const lang = await loadLanguage(rubySpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, rubySpec, 'vars.rb');
+
+    const names = result.symbols.map(s => s.name);
+    expect(names).toContain('@value');
+    expect(names).toContain('@@count');
+  });
+
+  it('extracts type bindings from .new calls', async () => {
+    const source = `
+class Service
+  def run
+    repo = UserRepo.new
+    @cache = Cache.new
+  end
+end
+`;
+    const parser = await getParser(rubySpec.wasmName);
+    const lang = await loadLanguage(rubySpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, rubySpec, 'types.rb');
+
+    const typeNames = result.typeBindings.map(tb => tb.typeName);
+    expect(typeNames).toContain('UserRepo');
+    expect(typeNames).toContain('Cache');
+
+    const varNames = result.typeBindings.map(tb => tb.variableName);
+    expect(varNames).toContain('repo');
+    expect(varNames).toContain('@cache');
+  });
+
+  it('extracts require and require_relative as imports', async () => {
+    const source = `require_relative './models'`;
+    const parser = await getParser(rubySpec.wasmName);
+    const lang = await loadLanguage(rubySpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, rubySpec, 'imports.rb');
+
+    expect(result.imports.some(i => i.modulePath === './models')).toBe(true);
   });
 });

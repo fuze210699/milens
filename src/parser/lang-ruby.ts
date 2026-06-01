@@ -13,6 +13,11 @@ const spec: LangSpec = {
   queries: {
     classes: `(class name: (constant) @name) @def`,
     modules: `(module name: (constant) @name) @def`,
+    constants: `(assignment left: (constant) @name) @def`,
+    variables: `[
+      (assignment left: (instance_variable) @name) @def
+      (assignment left: (class_variable) @name) @def
+    ]`,
     methods: `[
       (method name: (identifier) @name) @def
       (singleton_method name: (identifier) @name) @def
@@ -31,6 +36,17 @@ const spec: LangSpec = {
       (class name: (constant) @child superclass: (superclass (scope_resolution name: (constant) @parent))) @def
       (class name: (constant) @child body: (body_statement (call method: (identifier) @_inc arguments: (argument_list (constant) @parent)))) @def
       (class name: (constant) @child body: (body_statement (call method: (identifier) @_inc arguments: (argument_list (scope_resolution name: (constant) @parent))))) @def
+    ]`,
+    typeBindings: `[
+      (assignment
+        left: (identifier) @var
+        right: (call receiver: (constant) @type method: (identifier)))
+      (assignment
+        left: (instance_variable) @var
+        right: (call receiver: (constant) @type method: (identifier)))
+      (assignment
+        left: (identifier) @var
+        right: (call receiver: (scope_resolution name: (constant) @type) method: (identifier)))
     ]`,
   },
   resolveImport(raw, fromFile, root, _aliases) {

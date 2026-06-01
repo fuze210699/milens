@@ -1,5 +1,6 @@
 import type { LangSpec } from './extract.js';
-import type { RawCall } from '../types.js';
+import type { RawCall, CodeSymbol } from '../types.js';
+import type Parser from 'web-tree-sitter';
 import tsSpec from './lang-ts.js';
 
 // Vue SFC: parse <script> or <script setup> blocks as TypeScript
@@ -79,6 +80,210 @@ export function extractVueTemplateRefs(source: string, filePath: string): RawCal
   }
 
   return calls;
+}
+
+/**
+ * AST-based extraction of references from Vue <template> block using tree-sitter-html.
+ * Handles multi-line attributes, nested components, class attributes for CSS linking,
+ * ref attributes for template ref symbols, and all directive/event/interpolation patterns.
+ */
+export function extractVueTemplateAst(
+  parser: Parser,
+  source: string,
+  filePath: string,
+): { calls: RawCall[]; symbols: CodeSymbol[] } {
+  const calls: RawCall[] = [];
+  const symbols: CodeSymbol[] = [];
+  const templateMatch = source.match(/<template[^>]*>([\s\S]*?)<\/template>/i);
+  if (!templateMatch) return { calls, symbols };
+
+  const templateStart = source.indexOf(templateMatch[0]);
+  const tagEnd = templateMatch[0].indexOf('>') + 1;
+  const contentStart = templateStart + tagEnd;
+  const lineOffset = source.slice(0, contentStart).split('\n').length;
+  const templateContent = templateMatch[1];
+  const moduleId = `${filePath}#module:_top:0`;
+
+  const tree = parser.parse(templateContent);
+  const seenCalls = new Set<string>();
+
+  function walk(node: Parser.SyntaxNode): void {
+    if (node.type === 'start_tag' || node.type === 'self_closing_tag') {
+      const tagNameNode = node.childForFieldName?.('name') ?? node.firstNamedChild;
+      const tagName = tagNameNode?.text;
+      const line = lineOffset + node.startPosition.row;
+
+      // Component tags: PascalCase or kebab-case with hyphen
+      if (tagName && (/^[A-Z]/.test(tagName) || tagName.includes('-'))) {
+        const dedupKey = `tag:${tagName}:${line}`;
+        if (!seenCalls.has(dedupKey)) {
+          seenCalls.add(dedupKey);
+          calls.push({ filePath, enclosingSymbolId: moduleId, calleeName: tagName, line });
+        }
+      }
+
+      // Process attributes
+      for (let i = 0; i < node.namedChildCount; i++) {
+        const child = node.namedChild(i);
+        if (child?.type !== 'attribute') continue;
+
+        const attrNameChild = child.firstNamedChild;
+        const attrName = attrNameChild?.text || '';
+        const valueNode = child.namedChild(1);
+        const value = valueNode?.text || '';
+        const attrLine = lineOffset + child.startPosition.row;
+
+        // class="container main" → calls with . prefix for CSS linking
+        if (attrName === 'class' && value) {
+          const classes = value.split(/\s+/).filter(Boolean);
+          for (const cls of classes) {
+            const dedupKey = `class:${cls}:${attrLine}`;
+            if (!seenCalls.has(dedupKey)) {
+              seenCalls.add(dedupKey);
+              calls.push({ filePath, enclosingSymbolId: moduleId, calleeName: `.${cls}`, line: attrLine });
+            }
+          }
+          continue;
+        }
+
+        // ref="inputEl" → template ref symbol
+        if (attrName === 'ref' && value) {
+          const dedupKey = `ref:${value}:${attrLine}`;
+          if (!seenCalls.has(dedupKey)) {
+            seenCalls.add(dedupKey);
+            symbols.push({
+              id: `${filePath}#variable:${value}:${attrLine}`,
+              name: value,
+              kind: 'variable',
+              filePath,
+              startLine: attrLine,
+              endLine: attrLine,
+              exported: false,
+            });
+          }
+          continue;
+        }
+
+        // Event handlers: @click="handler", v-on:click="handler"
+        if ((attrName.startsWith('@') || attrName.startsWith('v-on:')) && value) {
+          const handler = value.match(/^([a-zA-Z_$][\w$]*)/)?.[1];
+          if (handler) {
+            const dedupKey = `event:${handler}:${attrLine}`;
+            if (!seenCalls.has(dedupKey)) {
+              seenCalls.add(dedupKey);
+              calls.push({ filePath, enclosingSymbolId: moduleId, calleeName: handler, line: attrLine });
+            }
+          }
+          continue;
+        }
+
+        // Directives: v-if="expr", v-show="expr", v-model="expr", :prop="expr"
+        if (/^(v-(?:if|else-if|show|model|for|html|text|bind)|:)/.test(attrName) && value) {
+          const expr = value.match(/^([a-zA-Z_$][\w$.]*)/)?.[1];
+          if (expr) {
+            const dedupKey = `dir:${expr}:${attrLine}`;
+            if (!seenCalls.has(dedupKey)) {
+              seenCalls.add(dedupKey);
+              calls.push({ filePath, enclosingSymbolId: moduleId, calleeName: expr, line: attrLine });
+            }
+          }
+          continue;
+        }
+      }
+    }
+
+    // Interpolations: {{ expression }}
+    if (node.type === 'interpolation') {
+      const text = node.text.slice(2, -2).trim(); // strip {{ }}
+      const expr = text.match(/^([a-zA-Z_$][\w$.]*)/)?.[1];
+      if (expr) {
+        const line = lineOffset + node.startPosition.row;
+        const dedupKey = `interp:${expr}:${line}`;
+        if (!seenCalls.has(dedupKey)) {
+          seenCalls.add(dedupKey);
+          calls.push({ filePath, enclosingSymbolId: moduleId, calleeName: expr, line });
+        }
+      }
+    }
+
+    // Recurse
+    for (let i = 0; i < node.namedChildCount; i++) {
+      walk(node.namedChild(i)!);
+    }
+  }
+
+  const htmlTree = parser.parse(templateContent);
+  walk(htmlTree.rootNode);
+
+  return { calls, symbols };
+}
+
+/**
+ * Extract Composition API symbols from <script setup> content.
+ * Captures defineProps prop children and defineEmits event names.
+ * Parent variable symbols (props, emit) are already captured by the TS variables query.
+ */
+export function extractVueCompositionApi(
+  scriptContent: string,
+  filePath: string,
+  lineOffset: number,
+): CodeSymbol[] {
+  const symbols: CodeSymbol[] = [];
+  const lines = scriptContent.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const absLine = lineOffset + i + 1;
+
+    // defineProps<{ name: string; age?: number }>()
+    const propsMatch = line.match(/const\s+(\w+)\s*=\s*defineProps\s*<\s*\{\s*([^}]*)\s*\}\s*>/);
+    if (propsMatch) {
+      const varName = propsMatch[1];
+      const typeBody = propsMatch[2];
+      const parentId = `${filePath}#variable:${varName}:${absLine}`;
+
+      const propRe = /(\w+)\s*\??\s*:\s*(?:string|number|boolean|any|void|never|unknown|[A-Z]\w*|[\w\[\]<>|&,'"]+)/g;
+      let pm: RegExpExecArray | null;
+      while ((pm = propRe.exec(typeBody)) !== null) {
+        const propName = pm[1];
+        symbols.push({
+          id: `${filePath}#variable:${propName}:${absLine}`,
+          name: propName,
+          kind: 'variable',
+          filePath,
+          startLine: absLine,
+          endLine: absLine,
+          exported: true,
+          parentId,
+        });
+      }
+    }
+
+    // defineEmits(['update', 'delete']) — runtime declaration
+    const emitsArrMatch = line.match(/const\s+(\w+)\s*=\s*defineEmits\s*\(\s*\[\s*([^\]]*)\s*\]/);
+    if (emitsArrMatch) {
+      const varName = emitsArrMatch[1];
+      const eventsStr = emitsArrMatch[2];
+      const parentId = `${filePath}#variable:${varName}:${absLine}`;
+
+      const eventRe = /'([\w][\w:.-]*)'/g;
+      let em: RegExpExecArray | null;
+      while ((em = eventRe.exec(line)) !== null) {
+        symbols.push({
+          id: `${filePath}#variable:${em[1]}:${absLine}`,
+          name: em[1],
+          kind: 'variable',
+          filePath,
+          startLine: absLine,
+          endLine: absLine,
+          exported: true,
+          parentId,
+        });
+      }
+    }
+  }
+
+  return symbols;
 }
 
 export default spec;

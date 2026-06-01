@@ -8,7 +8,13 @@ const spec: LangSpec = {
   wasmName: 'tree-sitter-css',
   queries: {
     imports: `(import_statement (string_value) @source) @def`,
-    variables: `(declaration (property_name) @name) @def`,
+    variables: `[
+      (declaration (property_name) @name) @def
+      (rule_set (selectors (class_selector (class_name) @name))) @def
+      (rule_set (selectors (id_selector (id_name) @name))) @def
+      (keyframes_statement (keyframes_name) @name) @def
+      (media_statement (feature_query (feature_name) @name)) @def
+    ]`,
   },
   resolveImport(raw, fromFile, root, aliases) {
     // Strip quotes from CSS string values

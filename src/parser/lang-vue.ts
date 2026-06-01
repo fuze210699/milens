@@ -130,7 +130,8 @@ export function extractVueTemplateAst(
         const attrNameChild = child.firstNamedChild;
         const attrName = attrNameChild?.text || '';
         const valueNode = child.namedChild(1);
-        const value = valueNode?.text || '';
+        const rawValue = valueNode?.text || '';
+        const value = rawValue.replace(/^["']|["']$/g, '');
         const attrLine = lineOffset + child.startPosition.row;
 
         // class="container main" → calls with . prefix for CSS linking

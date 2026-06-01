@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getParser, loadLanguage } from '../../src/parser/loader.js';
 import { extractFromTree } from '../../src/parser/extract.js';
-import { extractVueScript, extractVueTemplateRefs, extractVueCompositionApi } from '../../src/parser/lang-vue.js';
+import { extractVueScript, extractVueTemplateRefs, extractVueCompositionApi, extractVueTemplateAst } from '../../src/parser/lang-vue.js';
 import tsSpec from '../../src/parser/lang-ts.js';
 import pySpec from '../../src/parser/lang-py.js';
 import goSpec from '../../src/parser/lang-go.js';
@@ -193,6 +193,70 @@ describe('Vue extractor', () => {
     expect(calleeNames).toContain('canEdit');
     // Template interpolations
     expect(calleeNames).toContain('displayName');
+  });
+
+  it('AST-based extraction captures component tags and event handlers', async () => {
+    const source = `<template>
+  <MyComponent @click="handleClick" />
+  <el-button v-on:submit="onSubmit" />
+</template>`;
+    const htmlParser = await getParser('tree-sitter-html');
+    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue');
+
+    expect(result.calls.length).toBeGreaterThan(0);
+    const calleeNames = result.calls.map(c => c.calleeName);
+    expect(calleeNames).toContain('MyComponent');
+    expect(calleeNames).toContain('el-button');
+    expect(calleeNames).toContain('handleClick');
+    expect(calleeNames).toContain('onSubmit');
+  });
+
+  it('AST-based extraction captures class attributes with . prefix', async () => {
+    const source = `<template><div class="container main" /></template>`;
+    const htmlParser = await getParser('tree-sitter-html');
+    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue');
+
+    const calleeNames = result.calls.map(c => c.calleeName);
+    expect(calleeNames).toContain('.container');
+    expect(calleeNames).toContain('.main');
+  });
+
+  it('AST-based extraction captures ref attributes as symbols', async () => {
+    const source = `<template><input ref="inputEl" /></template>`;
+    const htmlParser = await getParser('tree-sitter-html');
+    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue');
+
+    const refSym = result.symbols.find(s => s.name === 'inputEl');
+    expect(refSym).toBeDefined();
+    expect(refSym!.kind).toBe('variable');
+    expect(refSym!.exported).toBe(false);
+  });
+
+  it('AST-based extraction handles multi-line attributes', async () => {
+    const source = `<template>
+  <MyComponent
+    v-if="isVisible"
+    :data="items"
+    @update="onUpdate"
+  />
+</template>`;
+    const htmlParser = await getParser('tree-sitter-html');
+    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue');
+
+    const calleeNames = result.calls.map(c => c.calleeName);
+    expect(calleeNames).toContain('MyComponent');
+    expect(calleeNames).toContain('isVisible');
+    expect(calleeNames).toContain('items');
+    expect(calleeNames).toContain('onUpdate');
+  });
+
+  it('AST-based extraction returns empty for no template', async () => {
+    const source = `<script setup>const x = 1;</script>`;
+    const htmlParser = await getParser('tree-sitter-html');
+    const result = extractVueTemplateAst(htmlParser, source, 'NoTemplate.vue');
+
+    expect(result.calls.length).toBe(0);
+    expect(result.symbols.length).toBe(0);
   });
 
   it('extracts Composition API defineProps child symbols', () => {

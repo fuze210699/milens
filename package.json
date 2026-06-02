@@ -24,7 +24,8 @@
     "build:standalone": "node scripts/build-standalone.mjs",
     "build:standalone:all": "node scripts/build-standalone.mjs --target all",
     "self-analyze": "tsx src/cli.ts analyze -p . --force --verbose --skills",
-    "self-serve": "tsx src/cli.ts serve -p . --http --port 3100"
+    "self-serve": "tsx src/cli.ts serve -p . --http --port 3100",
+    "docs:update": "node scripts/update-docs.js"
   },
   "keywords": [
     "code-intelligence",

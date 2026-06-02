@@ -255,3 +255,30 @@ export interface VulnReport {
   vulnerableDependencies: number;
   findings: VulnInfo[];
 }
+
+// ── Cross-repo reference types ──
+
+export interface CrossRepoEntry {
+  name: string;
+  visibility: 'Public' | 'Private';
+  license?: string;
+  role: string;
+  isUpstream?: boolean;
+}
+
+export interface CrossRepoContract {
+  package: string;
+  version: string;
+}
+
+export interface CrossRepoDependency {
+  symbol: string;
+  source: string;
+  usedBy: string;
+}
+
+export interface CrossRepoConfig {
+  repos: CrossRepoEntry[];
+  contract?: CrossRepoContract;
+  dependencies?: CrossRepoDependency[];
+}

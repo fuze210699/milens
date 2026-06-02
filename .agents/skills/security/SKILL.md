@@ -53,6 +53,7 @@ Contains 35 symbols (15 exported) across 2 files.
 - **`parseDependencies`** [function] — 3 incoming references
 
 ## Dependencies
+- **test**: `add`
 - **root**: `has`
 
 ## Used By

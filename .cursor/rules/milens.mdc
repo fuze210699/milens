@@ -7,11 +7,28 @@ alwaysApply: true
 <!-- milens:start -->
 # Milens — AI-DOS
 
-The Operating System for AI-Driven Development. This project is indexed by milens (1078 symbols, 1822 links, 131 files).
+The Operating System for AI-Driven Development. This project is indexed by milens (1363 symbols, 2273 links, 165 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
 > **CRITICAL:** milens MCP tools are **deferred** in most editors. Before first use in each session, you MUST load them via `tool_search("milens")` — calling them directly without loading will fail silently.
+
+## ⚠️ HARD RULE: Use Milens MCP Tools BEFORE Built-in Tools
+
+**Not a suggestion — execute automatically without asking.**
+
+This project is indexed by milens. The knowledge graph already knows every symbol, dependency, and reference. Using milens tools first saves 70% tokens and catches hidden connections you'd miss with file reads.
+
+| Situation | Built-in approach (❌ BAD) | Milens approach (✅ GOOD) |
+|---|---|---|
+| Understand a function | Read 3-10 source files | `mcp_milens_overview({name: "X"})` — 1 call replaces 3-5 file reads |
+| Find all references | Built-in grep in source files | `mcp_milens_grep({pattern: "X"})` — searches code, templates, configs, docs, styles |
+| Check edit safety | Hope nothing breaks | `mcp_milens_impact({target: "X"})` — exact blast radius before touching code |
+| Start working | Read README, explore directories | `mcp_milens_codebase_summary()` — 500 token project overview |
+| Before commit | `git diff` manually | `mcp_milens_detect_changes()` — symbols changed + direct dependents + risk |
+| Find where X is defined | Read files one by one | `mcp_milens_query({query: "X"})` — FTS5 instant search |
+
+**If you skip milens tools, you're wasting tokens and risking breaking changes you didn't know about.**
 
 ## Mandatory Workflows
 
@@ -49,6 +66,8 @@ These are **hard pre-conditions**, not guidelines. Execute them automatically wi
 
 ### When in doubt → use `mcp_milens_grep` first
 `grep` searches everything. `query` only searches indexed symbol definitions.
+
+> **⚠️ `mcp_milens_grep` default is LITERAL mode (isRegex: false).** Characters `| . * + ?` are escaped as plain text. To use regex patterns like `error|fail|panic` or `TODO.*urgent`, you MUST set `isRegex: true`. The tool will warn you if you forget.
 
 ## Workflow Triggers
 
@@ -90,7 +109,99 @@ When the user says... → do this FIRST:
 | "what did session X do" | `mcp_milens_session_context({session_id: "..."})` — get annotations + tool calls |
 | "file changed to X" | `mcp_milens_hook_onFileChange({files: ["path/to/file"], repo: "<workspaceRoot>"})` |
 
-## Documentation Workflows
+### Domain-aware skill triggers:
+| User intent | Skill to load |
+|---|---|
+| "I'm working on authentication/security" | Load `milens-security` skill + `mcp_milens_security_scan()` |
+| "I need to understand the parser" | Load `milens-parser` skill + `mcp_milens_get_file_symbols({file: "src/parser/"})` |
+| "I'm debugging a server issue" | Load `milens-server` skill + `mcp_milens_trace()` |
+| "I'm working with the database" | Load `milens-store` skill + `mcp_milens_get_file_symbols({file: "src/store/"})` |
+| "I need to write tests for this" | Load `milens-tdd` skill + `mcp_milens_test_plan()` |
+| "I'm planning a feature" | Load `milens-plan` skill + `mcp_milens_codebase_summary()` |
+| "I need to refactor this" | Load `milens-refactor-clean` skill + `mcp_milens_impact()` |
+| "Review my code changes" | Load `milens-code-review` skill + `mcp_milens_review_pr()` |
+
+## Annotation Guide — Building a Smarter Codebase
+
+Every time you discover something important about a symbol, annotate it. The system learns across sessions — your note today saves tokens tomorrow.
+
+### When to annotate:
+- Found a bug pattern? → `mcp_milens_annotate({symbol: "X", key: "bug", value: "..."})`
+- Discovered an architecture rule? → `mcp_milens_annotate({symbol: "X", key: "architecture", value: "..."})`
+- Learned how to test something? → `mcp_milens_annotate({symbol: "X", key: "test", value: "..."})`
+- Found a security issue? → `mcp_milens_annotate({symbol: "X", key: "security", value: "..."})`
+- Noted a hidden dependency? → `mcp_milens_annotate({symbol: "X", key: "dependency", value: "..."})`
+
+### Annotation keys reference:
+| Key | Use when | Example value |
+|-----|----------|---------------|
+| `bug` | Known bug, not yet fixed | "NullPointerException when users is empty array" |
+| `security` | Security vulnerability | "No CSRF token validation on this endpoint" |
+| `architecture` | Design pattern, constraint | "Service is a singleton — don't instantiate directly" |
+| `test` | Testing knowledge | "Must mock Database.getConnection() before testing" |
+| `dependency` | Hidden coupling | "Imports from deprecated module old-auth.js" |
+| `refactor` | Future refactoring notes | "Split into validateEmail() + normalizeEmail()" |
+| `workflow` | Process knowledge | "Must restart dev server after modifying this file" |
+| `note` | General observation | "This function is called from cron job at 3AM" |
+
+### Learning lifecycle:
+1. **Session 1:** `annotate()` → confidence 0.5
+2. **Session 2:** `recall()` sees it again → confidence 0.7
+3. **Session 5:** confidence hits 0.8 → `milens evolve` promotes it to SKILL.md
+
+### Annotate triggers:
+| User says... | Tool call |
+|---|---|
+| "found a bug in X" | `mcp_milens_annotate({symbol: "X", key: "bug", value: "describe the bug"})` |
+| "X has a security issue" | `mcp_milens_annotate({symbol: "X", key: "security", value: "describe the issue"})` |
+| "learned how X works" | `mcp_milens_annotate({symbol: "X", key: "note", value: "key insight"})` |
+| "X depends on Y internally" | `mcp_milens_annotate({symbol: "X", key: "dependency", value: "depends on Y for Z"})` |
+| "X needs refactoring later" | `mcp_milens_annotate({symbol: "X", key: "refactor", value: "plan"})` |
+
+### At session end, ALWAYS:
+1. `mcp_milens_recall({})` — review annotations you found useful
+2. `mcp_milens_annotate({symbol: "X", key: "...", value: "..."})` — save new discoveries from this session
+
+## Problem → Solution — When You're Stuck
+
+| You're trying to... | Do this FIRST |
+|---|---|
+| Understand the codebase | `mcp_milens_codebase_summary()` then `mcp_milens_domains()` |
+| Understand a specific function | `mcp_milens_context({name: "functionName"})` |
+| Find where something is defined | `mcp_milens_query({query: "ClassName"})` |
+| Find ALL references to something | `mcp_milens_grep({pattern: "ClassName"})` |
+| Check if editing is safe | `mcp_milens_impact({target: "functionName"})` |
+| Edit with confidence | `mcp_milens_overview({name: "functionName"})` — context+impact+grep in 1 call |
+| Know which tests to run | `mcp_milens_test_impact()` — maps changes to test files |
+| Find what needs testing most | `mcp_milens_test_coverage_gaps()` — sorted by risk |
+| Get a test strategy | `mcp_milens_test_plan({name: "functionName"})` — mocks + scenarios |
+| Review your changes | `mcp_milens_review_pr()` — risk scores for changed symbols |
+| Check for security issues | `mcp_milens_security_scan()` — 50+ rules in one call |
+| Remove dead code safely | `mcp_milens_find_dead_code()` then use `dead_code_remove` prompt |
+| Trace how code executes | `mcp_milens_trace({name: "functionName", direction: "to"})` |
+| Find API endpoints | `mcp_milens_routes()` — auto-detect across 7 frameworks |
+| See class hierarchy | `mcp_milens_get_type_hierarchy({name: "ClassName"})` |
+| Compare impact before/after | `mcp_milens_compare_impact({name: "X", action: "snapshot"})` before, then `compare` after |
+| Get a full picture fast | `mcp_milens_orchestrate()` — runs detect+review+impact+gaps+dead code |
+| Remember something important | `mcp_milens_annotate({symbol: "X", key: "...", value: "..."})` |
+| Recall past knowledge | `mcp_milens_recall({symbol: "X"})` |
+| Start a new session properly | `mcp_milens_session_start({agent: "..."})` → `mcp_milens_recall()` → `mcp_milens_codebase_summary()` |
+| End a session properly | `mcp_milens_detect_changes()` → `mcp_milens_review_pr()` → annotate → `mcp_milens_session_end()` |
+| Transfer work to another agent | `mcp_milens_handoff({from_session: "...", to_agent: "...", context: "..."})` |
+| Debug a crash / exception | `mcp_milens_trace({name: "crashingFunction"})` + `mcp_milens_context()` + `mcp_milens_impact()` |
+
+## Session Lifecycle
+
+### Start EVERY session:
+1. `mcp_milens_session_start({agent: "your-agent-name"})` — register session
+2. `mcp_milens_recall({})` — what did we learn last time?
+3. `mcp_milens_codebase_summary()` — refresh project context in 500 tokens
+
+### End EVERY session:
+1. `mcp_milens_detect_changes()` — verify changes
+2. `mcp_milens_review_pr()` — risk assessment
+3. `mcp_milens_annotate({...})` — save key discoveries from this session
+4. `mcp_milens_session_end({session_id: "..."})` — record stats
 
 Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symbols with parent-child hierarchy, and local links become cross-file references.
 
@@ -119,52 +230,62 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symb
 
 ## Reference
 
-### Tools
+### ⭐ Core Tools — Use Every Session (8)
 
 | Tool | Purpose |
 |---|---|
-| `mcp_milens_query` | Find symbol definitions by name (FTS5) |
-| `mcp_milens_grep` | Text search ALL files (templates, styles, configs, docs) |
-| `mcp_milens_context` | 360° view: incoming refs + outgoing deps |
-| `mcp_milens_impact` | Blast radius before editing |
-| `mcp_milens_detect_changes` | Pre-commit scope check |
-| `mcp_milens_explain_relationship` | Shortest path between two symbols |
-| `mcp_milens_get_file_symbols` | All symbols in a file |
-| `mcp_milens_get_type_hierarchy` | Class inheritance tree |
-| `mcp_milens_find_dead_code` | Unused exported symbols |
-| `mcp_milens_status` | Index stats for a repository: symbols, links, files, coverage %, staleness |
-| `mcp_milens_edit_check` | Pre-edit safety: callers + export status + re-export chains + test coverage |
-| `mcp_milens_trace` | Execution flow: call chains from entrypoints to a symbol |
-| `mcp_milens_routes` | Detect framework routes/endpoints (Express, FastAPI, NestJS, etc.) |
-| `mcp_milens_smart_context` | Intent-aware context: understand/edit/debug/test |
-| `mcp_milens_overview` | Combined context + impact + grep in ONE call. Preferred before editing/deleting/renaming a symbol. |
-| `mcp_milens_domains` | Domain clusters: groups of files forming logical modules |
-| `mcp_milens_repos` | List all indexed repositories with summary stats |
-| `mcp_milens_ast_explore` | Explore raw AST structure of a code file |
-| `mcp_milens_test_query` | Run a tree-sitter query against a code snippet and return matched nodes with capture names |
-| `mcp_milens_review_pr` | PR risk assessment: scores changed symbols by blast radius + test coverage |
-| `mcp_milens_review_symbol` | Single symbol risk: role, heat, dependents, test status |
-| `mcp_milens_test_plan` | Dependency-aware test plan: mocks, strategies, suggested tests |
-| `mcp_milens_test_coverage_gaps` | Untested exported symbols sorted by risk |
-| `mcp_milens_test_impact` | Which tests to run for current changes |
-| `mcp_milens_annotate` | Store observation/note about a symbol (persists across sessions) |
-| `mcp_milens_recall` | Retrieve annotations (filter by symbol, key, agent, session) |
-| `mcp_milens_session_start` | Register agent session for multi-agent coordination |
+| `mcp_milens_overview` | **Use this first.** Combined context + impact + grep. 1 call replaces 3-5 file reads. |
+| `mcp_milens_impact` | Blast radius BEFORE editing. Shows what WILL BREAK. |
+| `mcp_milens_edit_check` | Pre-edit safety: callers + exports + re-export chains + test coverage |
+| `mcp_milens_context` | 360° view: all callers + all callees. Instant dependency graph. |
+| `mcp_milens_query` | Find symbol definitions by name (FTS5 instant search) |
+| `mcp_milens_grep` | Search ALL files for any text (templates, configs, docs, styles) |
+| `mcp_milens_detect_changes` | Pre-commit: which symbols changed + dependents + risk scores |
+| `mcp_milens_codebase_summary` | Project overview in ~500 tokens. Use instead of reading README. |
+
+### 🔧 Situational Tools — Use When Needed (15)
+
+| Tool | Purpose | Use when... |
+|---|---|---|
+| `mcp_milens_review_pr` | PR risk assessment | Before opening PR |
+| `mcp_milens_review_symbol` | Single symbol deep-dive | Symbol is flagged CRITICAL/HIGH |
+| `mcp_milens_test_plan` | Mock strategy + >=3 test scenarios | Writing new tests |
+| `mcp_milens_test_coverage_gaps` | Untested symbols sorted by risk | Finding test priorities |
+| `mcp_milens_test_impact` | Maps changes → test files | After making edits |
+| `mcp_milens_test_generate` | Auto-generate test file | Starting tests from scratch |
+| `mcp_milens_security_scan` | 50+ security rules | Security audit requested |
+| `mcp_milens_trace` | Call chains from entrypoints | Debugging execution flow |
+| `mcp_milens_routes` | Framework routes/endpoints | Finding API endpoints |
+| `mcp_milens_smart_context` | Intent-aware context | Understand/edit/debug/test modes |
+| `mcp_milens_domains` | Domain clusters | Understanding module structure |
+| `mcp_milens_explain_relationship` | Shortest dependency path | How A connects to B |
+| `mcp_milens_get_type_hierarchy` | Inheritance tree | Class/interface exploration |
+| `mcp_milens_find_dead_code` | Unused exported symbols | Before major refactors |
+| `mcp_milens_find_similar` | Symbols with shared callers/callees | Finding refactor patterns |
+
+### 📚 Advanced Tools — Reference (19)
+
+| Tool | Purpose |
+|---|---|
+| `mcp_milens_status` | Index health: symbols, links, files, coverage, staleness |
+| `mcp_milens_repos` | List all indexed repositories |
+| `mcp_milens_annotate` | Record observations about symbols (persists across sessions) |
+| `mcp_milens_recall` | Retrieve annotations from past sessions |
+| `mcp_milens_session_start` | Register agent session |
+| `mcp_milens_session_end` | End session and record stats |
 | `mcp_milens_session_context` | Get session metadata + annotations |
 | `mcp_milens_handoff` | Transfer context between agent sessions |
-| `mcp_milens_codebase_summary` | High-level bootstrapping context: domains, key symbols, coverage |
-| `mcp_milens_semantic_search` | Hybrid FTS5 + vector search (requires --embeddings) |
-| `mcp_milens_find_similar` | Find symbols similar by embedding proximity |
-| `mcp_milens_compare_impact` | Compare impact graph before/after edit — detects regressions |
-| `mcp_milens_orchestrate` | Run full orchestration cycle: detect_changes → review_pr → impact → coverage gaps → dead code → action plan |
-| `mcp_milens_fix_apply` | Apply a security fix to a file (creates backup) |
-| `mcp_milens_test_generate` | Auto-generate test file: detects framework (vitest/jest/mocha/pytest) and writes complete test with mock strategy |
-| `mcp_milens_pre_commit_check` | Pre-commit risk scan: review_pr + dead code + coverage gaps |
-| `mcp_milens_hook_preCompact` | Save metrics snapshot before context compaction |
-| `mcp_milens_hook_postCompact` | Restore context by recalling annotations after compaction |
-| `mcp_milens_session_end` | End a session and record its stats. Use at the end of every session. |
-| `mcp_milens_hook_onFileChange` | Trigger the onFileChange hook. Call when files are modified to get impact summary. |
-| `mcp_milens_security_scan` | Scan codebase for security vulnerabilities using 50+ built-in rules. Replaces multiple manual grep() calls. |
+| `mcp_milens_orchestrate` | Full cycle: detect → review → impact → gaps → dead code |
+| `mcp_milens_pre_commit_check` | Pre-commit risk scan |
+| `mcp_milens_compare_impact` | Compare impact graph before/after edit |
+| `mcp_milens_semantic_search` | Hybrid FTS5 + vector search |
+| `mcp_milens_fix_apply` | Apply security fix to a file |
+| `mcp_milens_hook_preCompact` | Save metrics before context compaction |
+| `mcp_milens_hook_postCompact` | Restore context after compaction |
+| `mcp_milens_hook_onFileChange` | Trigger on file change hook |
+| `mcp_milens_ast_explore` | Parse code to AST S-expression |
+| `mcp_milens_test_query` | Test tree-sitter query patterns |
+| `mcp_milens_get_file_symbols` | All symbols in a file with ref/dep counts |
 
 ### Keeping the Index Fresh
 

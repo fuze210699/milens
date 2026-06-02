@@ -27,50 +27,76 @@ When working with code in **test/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 195 symbols (43 exported) across 49 files.
+Contains 328 symbols (119 exported) across 77 files.
 
 ## Key Symbols
+- **`User`** [class] (test/fixtures/accuracy/py-project/src/models.py:1) — 6 refs
+- **`Calculator`** [class] (test/fixtures/accuracy/js-project/src/calculator.js:1) — 5 refs
 - **`User`** [interface] (test/fixtures/ts-project/src/models.ts:1) — 5 refs
+- **`save`** [method] (test/fixtures/accuracy/py-project/src/models.py:14) — 4 refs
+- **`User`** [interface] (test/fixtures/accuracy/ts-project/src/models.ts:1) — 3 refs
+- **`User`** [class] (test/fixtures/py-project/models.py:1) — 3 refs
+- **`User`** [class] (test/fixtures/accuracy/ruby-project/src/models.rb:1) — 3 refs
+- **`createCalc`** [function] (test/fixtures/accuracy/js-project/src/calculator.js:6) — 2 refs
+- **`UserRepository`** [class] (test/fixtures/accuracy/ts-project/src/models.ts:12) — 2 refs
 - **`createUser`** [function] (test/fixtures/ts-project/src/models.ts:9) — 2 refs
 - **`UserRole`** [type] (test/fixtures/ts-project/src/models.ts:7) — 2 refs
-- **`create_user`** [function] (test/fixtures/py-project/models.py:10) — 2 refs
-- **`User`** [class] (test/fixtures/py-project/models.py:1) — 2 refs
-- **`Project Guide`** [section] (test/fixtures/md-project/docs/guide.md:1) — 1 refs
-- **`Getting Started`** [section] (test/fixtures/md-project/docs/guide.md:5) — 1 refs
-- **`Architecture`** [section] (test/fixtures/md-project/docs/guide.md:15) — 1 refs
-- **`Models`** [section] (test/fixtures/md-project/docs/guide.md:19) — 1 refs
-- **`Authentication`** [section] (test/fixtures/md-project/docs/guide.md:25) — 1 refs
-- **`API Reference`** [section] (test/fixtures/md-project/docs/guide.md:35) — 1 refs
-- **`Endpoints`** [section] (test/fixtures/md-project/docs/guide.md:37) — 1 refs
-- **`Error Codes`** [section] (test/fixtures/md-project/docs/guide.md:42) — 1 refs
-- **`Contributing`** [section] (test/fixtures/md-project/docs/guide.md:46) — 1 refs
-- **`UserController`** [class] (test/fixtures/ts-project/src/nest-sample.ts:18) — 1 refs
+- **`UserService`** [class] (test/fixtures/ts-project/src/nest-sample.ts:27) — 2 refs
+- **`Save`** [method] (test/fixtures/accuracy/go-project/src/models/user.go:16) — 2 refs
+- **`UserRepo`** [class] (test/fixtures/accuracy/py-project/src/models.py:10) — 2 refs
+- **`UserService`** [class] (test/fixtures/accuracy/py-project/src/service.py:4) — 2 refs
 
 ## Entry Points
+- **`add`** [method] — 43 incoming references
 - **`lang`** [variable] — 12 incoming references
 - **`dbPath`** [function] — 10 incoming references
-- **`User`** [interface] — 5 incoming references
-- **`parser`** [variable] — 3 incoming references
-- **`createUser`** [function] — 2 incoming references
+- **`User`** [class] — 6 incoming references
+- **`Calculator`** [class] — 5 incoming references
 
 ## Dependencies
-- **root**: `generateAgentsMd`, `AnnotationKey`, `CodeSymbol`, `SymbolLink`, `computeMetrics`, `formatMetricsReport`, `MilensMetrics`, `RawImport` (+9 more)
-- **store**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+76 more)
+- **analyzer**: `analyze`, `loadAliases`, `getCachedTree`, `clearTreeCache`, `enrichMetadata`, `resolveLinksWithStats`, `resolveLinks`, `reviewSymbol` (+10 more)
+- **store**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+77 more)
+- **root**: `generateAgentsMd`, `AnnotationKey`, `CodeSymbol`, `SymbolLink`, `computeMetrics`, `formatMetricsReport`, `MilensMetrics`, `RawImport` (+17 more)
 - **security**: `detectEcosystem`, `parseDependencies`, `checkVulnerabilities`, `auditDependencies`, `loadRules`, `getRulesByCategory`, `getRulesBySeverity`
-- **analyzer**: `enrichMetadata`, `resolveLinks`, `resolveLinksWithStats`, `reviewSymbol`, `reviewPr`, `scanFiles`, `generateTestPlan`, `findCoverageGaps` (+5 more)
-- **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `spec`, `extractHtmlScripts`, `extractHtmlRefs` (+7 more)
+- **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `extractVueCompositionApi`, `extractVueTemplateAst`, `spec` (+11 more)
 - **server**: `HookManager`, `HookConfig`, `defaultOnSessionStart`, `defaultOnSessionEnd`, `defaultOnPreCommit`, `defaultOnFileChange`, `defaultOnPreCompact`, `defaultOnPostCompact` (+10 more)
 - **orchestrator**: `Orchestrator`, `formatReport`, `OrchestratorReport`, `subscribe`, `run`, `snapshot`, `compare`, `cancel` (+3 more)
 
 ## Used By
-- **apps**: `dbPath`
-- **analyzer**: `parser`, `lang`
-- **root**: `dbPath`
-- **parser**: `lang`, `parser`
-- **server**: `dbPath`
-- **store**: `dbPath`
+- **apps**: `add`, `dbPath`
+- **docs**: `add`
+- **root**: `add`, `dbPath`
+- **analyzer**: `add`, `parser`, `lang`
+- **orchestrator**: `add`
+- **parser**: `lang`, `add`, `parser`
+- **security**: `add`
+- **server**: `add`, `dbPath`
+- **store**: `add`, `dbPath`
 
 ## Files
+- test/fixtures/accuracy/go-project/src/admin.go
+- test/fixtures/accuracy/go-project/src/main.go
+- test/fixtures/accuracy/go-project/src/models/user.go
+- test/fixtures/accuracy/java-project/src/Models.java
+- test/fixtures/accuracy/java-project/src/Service.java
+- test/fixtures/accuracy/js-project/src/app.js
+- test/fixtures/accuracy/js-project/src/calculator.js
+- test/fixtures/accuracy/js-project/src/extend.js
+- test/fixtures/accuracy/php-project/src/admin.php
+- test/fixtures/accuracy/php-project/src/models.php
+- test/fixtures/accuracy/php-project/src/service.php
+- test/fixtures/accuracy/py-project/src/admin.py
+- test/fixtures/accuracy/py-project/src/models.py
+- test/fixtures/accuracy/py-project/src/service.py
+- test/fixtures/accuracy/ruby-project/src/mixins.rb
+- test/fixtures/accuracy/ruby-project/src/models.rb
+- test/fixtures/accuracy/ruby-project/src/service.rb
+- test/fixtures/accuracy/rust-project/src/admin.rs
+- test/fixtures/accuracy/rust-project/src/main.rs
+- test/fixtures/accuracy/rust-project/src/models.rs
+- test/fixtures/accuracy/ts-project/src/auth.ts
+- test/fixtures/accuracy/ts-project/src/index.ts
+- test/fixtures/accuracy/ts-project/src/models.ts
 - test/fixtures/go-project/models/user.go
 - test/fixtures/go-project/service/handler.go
 - test/fixtures/html-project/css/main.css
@@ -90,6 +116,7 @@ Contains 195 symbols (43 exported) across 49 files.
 - test/fixtures/vue-project-refs/src/views/TestView.vue
 - test/fixtures/vue-project/src/composables/useClipboard.js
 - test/fixtures/vue-project/src/views/TestView.vue
+- test/unit/accuracy.test.ts
 - test/unit/agents-md.test.ts
 - test/unit/annotations.test.ts
 - test/unit/cli.test.ts
@@ -97,6 +124,7 @@ Contains 195 symbols (43 exported) across 49 files.
 - test/unit/database.test.ts
 - test/unit/db-extended.test.ts
 - test/unit/deps-audit.test.ts
+- test/unit/engine.test.ts
 - test/unit/enrich.test.ts
 - test/unit/extractor.test.ts
 - test/unit/hooks.test.ts
@@ -106,6 +134,7 @@ Contains 195 symbols (43 exported) across 49 files.
 - test/unit/mcp-prompts.test.ts
 - test/unit/mcp-tools.test.ts
 - test/unit/metrics.test.ts
+- test/unit/mro.test.ts
 - test/unit/orchestrator.test.ts
 - test/unit/parser-extract-cache.test.ts
 - test/unit/parser-loader.test.ts
@@ -113,10 +142,12 @@ Contains 195 symbols (43 exported) across 49 files.
 - test/unit/resolver.test.ts
 - test/unit/review.test.ts
 - test/unit/scanner.test.ts
+- test/unit/scope-resolver.test.ts
 - test/unit/security-rules.test.ts
 - test/unit/server-test-plan.test.ts
 - test/unit/skills.test.ts
 - test/unit/testplan.test.ts
+- test/unit/uninstall.test.ts
 - test/unit/utils.test.ts
 - test/unit/vectors.test.ts
 - test/unit/vue-import.test.ts

@@ -30,9 +30,9 @@ When working with code in **store/**, follow these mandatory safety rules:
 Contains 135 symbols (15 exported) across 5 files.
 
 ## Key Symbols
-- **`Database`** [class] (src/store/db.ts:10) — 77 refs
+- **`Database`** [class] (src/store/db.ts:10) — 79 refs
 - **`AnnotationStore`** [class] (src/store/annotations.ts:10) — 19 refs
-- **`RepoRegistry`** [class] (src/store/registry.ts:18) — 13 refs
+- **`RepoRegistry`** [class] (src/store/registry.ts:18) — 16 refs
 - **`runDecayPass`** [function] (src/store/confidence.ts:85) — 6 refs
 - **`buildEmbeddingText`** [function] (src/store/vectors.ts:250) — 4 refs
 - **`TfIdfProvider`** [class] (src/store/vectors.ts:44) — 4 refs
@@ -47,24 +47,24 @@ Contains 135 symbols (15 exported) across 5 files.
 - **`SimilarResult`** [interface] (src/store/vectors.ts:23) — 0 refs
 
 ## Entry Points
-- **`Database`** [class] — 77 incoming references
-- **`close`** [method] — 30 incoming references
-- **`get`** [method] — 22 incoming references
+- **`Database`** [class] — 79 incoming references
+- **`close`** [method] — 31 incoming references
+- **`get`** [method] — 23 incoming references
 - **`AnnotationStore`** [class] — 19 incoming references
-- **`rowToSymbol`** [function] — 13 incoming references
+- **`RepoRegistry`** [class] — 16 incoming references
 
 ## Dependencies
 - **root**: `Annotation`, `AnnotationKey`, `Session`, `EvolutionEvent`, `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has` (+1 more)
-- **analyzer**: `find`, `resolve`
-- **test**: `dbPath`
+- **test**: `add`, `dbPath`
+- **analyzer**: `resolve`
 
 ## Used By
-- **root**: `Database`, `RepoRegistry`, `AnnotationStore`, `runDecayPass`, `getIncomingLinks`, `getAllSymbols`, `getCodebaseSummary`, `register` (+25 more)
+- **root**: `Database`, `RepoRegistry`, `AnnotationStore`, `runDecayPass`, `getIncomingLinks`, `getAllSymbols`, `getCodebaseSummary`, `register` (+24 more)
 - **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `clearFiles`, `clear`, `isFileUpToDate` (+23 more)
 - **orchestrator**: `Database`, `findSymbolByName`, `findUpstream`, `clear`, `getTestCoverageGaps`, `findDeadCode`, `close`
-- **server**: `Database`, `AnnotationStore`, `RepoRegistry`, `runDecayPass`, `getCodebaseSummary`, `recall`, `close`, `getStats` (+37 more)
-- **test**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+76 more)
-- **apps**: `remove`, `Database`, `getCodebaseSummary`, `close`
+- **server**: `Database`, `AnnotationStore`, `RepoRegistry`, `runDecayPass`, `getCodebaseSummary`, `recall`, `close`, `getStats` (+36 more)
+- **test**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+77 more)
+- **apps**: `remove`, `getAnnotations`, `Database`, `getCodebaseSummary`, `close`
 - **docs**: `remove`
 - **parser**: `load`
 

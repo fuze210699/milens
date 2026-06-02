@@ -26,46 +26,47 @@ When working with code in **analyzer/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 80 symbols (21 exported) across 7 files.
+Contains 128 symbols (29 exported) across 8 files.
 
 ## Key Symbols
-- **`reviewPr`** [function] (src/analyzer/review.ts:101) — 7 refs
-- **`analyze`** [function] (src/analyzer/engine.ts:125) — 6 refs
-- **`resolveLinksWithStats`** [function] (src/analyzer/resolver.ts:35) — 5 refs
-- **`loadAliases`** [function] (src/analyzer/config.ts:10) — 4 refs
+- **`resolveLinksWithStats`** [function] (src/analyzer/resolver.ts:37) — 9 refs
+- **`reviewPr`** [function] (src/analyzer/review.ts:280) — 9 refs
+- **`analyze`** [function] (src/analyzer/engine.ts:137) — 8 refs
+- **`loadAliases`** [function] (src/analyzer/config.ts:10) — 6 refs
+- **`ResolutionResult`** [interface] (src/analyzer/resolver.ts:24) — 6 refs
+- **`diffResolutions`** [function] (src/analyzer/scope-resolver.ts:736) — 5 refs
 - **`enrichMetadata`** [function] (src/analyzer/enrich.ts:21) — 4 refs
 - **`ReviewResult`** [interface] (src/analyzer/review.ts:17) — 4 refs
 - **`scanFiles`** [function] (src/analyzer/scanner.ts:11) — 4 refs
-- **`resolveLinks`** [function] (src/analyzer/resolver.ts:30) — 3 refs
-- **`reviewSymbol`** [function] (src/analyzer/review.ts:167) — 2 refs
-- **`generateTestPlan`** [function] (src/analyzer/testplan.ts:104) — 2 refs
-- **`findCoverageGaps`** [function] (src/analyzer/testplan.ts:175) — 2 refs
-- **`analyzeTestImpact`** [function] (src/analyzer/testplan.ts:208) — 2 refs
-- **`ResolutionResult`** [interface] (src/analyzer/resolver.ts:22) — 1 refs
-- **`SymbolRisk`** [interface] (src/analyzer/review.ts:8) — 1 refs
-- **`RiskLevel`** [type] (src/analyzer/review.ts:6) — 1 refs
+- **`resolveWithScopes`** [function] (src/analyzer/scope-resolver.ts:48) — 4 refs
+- **`clearTreeCache`** [function] (src/analyzer/engine.ts:28) — 3 refs
+- **`resolveLinks`** [function] (src/analyzer/resolver.ts:32) — 3 refs
+- **`computeDiffStats`** [function] (src/analyzer/scope-resolver.ts:774) — 3 refs
+- **`getCachedTree`** [function] (src/analyzer/engine.ts:25) — 2 refs
+- **`reviewSymbol`** [function] (src/analyzer/review.ts:392) — 2 refs
 
 ## Entry Points
-- **`find`** [function] — 22 incoming references
-- **`resolve`** [method] — 16 incoming references
-- **`reviewPr`** [function] — 7 incoming references
-- **`analyze`** [function] — 6 incoming references
-- **`clear`** [method] — 5 incoming references
+- **`resolve`** [method] — 23 incoming references
+- **`find`** [function] — 14 incoming references
+- **`ScopeNode`** [interface] — 11 incoming references
+- **`resolveLinksWithStats`** [function] — 9 incoming references
+- **`reviewPr`** [function] — 9 incoming references
 
 ## Dependencies
-- **parser**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `extractVueScript`, `extractVueTemplateRefs` (+6 more)
+- **parser**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `extractVueScript`, `extractVueTemplateRefs` (+9 more)
 - **root**: `isTestFile`, `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding` (+8 more)
 - **store**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `clearFiles`, `clear`, `isFileUpToDate` (+23 more)
-- **test**: `parser`, `lang`
+- **test**: `add`, `parser`, `lang`
 
 ## Used By
 - **root**: `loadAliases`, `analyze`, `resolve`, `clear`
 - **orchestrator**: `reviewPr`, `ReviewResult`, `SymbolRisk`
-- **server**: `reviewPr`, `analyze`, `resolve`, `find`, `clear`
-- **test**: `enrichMetadata`, `resolveLinks`, `resolveLinksWithStats`, `reviewSymbol`, `reviewPr`, `scanFiles`, `generateTestPlan`, `findCoverageGaps` (+5 more)
+- **server**: `reviewPr`, `analyze`, `resolve`, `clear`
+- **test**: `analyze`, `loadAliases`, `getCachedTree`, `clearTreeCache`, `enrichMetadata`, `resolveLinksWithStats`, `resolveLinks`, `reviewSymbol` (+10 more)
+- **apps**: `resolve`
 - **scripts**: `resolve`
-- **parser**: `find`, `resolve`
-- **store**: `find`, `resolve`
+- **parser**: `resolve`
+- **store**: `resolve`
 
 ## Files
 - src/analyzer/config.ts
@@ -74,4 +75,5 @@ Contains 80 symbols (21 exported) across 7 files.
 - src/analyzer/resolver.ts
 - src/analyzer/review.ts
 - src/analyzer/scanner.ts
+- src/analyzer/scope-resolver.ts
 - src/analyzer/testplan.ts

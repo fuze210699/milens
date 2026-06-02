@@ -7,7 +7,7 @@
   <a href="https://www.npmjs.com/package/milens"><img src="https://img.shields.io/npm/v/milens" alt="npm"></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="node"></a>
   <a href="https://github.com/fuze210699/milens/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="license"></a>
-  <img src="https://img.shields.io/badge/tools-41-purple" alt="41 tools">
+  <img src="https://img.shields.io/badge/tools-43-purple" alt="43 tools">
   <img src="https://img.shields.io/badge/languages-12-blue" alt="12 languages">
   <img src="https://img.shields.io/badge/prompts-7-orange" alt="7 prompts">
   <img src="https://img.shields.io/badge/security-50%2B-red" alt="50+ rules">
@@ -28,15 +28,15 @@
 ## Quick Install
 
 ```bash
-npx milens init --profile full
-npx milens analyze -p . --force
+milens init --profile full
+milens analyze -p . --force
 ```
 
 ---
 
 ## What is Milens?
 
-Milens builds a **knowledge graph** of your codebase — functions, classes, imports, calls, and inheritance chains — then exposes it through 41 MCP tools. AI agents query the graph instead of reading files.
+Milens builds a **knowledge graph** of your codebase — functions, classes, imports, calls, and inheritance chains — then exposes it through 43 MCP tools. AI agents query the graph instead of reading files.
 
 - **Parse 12 languages.** Tree-sitter WASM — TS, JS, Python, Java, Go, Rust, PHP, Ruby, Vue, HTML, CSS, Markdown.
 - **Query instantly.** FTS5 + recursive CTE — all in SQLite, no API calls.
@@ -67,7 +67,7 @@ Analyzer ── extractFromTree() + dual-path resolver
 Store ──── SQLite + FTS5 (symbols, links, metadata, embeddings)
   │
   ▼
-Server ─── MCP stdio/HTTP (41 tools)
+Server ─── MCP stdio/HTTP (43 tools)
   │
   ├── AI Agent (MCP client)
   └── CLI (terminal)
@@ -157,7 +157,7 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 
 | Feature | Description |
 |---|---|
-| **Code Intelligence** | 41 MCP tools — search, impact, context, trace, routes |
+| **Code Intelligence** | 43 MCP tools — search, impact, context, trace, routes |
 | **Security Scanner** | 50+ rules across 9 categories + dependency audit |
 | **Sub-Agent Prompts** | 7 prompts — plan, review, tdd, security, architect, debug, dead_code_remove |
 | **CLI Workflows** | 7 commands — tdd, review, plan, onboard, security-scan, refactor, handoff |
@@ -403,7 +403,7 @@ Each adapter is in the `adapters/` directory with ready-to-copy config files and
 ```bash
 MILENS_PROFILE=minimal milens serve          # 10 tools — lighter footprint
 MILENS_PROFILE=standard milens serve         # 25 tools — full daily coding
-milens serve --profile full                  # 41 tools — everything
+milens serve --profile full                  # 43 tools — everything
 ```
 
 ---
@@ -507,7 +507,6 @@ Everything that touches your code stays on your filesystem. Built for production
 ## License
 
 Core (analyzer, parser, store, CLI, MCP tools): **MIT License**
-Advanced features (GitHub App, enterprise): Commercial license
 See [LICENSE](LICENSE) for details.
 
 ---

@@ -27,7 +27,7 @@ When working with code in **apps/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 38 symbols (12 exported) across 10 files.
+Contains 54 symbols (12 exported) across 10 files.
 
 ## Key Symbols
 - **`Milens Desktop Dashboard`** [section] (apps/dashboard/README.md:1) — 0 refs
@@ -44,15 +44,17 @@ Contains 38 symbols (12 exported) across 10 files.
 - **`MilensRunner`** [class] (apps/github/handlers/milens-runner.js:6) — 0 refs
 
 ## Entry Points
-- **`createWindow`** [function] — 1 incoming references
-- **`__dirname`** [variable] — 1 incoming references
-- **`checkRateLimit`** [function] — 1 incoming references
-- **`getTier`** [function] — 1 incoming references
-- **`runMilensAnalyze`** [function] — 1 incoming references
+- **`DASHBOARD_URL`** [variable] — 3 incoming references
+- **`loadOverview`** [function] — 2 incoming references
+- **`poll`** [function] — 2 incoming references
+- **`__dirname`** [variable] — 2 incoming references
+- **`setStatus`** [function] — 1 incoming references
 
 ## Dependencies
-- **store**: `remove`, `Database`, `getCodebaseSummary`, `close`
-- **test**: `dbPath`
+- **store**: `remove`, `getAnnotations`, `Database`, `getCodebaseSummary`, `close`
+- **test**: `add`, `dbPath`
+- **orchestrator**: `e`
+- **analyzer**: `resolve`
 
 ## Files
 - apps/dashboard/README.md

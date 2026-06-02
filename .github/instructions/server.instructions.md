@@ -25,7 +25,7 @@ When working with code in **server/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 94 symbols (16 exported) across 5 files.
+Contains 99 symbols (16 exported) across 5 files.
 
 ## Key Symbols
 - **`HookManager`** [class] (src/server/hooks.ts:43) — 8 refs
@@ -38,27 +38,27 @@ Contains 94 symbols (16 exported) across 5 files.
 - **`defaultOnPostCompact`** [function] (src/server/hooks.ts:358) — 4 refs
 - **`SessionContext`** [interface] (src/server/hooks.ts:15) — 4 refs
 - **`registerAllPrompts`** [function] (src/server/mcp-prompts.ts:637) — 4 refs
-- **`createMcpServer`** [function] (src/server/mcp.ts:370) — 4 refs
+- **`createMcpServer`** [function] (src/server/mcp.ts:420) — 4 refs
 - **`generateTestPlan`** [function] (src/server/test-plan.ts:14) — 4 refs
 - **`FileWatcher`** [class] (src/server/watcher.ts:50) — 3 refs
-- **`startStdio`** [function] (src/server/mcp.ts:2717) — 2 refs
-- **`startHttp`** [function] (src/server/mcp.ts:2756) — 2 refs
+- **`startStdio`** [function] (src/server/mcp.ts:2907) — 2 refs
+- **`startHttp`** [function] (src/server/mcp.ts:2946) — 2 refs
 
 ## Entry Points
-- **`get`** [method] — 9 incoming references
+- **`get`** [method] — 12 incoming references
 - **`HookManager`** [class] — 8 incoming references
 - **`loadConfig`** [method] — 7 incoming references
 - **`HookConfig`** [interface] — 5 incoming references
 - **`defaultOnSessionStart`** [function] — 4 incoming references
 
 ## Dependencies
-- **store**: `Database`, `AnnotationStore`, `RepoRegistry`, `runDecayPass`, `getCodebaseSummary`, `recall`, `close`, `getStats` (+37 more)
-- **analyzer**: `reviewPr`, `analyze`, `resolve`, `find`, `clear`
+- **store**: `Database`, `AnnotationStore`, `RepoRegistry`, `runDecayPass`, `getCodebaseSummary`, `recall`, `close`, `getStats` (+36 more)
+- **analyzer**: `reviewPr`, `analyze`, `resolve`, `clear`
 - **parser**: `getParser`, `loadLanguage`, `ALL_LANGS`
 - **security**: `loadRules`
 - **orchestrator**: `Orchestrator`, `snapshot`, `compare`, `runAndFormat`
 - **root**: `has`
-- **test**: `dbPath`
+- **test**: `add`, `dbPath`
 
 ## Used By
 - **root**: `startHttp`, `startStdio`, `HookManager`, `get`, `enableHook`, `loadConfig`, `saveConfig`, `disableHook`

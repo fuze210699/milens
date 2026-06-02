@@ -34,20 +34,22 @@ Contains 22 symbols (7 exported) across 2 files.
 
 ## Entry Points
 - **`Orchestrator`** [class] — 6 incoming references
+- **`e`** [function] — 5 incoming references
 - **`OrchestratorReport`** [interface] — 5 incoming references
 - **`formatReport`** [function] — 4 incoming references
 - **`snapshot`** [method] — 3 incoming references
-- **`run`** [method] — 3 incoming references
 
 ## Dependencies
 - **store**: `Database`, `findSymbolByName`, `findUpstream`, `clear`, `getTestCoverageGaps`, `findDeadCode`, `close`
 - **analyzer**: `reviewPr`, `ReviewResult`, `SymbolRisk`
 - **root**: `CodeSymbol`, `has`
+- **test**: `add`
 
 ## Used By
 - **root**: `Orchestrator`, `subscribe`, `runAndFormat`
 - **server**: `Orchestrator`, `snapshot`, `compare`, `runAndFormat`
 - **test**: `Orchestrator`, `formatReport`, `OrchestratorReport`, `subscribe`, `run`, `snapshot`, `compare`, `cancel` (+3 more)
+- **apps**: `e`
 
 ## Files
 - src/orchestrator/orchestrator.ts

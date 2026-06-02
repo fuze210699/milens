@@ -26,27 +26,27 @@ When working with code in **parser/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 76 symbols (26 exported) across 15 files.
+Contains 83 symbols (31 exported) across 16 files.
 
 ## Key Symbols
-- **`LangSpec`** [interface] (src/parser/extract.ts:6) — 30 refs
+- **`LangSpec`** [interface] (src/parser/extract.ts:6) — 32 refs
 - **`loadLanguage`** [function] (src/parser/loader.ts:21) — 14 refs
 - **`getParser`** [function] (src/parser/loader.ts:32) — 13 refs
-- **`extractFromTree`** [function] (src/parser/extract.ts:250) — 8 refs
+- **`extractFromTree`** [function] (src/parser/extract.ts:256) — 8 refs
 - **`supportedExtensions`** [function] (src/parser/languages.ts:29) — 6 refs
-- **`extractHtmlScripts`** [function] (src/parser/lang-html.ts:33) — 5 refs
+- **`extractHtmlScripts`** [function] (src/parser/lang-html.ts:38) — 5 refs
 - **`extractMarkdown`** [function] (src/parser/lang-md.ts:34) — 5 refs
 - **`spec`** [variable] (src/parser/lang-ts.ts:5) — 5 refs
-- **`extractVueScript`** [function] (src/parser/lang-vue.ts:18) — 5 refs
+- **`extractVueScript`** [function] (src/parser/lang-vue.ts:19) — 5 refs
 - **`initTreeSitter`** [function] (src/parser/loader.ts:15) — 5 refs
-- **`clearQueryCache`** [function] (src/parser/extract.ts:67) — 4 refs
-- **`extractHtmlRefs`** [function] (src/parser/lang-html.ts:52) — 4 refs
-- **`extractVueTemplateRefs`** [function] (src/parser/lang-vue.ts:37) — 4 refs
-- **`langForFile`** [function] (src/parser/languages.ts:24) — 4 refs
-- **`spec`** [variable] (src/parser/lang-js.ts:5) — 3 refs
+- **`clearQueryCache`** [function] (src/parser/extract.ts:72) — 4 refs
+- **`extractHtmlRefs`** [function] (src/parser/lang-html.ts:57) — 4 refs
+- **`extractHtmlLinks`** [function] (src/parser/lang-html.ts:99) — 4 refs
+- **`extractVueTemplateRefs`** [function] (src/parser/lang-vue.ts:38) — 4 refs
+- **`extractVueTemplateAst`** [function] (src/parser/lang-vue.ts:90) — 4 refs
 
 ## Entry Points
-- **`LangSpec`** [interface] — 30 incoming references
+- **`LangSpec`** [interface] — 32 incoming references
 - **`loadLanguage`** [function] — 14 incoming references
 - **`getParser`** [function] — 13 incoming references
 - **`extractFromTree`** [function] — 8 incoming references
@@ -54,14 +54,14 @@ Contains 76 symbols (26 exported) across 15 files.
 
 ## Dependencies
 - **root**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+4 more)
-- **test**: `lang`, `parser`
-- **analyzer**: `find`, `resolve`
+- **test**: `lang`, `add`, `parser`
+- **analyzer**: `resolve`
 - **store**: `load`
 
 ## Used By
-- **analyzer**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `extractVueScript`, `extractVueTemplateRefs` (+6 more)
+- **analyzer**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `extractVueScript`, `extractVueTemplateRefs` (+9 more)
 - **server**: `getParser`, `loadLanguage`, `ALL_LANGS`
-- **test**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `spec`, `extractHtmlScripts`, `extractHtmlRefs` (+7 more)
+- **test**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `extractVueCompositionApi`, `extractVueTemplateAst`, `spec` (+11 more)
 
 ## Files
 - src/parser/extract.ts
@@ -77,5 +77,6 @@ Contains 76 symbols (26 exported) across 15 files.
 - src/parser/lang-rust.ts
 - src/parser/lang-ts.ts
 - src/parser/lang-vue.ts
+- src/parser/language-provider.ts
 - src/parser/languages.ts
 - src/parser/loader.ts

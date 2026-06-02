@@ -21,9 +21,16 @@ When working with code in **docs/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 140 symbols (119 exported) across 19 files.
+Contains 187 symbols (162 exported) across 23 files.
 
 ## Key Symbols
+- **`Accuracy Engine`** [section] (docs/accuracy.md:1) — 0 refs
+- **`Type Bindings`** [section] (docs/accuracy.md:5) — 0 refs
+- **`Method Resolution Order (MRO)`** [section] (docs/accuracy.md:29) — 0 refs
+- **`C3 Linearization Example (Diamond)`** [section] (docs/accuracy.md:45) — 0 refs
+- **`Import Semantics`** [section] (docs/accuracy.md:59) — 0 refs
+- **`Accuracy Fixtures`** [section] (docs/accuracy.md:69) — 0 refs
+- **`Dual-Path Resolution`** [section] (docs/accuracy.md:86) — 0 refs
 - **`Adapter Packs`** [section] (docs/adapters.md:1) — 0 refs
 - **`Available Adapters`** [section] (docs/adapters.md:5) — 0 refs
 - **`Quick Install`** [section] (docs/adapters.md:17) — 0 refs
@@ -32,13 +39,6 @@ Contains 140 symbols (119 exported) across 19 files.
 - **`Cursor`** [section] (docs/adapters.md:36) — 0 refs
 - **`GitHub Copilot`** [section] (docs/adapters.md:42) — 0 refs
 - **`Codex`** [section] (docs/adapters.md:48) — 0 refs
-- **`Gemini`** [section] (docs/adapters.md:54) — 0 refs
-- **`Zed`** [section] (docs/adapters.md:60) — 0 refs
-- **`Automated Install`** [section] (docs/adapters.md:66) — 0 refs
-- **`Profile Selection`** [section] (docs/adapters.md:74) — 0 refs
-- **`MCP Config Reference`** [section] (docs/adapters.md:86) — 0 refs
-- **`Upgrading Milens`** [section] (docs/milens-upgrade.md:1) — 0 refs
-- **`Storage Map`** [section] (docs/milens-upgrade.md:5) — 0 refs
 
 ## Entry Points
 - **`applyFilters`** [function] — 1 incoming references
@@ -46,21 +46,26 @@ Contains 140 symbols (119 exported) across 19 files.
 
 ## Dependencies
 - **store**: `remove`
+- **test**: `add`
 
 ## Files
 - docs/README.md
+- docs/accuracy.md
 - docs/adapters.html
 - docs/adapters.md
 - docs/changelog.html
+- docs/cli.md
 - docs/compare.html
 - docs/github-app.html
 - docs/index.html
+- docs/languages.md
 - docs/learning.html
 - docs/milens-upgrade.md
 - docs/platforms.html
 - docs/pricing.html
 - docs/pricing.md
 - docs/quickstart.md
+- docs/review.md
 - docs/scenarios.html
 - docs/security-presets.md
 - docs/security.html

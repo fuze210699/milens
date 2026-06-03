@@ -14,6 +14,7 @@ import { enrichMetadata } from './enrich.js';
 import { isTestFile } from '../utils.js';
 import { Database } from '../store/db.js';
 import { TfIdfProvider, EmbeddingStore, buildEmbeddingText } from '../store/vectors.js';
+import { ProgressPhase, type ProgressReporter } from '../ui/progress.js';
 import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, AnalysisStats } from '../types.js';
 import type Parser from 'web-tree-sitter';
 import type { LangSpec } from '../parser/extract.js';
@@ -97,6 +98,7 @@ interface EngineOptions {
   aliases?: Record<string, string>;
   embeddings?: boolean;
   files?: string[];
+  onProgress?: ProgressReporter;
 }
 
 function buildChunks(files: FileWithSpec[]): FileWithSpec[][] {
@@ -139,20 +141,13 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const rootPath = resolve(opts.rootPath);
   const db = new Database(opts.dbPath);
   const aliases = opts.aliases ?? {};
-
-  if (opts.force) {
-    if (opts.files && opts.files.length > 0) {
-      db.clearFiles(opts.files);
-    } else {
-      db.clear();
-    }
-  }
+  const reporter = opts.onProgress;
 
   // Phase 1: Scan files (or use explicit file list for incremental)
   const files = opts.files && opts.files.length > 0
     ? scanFilesWithFilter(rootPath, opts.files, opts.verbose)
     : scanFiles(rootPath, opts.verbose);
-  if (opts.verbose) console.log(`[scan] Found ${files.length} source files`);
+  if (opts.verbose) console.error(`[scan] Found ${files.length} source files`);
 
   // Phase 2: Group files by language for cache-friendly processing
   const langGroups = new Map<string, FileWithSpec[]>();
@@ -185,6 +180,12 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const importCache = new ImportResolveCache();
   let filesParsed = 0;
 
+  // Count total files for progress
+  let totalToParse = 0;
+  if (docGroup) totalToParse += docGroup.length;
+  for (const [, group] of langGroups) totalToParse += group.length;
+  reporter?.startPhase(ProgressPhase.PARSE, totalToParse);
+
   // Process document files (no tree-sitter needed) — batch read
   if (docGroup) {
     const docContents = await readFilesAsync(docGroup.map(f => f.absolutePath));
@@ -194,7 +195,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
       if (!source) continue;
 
       if (!opts.force && db.isFileUpToDate(file.relativePath, source)) {
-        if (opts.verbose) console.log(`[skip] ${file.relativePath} (unchanged)`);
+        if (opts.verbose) console.error(`[skip] ${file.relativePath} (unchanged)`);
         continue;
       }
 
@@ -216,7 +217,8 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
         db.upsertFileHash(file.relativePath, source);
         parsedFiles.add(file.relativePath);
         filesParsed++;
-        if (opts.verbose) console.log(`[parse] ${file.relativePath}: ${result.symbols.length} symbols`);
+        reporter?.tick(file.relativePath);
+        if (opts.verbose) console.error(`[parse] ${file.relativePath}: ${result.symbols.length} symbols`);
       } catch (err) {
         if (opts.verbose) console.error(`[error] ${file.relativePath}: ${err}`);
       }
@@ -248,7 +250,8 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
 
         // Skip unchanged files (incremental)
         if (!opts.force && db.isFileUpToDate(file.relativePath, source)) {
-          if (opts.verbose) console.log(`[skip] ${file.relativePath} (unchanged)`);
+          if (opts.verbose) console.error(`[skip] ${file.relativePath} (unchanged)`);
+          reporter?.tick();
           continue;
         }
 
@@ -270,7 +273,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
           // Resolve import paths eagerly (cached)
           for (const imp of result.imports) {
             const resolved = importCache.resolve(file.spec, imp.modulePath, imp.filePath, rootPath, aliases);
-            if (opts.verbose) console.log(`[resolve] ${imp.filePath}::${imp.modulePath} => ${resolved ?? 'NULL'}`);
+            if (opts.verbose) console.error(`[resolve] ${imp.filePath}::${imp.modulePath} => ${resolved ?? 'NULL'}`);
             if (resolved) {
               resolvedImportPaths.set(`${imp.filePath}::${imp.modulePath}`, resolved);
             }
@@ -287,7 +290,8 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
           db.upsertFileHash(file.relativePath, source);
           parsedFiles.add(file.relativePath);
           filesParsed++;
-          if (opts.verbose) console.log(`[parse] ${file.relativePath}: ${result.symbols.length} symbols`);
+          reporter?.tick(file.relativePath);
+          if (opts.verbose) console.error(`[parse] ${file.relativePath}: ${result.symbols.length} symbols`);
         } catch (err) {
           if (opts.verbose) console.error(`[error] ${file.relativePath}: ${err}`);
         }
@@ -295,6 +299,8 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
       // chunkContents goes out of scope → GC can reclaim source strings
     }
   }
+
+  reporter?.endPhase();
 
   // Phase 4: Load unchanged files' symbols for cross-file resolution
   if (!opts.force) {
@@ -312,6 +318,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   }
 
   // Phase 5: Resolve cross-file links
+  reporter?.startPhase(ProgressPhase.RESOLVE, 1);
   const perFileImportSemantics = new Map<string, 'named' | 'wildcard-leaf' | 'wildcard-transitive' | 'namespace'>();
   const perFileMroStrategy = new Map<string, 'first-wins' | 'c3' | 'ruby-mixin' | 'none'>();
   for (const [, group] of langGroups) {
@@ -341,17 +348,20 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   });
   const links = resolution.links;
   if (opts.verbose) {
-    console.log(`[link] Resolved ${links.length} relationships`);
+    console.error(`[link] Resolved ${links.length} relationships`);
     if (resolution.unresolvedImports > 0 || resolution.unresolvedCalls > 0) {
-      console.log(`[link] ⚠ ${resolution.unresolvedImports} unresolved imports, ${resolution.unresolvedCalls} unresolved calls (internal)`);
+      console.error(`[link] ⚠ ${resolution.unresolvedImports} unresolved imports, ${resolution.unresolvedCalls} unresolved calls (internal)`);
     }
     if (resolution.externalImports > 0 || resolution.externalCalls > 0) {
-      console.log(`[link] ✓ ${resolution.externalImports} external imports, ${resolution.externalCalls} external calls (expected)`);
+      console.error(`[link] ✓ ${resolution.externalImports} external imports, ${resolution.externalCalls} external calls (expected)`);
     }
   }
+  reporter?.endPhase();
 
   // Phase 5.5: Dual-path resolution — compare legacy vs scope-based
-  {
+  try {
+    const scopeT0 = Date.now();
+    if (opts.verbose) console.error(`[dual] Starting scope-based resolution (${allSymbols.length} symbols, ${allCalls.length} calls, ${allImports.length} imports)...`);
     const scopeResolution = resolveWithScopes({
       symbolsByFile,
       allSymbols,
@@ -368,13 +378,16 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
       perFileMroStrategy,
       treeCache,
     });
+    if (opts.verbose) console.error(`[dual] Scope resolution completed in ${Date.now() - scopeT0}ms (${scopeResolution.links.length} links)`);
     const diffs = diffResolutions(resolution, scopeResolution);
     if (opts.verbose) {
       const matchPct = resolution.links.length > 0
         ? ((resolution.links.length - diffs.length) / resolution.links.length * 100).toFixed(1)
         : '0.0';
-      console.log(`[dual] Legacy: ${resolution.links.length} links, Scope: ${scopeResolution.links.length} links, Diff: ${diffs.length} (${matchPct}% match)`);
+      console.error(`[dual] Legacy: ${resolution.links.length} links, Scope: ${scopeResolution.links.length} links, Diff: ${diffs.length} (${matchPct}% match)`);
     }
+  } catch (err) {
+    if (opts.verbose) console.error(`[dual] Scope resolution failed (non-fatal): ${err}`);
   }
 
   // Release raw extraction data — no longer needed after resolution
@@ -390,8 +403,10 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   importCache.clear();
 
   // Phase 6: Enrich — compute roles, heat, zones from resolved graph
+  reporter?.startPhase(ProgressPhase.ENRICH, 1);
   const enriched = enrichMetadata({ symbols: allSymbols, links });
-  if (opts.verbose) console.log(`[enrich] Computed metadata for ${allSymbols.length} symbols, ${enriched.zones.size} zones`);
+  if (opts.verbose) console.error(`[enrich] Computed metadata for ${allSymbols.length} symbols, ${enriched.zones.size} zones`);
+  reporter?.endPhase();
 
   // Phase 6.5: Test coverage — count symbols referenced from test files
   const testFileSymbolIds = new Set<string>();
@@ -415,9 +430,14 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const exportedProduction = allSymbols.filter(s => s.exported && !isTestFile(s.filePath));
 
   // Phase 7: Persist to database in single transaction
+  reporter?.startPhase(ProgressPhase.PERSIST, 1);
   db.transaction(() => {
     if (opts.force) {
-      db.clearSymbolsAndLinks();
+      if (opts.files && opts.files.length > 0) {
+        db.clearFiles(opts.files);
+      } else {
+        db.clear();
+      }
     } else {
       for (const fp of parsedFiles) db.deleteFileData(fp);
     }
@@ -443,6 +463,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     db.setMeta('exported_production_symbols', String(exportedProduction.length));
     db.rebuildSearch();
   });
+  reporter?.endPhase();
 
   // Phase 8: Generate embeddings (optional)
   if (opts.embeddings) {
@@ -467,7 +488,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
       });
       embedded += batch.length;
     }
-    if (opts.verbose) console.log(`[embed] Generated ${embedded} embeddings (${provider.name})`);
+    if (opts.verbose) console.error(`[embed] Generated ${embedded} embeddings (${provider.name})`);
   }
 
   const stats: AnalysisStats = {
@@ -483,12 +504,19 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   };
 
   if (opts.verbose) {
-    console.log(`[done] ${stats.symbolCount} symbols, ${stats.linkCount} links in ${stats.durationMs}ms`);
+    console.error(`[done] ${stats.symbolCount} symbols, ${stats.linkCount} links in ${stats.durationMs}ms`);
   }
+
+  reporter?.done(stats);
+  reporter?.finalize();
 
   clearQueryCache();
   clearTreeCache();
-  db.close();
+  try {
+    db.close();
+  } finally {
+    // ensure close even on error
+  }
   return stats;
 }
 

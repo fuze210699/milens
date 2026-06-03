@@ -633,10 +633,14 @@ function computeC3Order(
   directParents: string[],
   parentMap: Map<string, string[]>,
   allNodes: Set<string>,
+  visitedParents: Set<string> = new Set(),
 ): string[] {
   // Build linearization for each parent recursively
   const linearizations: string[][] = [];
   for (const p of directParents) {
+    if (visitedParents.has(p)) continue;
+    visitedParents.add(p);
+
     const pParents = parentMap.get(p) ?? [];
     const pAllNodes = new Set<string>();
     const q = [...pParents];
@@ -649,7 +653,7 @@ function computeC3Order(
     }
     // Recursively compute parent's C3 order
     if (pParents.length > 0) {
-      linearizations.push(computeC3Order(pParents, parentMap, pAllNodes));
+      linearizations.push(computeC3Order(pParents, parentMap, pAllNodes, visitedParents));
     }
   }
 

@@ -46,6 +46,7 @@ interface ScopeResolverInput {
 }
 
 export function resolveWithScopes(input: ScopeResolverInput): ResolutionResult {
+  const t0 = Date.now();
   const links: SymbolLink[] = [];
   let unresolvedImports = 0;
   let unresolvedCalls = 0;
@@ -55,20 +56,29 @@ export function resolveWithScopes(input: ScopeResolverInput): ResolutionResult {
   const symbolById = buildIdIndex(input.allSymbols);
 
   // Phase 1: Build scope graphs per file (AST-based preferred, symbol-based fallback)
+  let t = Date.now();
   const scopeForest = input.treeCache
     ? buildScopeGraphFromAST(input.treeCache, input.symbolsByFile)
     : buildScopeGraph(input.symbolsByFile);
+  if (process.env.MILENS_DEBUG) console.log(`[dual:perf] Phase 1 (scope graph): ${scopeForest.size} scopes in ${Date.now() - t}ms`);
 
   // Phase 2: Resolve imports → add visible symbols to file scopes
+  t = Date.now();
   const importedNamesPerFile = resolveImportsInScopes(input, scopeForest);
+  if (process.env.MILENS_DEBUG) console.log(`[dual:perf] Phase 2 (imports in scopes): ${importedNamesPerFile.size} files in ${Date.now() - t}ms`);
 
   // Phase 3: Build name index for call resolution
+  t = Date.now();
   const symbolByName = buildNameIndex(input.allSymbols);
+  if (process.env.MILENS_DEBUG) console.log(`[dual:perf] Phase 3 (name index): ${symbolByName.size} names in ${Date.now() - t}ms`);
 
   // Phase 4: Collect visible symbols per scope (local + imports + ancestors)
+  t = Date.now();
   collectVisibleSymbols(scopeForest, input.symbolsByFile, importedNamesPerFile, symbolById, input);
+  if (process.env.MILENS_DEBUG) console.log(`[dual:perf] Phase 4 (visible symbols): ${Date.now() - t}ms`);
 
   // F7: Track external imports per file to classify external vs unresolved calls
+  t = Date.now();
   const externalNamesPerFile = new Map<string, Set<string>>();
   for (const imp of input.imports) {
     const key = `${imp.filePath}::${imp.modulePath}`;
@@ -90,14 +100,19 @@ export function resolveWithScopes(input: ScopeResolverInput): ResolutionResult {
   }
 
   // Phase 5: Resolve calls via scope chain
+  const totalCalls = input.calls.length;
+  let callProgress = 0;
   for (const call of input.calls) {
+    callProgress++;
+    if (process.env.MILENS_DEBUG && callProgress % 5000 === 0) console.log(`[dual:perf] Phase 5 (calls): ${callProgress}/${totalCalls} (${Date.now() - t}ms)`);
+
     const scope = findScopeForCall(call, scopeForest, input.symbolsByFile);
     if (!scope) { unresolvedCalls++; continue; }
 
     // Walk scope chain to find callee
     let resolved = resolveCallInScope(call.calleeName, scope, scopeForest, symbolById);
     if (!resolved && call.receiver) {
-      resolved = resolveReceiverCall(call, scope, scopeForest, symbolById, input);
+      resolved = resolveReceiverCall(call, scope, scopeForest, symbolById, input, symbolByName);
     }
 
     // F1: Proximity fallback when scope chain exhausted
@@ -120,8 +135,10 @@ export function resolveWithScopes(input: ScopeResolverInput): ResolutionResult {
       }
     }
   }
+  if (process.env.MILENS_DEBUG) console.log(`[dual:perf] Phase 5 (calls done): ${totalCalls} calls in ${Date.now() - t}ms`);
 
   // Phase 6: Resolve imports (cross-file links)
+  t = Date.now();
   for (const imp of input.imports) {
     const targetFile = input.resolvedImportPaths.get(`${imp.filePath}::${imp.modulePath}`);
     if (!targetFile) {
@@ -145,8 +162,10 @@ export function resolveWithScopes(input: ScopeResolverInput): ResolutionResult {
       }
     }
   }
+  if (process.env.MILENS_DEBUG) console.log(`[dual:perf] Phase 6 (imports): ${input.imports.length} imports in ${Date.now() - t}ms`);
 
   // Phase 7: Heritage + containment
+  t = Date.now();
   for (const sym of input.allSymbols) {
     if (sym.parentId) {
       links.push(makeLink(sym.parentId, sym.id, 'contains', 1.0));
@@ -163,7 +182,9 @@ export function resolveWithScopes(input: ScopeResolverInput): ResolutionResult {
     }
   }
 
-  return { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls, externalImports, externalCalls };
+  const result = { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls, externalImports, externalCalls };
+  if (process.env.MILENS_DEBUG) console.log(`[dual:perf] Total: ${Date.now() - t0}ms, ${result.links.length} links`);
+  return result;
 }
 
 // ── Scope Graph from AST (tree-sitter) ──
@@ -581,8 +602,11 @@ function resolveCallInScope(
   symbolById: Map<string, CodeSymbol>,
 ): { symbol: CodeSymbol; confidence: number } | null {
   let current: ScopeNode | undefined = scope;
+  const visited = new Set<string>();
 
   while (current) {
+    if (visited.has(current.id)) break; // cycle guard
+    visited.add(current.id);
     const visible = current.visibleNames.get(calleeName);
     if (visible && visible.length > 0) {
       // Prefer symbol in same file
@@ -605,14 +629,19 @@ function resolveReceiverCall(
   allScopes: Map<string, ScopeNode>,
   symbolById: Map<string, CodeSymbol>,
   input: ScopeResolverInput,
+  symbolByName: Map<string, CodeSymbol[]>,
 ): { symbol: CodeSymbol; confidence: number } | null {
   const receiver = call.receiver!;
-  const candidateSymbols = input.allSymbols.filter(s => s.name === call.calleeName && s.kind === 'method');
+  const nameMatches = symbolByName.get(call.calleeName);
+  const candidateSymbols = nameMatches ? nameMatches.filter(s => s.kind === 'method') : [];
 
   // this/self → method of enclosing class
   if (receiver === 'this' || receiver === 'self') {
     let current: ScopeNode | undefined = scope;
+    const visited = new Set<string>();
     while (current) {
+      if (visited.has(current.id)) break; // cycle guard
+      visited.add(current.id);
       const cls = current.symbols.find(s => s.kind === 'class' || s.kind === 'struct' || s.kind === 'trait');
       if (cls) {
         const method = candidateSymbols.find(s => s.parentId === cls.id);
@@ -626,7 +655,10 @@ function resolveReceiverCall(
 
   // Type binding lookup from scope chain
   let lookupScope: ScopeNode | undefined = scope;
+  const visitedLookup = new Set<string>();
   while (lookupScope) {
+    if (visitedLookup.has(lookupScope.id)) break; // cycle guard
+    visitedLookup.add(lookupScope.id);
     const typeSymbols = lookupScope.visibleNames.get(receiver);
     if (typeSymbols && typeSymbols.length > 0) {
       const typeSym = typeSymbols[0];

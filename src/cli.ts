@@ -22,6 +22,7 @@ program
   .option('-p, --path <path>', 'Repository root path', '.')
   .option('-o, --output <dir>', 'Output directory for database')
   .option('-v, --verbose', 'Show detailed progress')
+  .option('-q, --quiet', 'Suppress progress output')
   .option('-f, --force', 'Force full re-index')
   .option('--files <paths...>', 'Only re-index specific files (relative to root)')
   .option('-s, --skills', 'Generate skill files for all supported editors')
@@ -41,22 +42,39 @@ program
     const aliases = loadAliases(rootPath);
 
     const { analyze } = await import('./analyzer/engine.js');
-    const stats = await analyze({
-      rootPath,
-      dbPath,
-      verbose: opts.verbose,
-      force: opts.force,
-      aliases,
-      embeddings: opts.embeddings,
-      files: opts.files,
-    });
+    const { createProgressReporter } = await import('./ui/progress.js');
+    const reporter = opts.quiet ? undefined : createProgressReporter();
 
-    // Register in global registry
-    const contentHash = createHash('sha256').update(JSON.stringify(stats)).digest('hex').slice(0, 12);
-    const { RepoRegistry } = await import('./store/registry.js');
-    new RepoRegistry().register(rootPath, dbPath, contentHash);
+    // Restore cursor on Ctrl+C
+    const onSigint = () => { reporter?.finalize(); process.exit(1); };
+    process.on('SIGINT', onSigint);
 
-    console.log(`\n✓ Indexed ${stats.symbolCount} symbols, ${stats.linkCount} links across ${stats.filesParsed} files (${stats.durationMs}ms)`);
+    try {
+      const stats = await analyze({
+        rootPath,
+        dbPath,
+        verbose: opts.verbose,
+        force: opts.force,
+        aliases,
+        embeddings: opts.embeddings,
+        files: opts.files,
+        onProgress: reporter,
+      });
+
+      // Register in global registry
+      const contentHash = createHash('sha256').update(JSON.stringify(stats)).digest('hex').slice(0, 12);
+      const { RepoRegistry } = await import('./store/registry.js');
+      new RepoRegistry().register(rootPath, dbPath, contentHash);
+
+      if (reporter) {
+        // finalize was called in analyze, just print skills if needed
+      } else {
+        console.log(`\n✓ Indexed ${stats.symbolCount} symbols, ${stats.linkCount} links across ${stats.filesParsed} files (${stats.durationMs}ms)`);
+      }
+    } finally {
+      process.off('SIGINT', onSigint);
+      reporter?.finalize();
+    }
 
     if (opts.skills || opts.skillsCopilot || opts.skillsCursor || opts.skillsClaude || opts.skillsAgents || opts.skillsWindsurf) {
       const editors: string[] | undefined = opts.skills
@@ -1555,7 +1573,7 @@ program
         const cmd = process.argv[1]
           ? `node ${process.argv[1]} analyze -p "${root}" --force --files ${fileArgs}`
           : `npx milens analyze -p "${root}" --force --files ${fileArgs}`;
-        execSync(cmd, { stdio: 'pipe', cwd: root });
+      execSync(cmd, { stdio: 'inherit', cwd: root });
         console.log(`✓ Index updated`);
       } catch {
         console.log(`⚠ Re-index failed — run manually: milens analyze -p . --force`);

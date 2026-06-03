@@ -338,6 +338,22 @@
 <section class="timeline" id="timeline">
   <div class="container">
 
+    <!-- v0.6.8 -->
+    <div class="timeline-entry">
+      <div class="timeline-badge">
+        <span class="version">v0.6.8</span>
+        <span class="date">June 2026</span>
+      </div>
+      <div class="timeline-card">
+        <h3><span class="version-dot"></span> Bugfix: C3 Recursion + Progress UI</h3>
+        <ul>
+          <li class="fix">Fixed RangeError (call stack overflow) in computeC3Order — added visitedParents guard for cyclic inheritance graphs</li>
+          <li class="fix">Restored missing src/ui/progress.ts — ProgressPhase, ProgressReporter, createProgressReporter</li>
+          <li>Re-indexed: 1420 symbols, 2331 links across 166 files</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- v0.6.7 -->
     <div class="timeline-entry">
       <div class="timeline-badge">

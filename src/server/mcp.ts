@@ -37,11 +37,40 @@ class LazyDb {
   private statsCache: { data: ReturnType<Database['getStats']>; ts: number } | null = null;
   private domainCache: { data: ReturnType<Database['getDomainStats']>; ts: number } | null = null;
   private static CACHE_TTL = 30_000; // 30s TTL
+  private dbMtime = 0; // Track DB file mtime to detect external changes (e.g. CLI `analyze`)
 
   constructor(private dbPath: string) {}
 
+  /** Check if DB file has been modified externally — invalidate caches if so */
+  private checkExternalChange(): void {
+    try {
+      const stat = require('node:fs').statSync(this.dbPath);
+      const mtime = stat.mtimeMs;
+      if (this.dbMtime > 0 && mtime > this.dbMtime) {
+        this.statsCache = null;
+        this.domainCache = null;
+      }
+      this.dbMtime = mtime;
+    } catch { /* db file may not exist yet */ }
+  }
+
   get(): Database {
     this.resetTimer();
+    // Detect external changes (e.g. CLI analyze) and force-close + reopen
+    let externalChange = false;
+    try {
+      const stat = require('node:fs').statSync(this.dbPath);
+      if (this.dbMtime > 0 && stat.mtimeMs > this.dbMtime + 1000) {
+        externalChange = true;
+      }
+      this.dbMtime = stat.mtimeMs;
+    } catch { /* db file may not exist yet */ }
+    if (externalChange && this.instance) {
+      this.instance.close();
+      this.instance = null;
+      this.statsCache = null;
+      this.domainCache = null;
+    }
     if (!this.instance || !this.instance.isOpen()) {
       this.instance = new Database(this.dbPath);
       this.statsCache = null;
@@ -52,6 +81,7 @@ class LazyDb {
 
   /** Cached getStats — avoids 3 COUNT(*) queries per tool call */
   getCachedStats(): ReturnType<Database['getStats']> {
+    this.checkExternalChange();
     const now = Date.now();
     if (this.statsCache && now - this.statsCache.ts < LazyDb.CACHE_TTL) {
       return this.statsCache.data;
@@ -63,6 +93,7 @@ class LazyDb {
 
   /** Cached getDomainStats — avoids expensive GROUP BY query per tool call */
   getCachedDomainStats(): ReturnType<Database['getDomainStats']> {
+    this.checkExternalChange();
     const now = Date.now();
     if (this.domainCache && now - this.domainCache.ts < LazyDb.CACHE_TTL) {
       return this.domainCache.data;
@@ -420,6 +451,7 @@ milens — code intelligence engine. Indexes codebases into symbol graphs.
 export function createMcpServer(rootPath?: string): McpServer {
   const registry = new RepoRegistry();
   const pools = new Map<string, LazyDb>();
+  const toolCallCounts = new Map<string, number>(); // In-memory counter per repo
   const trackDb = getTrackingDb();
   const guard = new SessionGuard();
 
@@ -458,7 +490,17 @@ export function createMcpServer(rootPath?: string): McpServer {
 
     if (!pools.has(root)) pools.set(root, new LazyDb(dbPath));
     const lazy = pools.get(root)!;
+
+    // Track tool call count per root (in-memory, resets on server restart)
+    if (!toolCallCounts.has(root)) toolCallCounts.set(root, 0);
+    toolCallCounts.set(root, toolCallCounts.get(root)! + 1);
+
     return { db: lazy.get(), root, dbPath, lazy };
+  }
+
+  /** Get the in-memory tool call count for a repo (resets on server restart) */
+  function getToolCallCount(root: string): number {
+    return toolCallCounts.get(root) ?? 0;
   }
 
   const server = new McpServer(
@@ -1038,7 +1080,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: find_dead_code ──
   server.tool(
     'find_dead_code',
-    'Exported symbols with zero incoming references (potentially unused).',
+    'Exported symbols with zero incoming code references (potentially unused). Note: only checks code-level imports/calls — symbols may still be referenced in templates, configs, or docs. Always cross-check with `grep` before removing.',
     {
       kind: z.string().optional().describe('Filter by symbol kind (function, class, method, etc.)'),
       limit: z.number().optional().default(30),
@@ -1050,7 +1092,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       if (dead.length === 0) {
         return { content: [{ type: 'text' as const, text: 'No unreferenced exported symbols found.' }] };
       }
-      const lines = [`${dead.length} unreferenced exported symbols:\n`];
+      const lines = [`${dead.length} unreferenced exported symbols (code-level only — verify with grep before removing):\n`];
       for (const sym of dead) {
         lines.push(fmtSymbol(sym));
       }
@@ -1957,8 +1999,8 @@ export function createMcpServer(rootPath?: string): McpServer {
     'Generate a test strategy for a symbol: mock plan + >=3 test scenarios.',
     { name: z.string(), repo: z.string().optional() },
     async ({ name, repo }) => {
-      const { db } = getDb(repo);
-      const plan = generateTestPlan(db, name);
+      const { db, root } = getDb(repo);
+      const plan = generateTestPlan(db, name, root);
       if (!plan) return { content: [{ type: 'text' as const, text: `"${name}" not found.` }] };
       return { content: [{ type: 'text' as const, text: plan.planText }] };
     },
@@ -2036,16 +2078,18 @@ export function createMcpServer(rootPath?: string): McpServer {
     'Get metadata about a session: annotations, tool calls, duration.',
     { session_id: z.string() },
     async ({ session_id }) => {
-      const { db } = getDb();
+      const { db, root } = getDb();
       const store = new AnnotationStore(db.connection);
       const ctx = store.sessionContext(session_id);
       if (!ctx.session) return { content: [{ type: 'text' as const, text: `Session "${session_id}" not found.` }] };
       const s = ctx.session;
+      const liveCalls = getToolCallCount(root);
+      const displayCalls = s.toolCallsCount > 0 ? s.toolCallsCount : liveCalls;
       const lines = [
         `Session: ${s.id}`,
         `Agent: ${s.agent} | Status: ${s.status}`,
         `Started: ${s.startedAt} | Ended: ${s.endedAt ?? 'in progress'}`,
-        `Tool calls: ${s.toolCallsCount} | Annotations: ${s.annotationsCount}`,
+        `Tool calls: ${displayCalls}${s.toolCallsCount === 0 ? ' (live count, resets on restart)' : ''} | Annotations: ${s.annotationsCount}`,
       ];
       if (s.context) lines.push(`Context: ${s.context}`);
       if (ctx.annotations.length > 0) {
@@ -2171,15 +2215,15 @@ export function createMcpServer(rootPath?: string): McpServer {
     { query: z.string(), limit: z.number().optional().default(10), repo: z.string().optional() },
     async ({ query, limit, repo }) => {
       const { db } = getDb(repo);
-      if (db.searchSymbols(query, limit).length > 0) {
-        const results = db.searchSymbols(query, limit);
-        const lines = [`Semantic search (FTS5 fallback — embeddings not available):\n`];
+      const results = db.searchSymbols(query, limit);
+      if (results.length > 0) {
+        const lines = [`Semantic search results for "${query}" (FTS5 keyword mode — run \`milens analyze --embeddings\` for semantic mode):\n`];
         for (const s of results) {
           lines.push(`${s.name} [${s.kind}] ${s.filePath}:${s.startLine}${s.exported ? ' (exported)' : ''}`);
         }
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       }
-      return { content: [{ type: 'text' as const, text: `No results for "${query}". Embeddings not available. Run \`milens analyze --embeddings\` for semantic search.` }] };
+      return { content: [{ type: 'text' as const, text: `No results for "${query}".\n\nTip: Run \`milens analyze --embeddings\` to enable semantic (vector) search. Currently using FTS5 keyword fallback which only matches exact symbol names.` }] };
     },
   );
 
@@ -2497,9 +2541,9 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: security_scan (S2) ──
   server.tool(
     'security_scan',
-    'Scan codebase for security vulnerabilities using 50+ built-in rules. Replaces multiple manual grep() calls. Categories: secrets, injection, unicode, dangerous, config, data-leak, crypto, auth, file-access.',
+    'Scan codebase for security vulnerabilities using 190+ built-in rules across 25 categories. Replaces multiple manual grep() calls. Categories: secrets, injection, rce, xss, deserialization, ssrf, xxe, path-traversal, file-upload, unicode, dangerous, config, data-leak, crypto, auth, jwt, cors-headers, dependency, cloud, docker, kubernetes, iac, business-logic, api-security, misc, file-access.',
     {
-      scope: z.enum(['all', 'secrets', 'injection', 'unicode', 'dangerous', 'config', 'data-leak', 'crypto', 'auth', 'file-access']).optional().default('all').describe('Scan scope'),
+      scope: z.enum(['all', 'secrets', 'injection', 'rce', 'xss', 'deserialization', 'ssrf', 'xxe', 'path-traversal', 'file-upload', 'unicode', 'dangerous', 'config', 'data-leak', 'crypto', 'auth', 'jwt', 'cors-headers', 'dependency', 'cloud', 'docker', 'kubernetes', 'iac', 'business-logic', 'api-security', 'misc', 'file-access']).optional().default('all').describe('Scan scope'),
       repo: z.string().optional().describe('Repository root path'),
       severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional().describe('Minimum severity filter'),
       limit: z.number().optional().default(50).describe('Max findings'),
@@ -2539,6 +2583,25 @@ export function createMcpServer(rootPath?: string): McpServer {
         const fullPath = resolvePath(root, file);
         if (!es(fullPath)) continue;
         
+        // Apply excludeGlob from each rule's exclusion pattern
+        let shouldExclude = false;
+        for (const rule of filtered) {
+          if (rule.excludeGlob) {
+            const excludePatterns = rule.excludeGlob.split(',');
+            for (const pattern of excludePatterns) {
+              const regex = new RegExp(
+                '^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\*\*/g, '.*') + '$'
+              );
+              if (regex.test(file) || regex.test('/' + file)) {
+                shouldExclude = true;
+                break;
+              }
+            }
+          }
+          if (shouldExclude) break;
+        }
+        if (shouldExclude) continue;
+
         // Skip files that don't match rule fileGlobs (simple check)
         const applicableRules = filtered.filter(r => {
           if (!r.fileGlob) return true;
@@ -2626,8 +2689,13 @@ export function createMcpServer(rootPath?: string): McpServer {
       const orchestrator = new Orchestrator({ rootPath: root, dbPath });
 
       try {
+        // Load any persisted snapshots from disk before operating
+        orchestrator.loadSnapshots();
+
         if (action === 'snapshot') {
           const snap = orchestrator.snapshot(name, db);
+          // Persist to disk so it survives across MCP requests
+          orchestrator.persistSnapshots();
           return { content: [{ type: 'text' as const, text: `Snapshot saved for "${name}":\n  Heat: ${snap.heatScore}\n  Dependents: ${snap.dependents.length}\n  Timestamp: ${snap.timestamp}` }] };
         }
 
@@ -2731,7 +2799,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
     async ({ symbol, repo }) => {
       const { db, root } = getDb(repo);
-      const plan = generateTestPlan(db, symbol);
+      const plan = generateTestPlan(db, symbol, root);
       if (!plan) return { content: [{ type: 'text' as const, text: `Symbol not found: "${symbol}"` }] };
 
       // Detect test framework
@@ -2877,12 +2945,12 @@ function generateTestCode(plan: import('./test-plan.js').TestPlan, framework: st
     lines.push('');
 
     for (const s of plan.testScenarios) {
-      const testFn = framework === 'mocha' ? `  it('${s.name}'` : `  it('${s.name}', () =>`;
-      lines.push(`  ${testFn} => {`);
-      lines.push(`    // ${s.description}`);
-      lines.push(`    const result = ${plan.symbol}();`);
-      lines.push(`    expect(result).toBeDefined();`);
-      lines.push(`  });`);
+      const testFn = framework === 'mocha' ? `it('${s.name}'` : `it('${s.name}', () =>`;
+      lines.push(`    ${testFn} {`);
+      lines.push(`      // ${s.description}`);
+      lines.push(`      const result = ${plan.symbol}();`);
+      lines.push(`      expect(result).toBeDefined();`);
+      lines.push(`    });`);
       lines.push('');
     }
 

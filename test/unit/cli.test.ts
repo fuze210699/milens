@@ -102,6 +102,7 @@ describe('CLI', () => {
       vi.restoreAllMocks();
       vi.resetModules();
 
+      // milens(fix): rule=SEC-010 — Never assign secret values to process.env in code. Use external .env files (gitignored) or a secrets manager.
       process.env.MILENS_VERSION = '9.9.9-test';
       const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
       vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);

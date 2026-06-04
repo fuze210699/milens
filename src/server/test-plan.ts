@@ -1,4 +1,6 @@
 import type { Database } from '../store/db.js';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve, dirname, basename, extname } from 'node:path';
 
 export interface TestPlan {
   symbol: string;
@@ -11,7 +13,30 @@ export interface TestPlan {
   planText: string;
 }
 
-export function generateTestPlan(db: Database, name: string): TestPlan | null {
+/** Extract describe/it block names from a test file that reference the target symbol */
+function extractTestNames(testFilePath: string, symbolName: string): string[] {
+  try {
+    const content = readFileSync(testFilePath, 'utf-8');
+    const names: string[] = [];
+    // Match describe/it blocks that contain the symbol name
+    const blockRe = /(?:describe|it)\s*\(\s*['"`]([^'"`]*)['"`]/g;
+    let m: RegExpExecArray | null;
+    while ((m = blockRe.exec(content)) !== null) {
+      // Only include if the block or surrounding code references the symbol
+      const blockStart = m.index;
+      const blockEnd = Math.min(content.length, blockStart + 500);
+      const blockContent = content.slice(blockStart, blockEnd);
+      if (blockContent.includes(symbolName)) {
+        names.push(m[1]);
+      }
+    }
+    return names;
+  } catch {
+    return [];
+  }
+}
+
+export function generateTestPlan(db: Database, name: string, rootPath?: string): TestPlan | null {
   const matches = db.findSymbolByName(name);
   if (matches.length === 0) return null;
 
@@ -68,6 +93,7 @@ export function generateTestPlan(db: Database, name: string): TestPlan | null {
   ];
 
   const existingTests: string[] = [];
+  const seenTestFiles = new Set<string>();
   for (const link of incomingLinks) {
     const caller = db.findSymbolById(link.fromId);
     if (!caller) continue;
@@ -76,9 +102,27 @@ export function generateTestPlan(db: Database, name: string): TestPlan | null {
       caller.filePath.includes('.test.') ||
       caller.filePath.includes('.spec.')
     ) {
-      existingTests.push(caller.name);
+      // Try to extract actual describe/it block names from the test file
+      if (!seenTestFiles.has(caller.filePath)) {
+        seenTestFiles.add(caller.filePath);
+        const testPath = rootPath ? resolve(rootPath, caller.filePath) : caller.filePath;
+        let addedFromFile = false;
+        if (existsSync(testPath)) {
+          const testNames = extractTestNames(testPath, sym.name);
+          if (testNames.length > 0) {
+            existingTests.push(...testNames);
+            addedFromFile = true;
+          }
+        }
+        // Per-file fallback: if no block names extracted, use caller name
+        if (!addedFromFile) {
+          existingTests.push(caller.name !== '_top' ? caller.name : caller.filePath.replace(/^.*[\\/]/, ''));
+        }
+      }
     }
   }
+  // Deduplicate
+  const uniqueTests = [...new Set(existingTests)];
 
   const sortedDeps = (include: 'mock' | 'stub' | 'spy') =>
     mockStrategy
@@ -104,7 +148,7 @@ export function generateTestPlan(db: Database, name: string): TestPlan | null {
     '',
     ...testScenarios.map(s => `### ${s.name}\n\n${s.description}\n`),
     existingTests.length > 0
-      ? `## Existing Tests\n\n${existingTests.map(t => `- \`${t}\``).join('\n')}\n`
+      ? `## Existing Tests\n\n${uniqueTests.map(t => `- \`${t}\``).join('\n')}\n`
       : '## Existing Tests\n\n*No existing tests found.*\n',
   ].join('\n');
 
@@ -115,7 +159,7 @@ export function generateTestPlan(db: Database, name: string): TestPlan | null {
     signature: sym.signature,
     mockStrategy,
     testScenarios,
-    existingTests,
+    existingTests: uniqueTests,
     planText,
   };
 }

@@ -3,7 +3,7 @@
   "mcp": {
     "milens": {
       "type": "local",
-      "command": ["node", "dist/cli.js", "serve", "-p", "."],
+      "command": ["milens", "serve", "-p", "."],
       "enabled": true
     }
   }

@@ -98,7 +98,11 @@ function getChangedFiles(root: string, ref: string, base?: string): string[] {
     const staged = execFileSync('git', ['diff', '--cached', '--name-only', ref], { cwd: root, encoding: 'utf-8' });
     const stagedFiles = staged.trim().split('\n').filter(Boolean)
       .filter(f => !isFixtureOrTest(f) && !isNonSourceFile(f));
-    return [...new Set([...sourceFiles, ...stagedFiles])];
+    // Also include unstaged working tree changes (for pre-commit review)
+    const unstaged = execFileSync('git', ['diff', '--name-only'], { cwd: root, encoding: 'utf-8' });
+    const unstagedFiles = unstaged.trim().split('\n').filter(Boolean)
+      .filter(f => !isFixtureOrTest(f) && !isNonSourceFile(f));
+    return [...new Set([...sourceFiles, ...stagedFiles, ...unstagedFiles])];
   }
   return [...new Set(sourceFiles)];
 }

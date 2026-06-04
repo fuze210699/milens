@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "milens": {
-      "command": "npx",
-      "args": ["milens", "serve"],
+      "command": "milens",
+      "args": ["serve", "-p", "."],
       "env": { "MILENS_PROFILE": "standard" }
     }
   }

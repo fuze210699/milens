@@ -9,8 +9,8 @@
   <a href="https://github.com/fuze210699/milens/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="license"></a>
   <img src="https://img.shields.io/badge/tools-43-purple" alt="43 tools">
   <img src="https://img.shields.io/badge/languages-12-blue" alt="12 languages">
-  <img src="https://img.shields.io/badge/prompts-7-orange" alt="7 prompts">
-  <img src="https://img.shields.io/badge/security-50%2B-red" alt="50+ rules">
+  <img src="https://img.shields.io/badge/prompts-6-orange" alt="6 prompts">
+  <img src="https://img.shields.io/badge/security-190%2B-red" alt="190+ rules">
   <img src="https://img.shields.io/badge/harnesses-7-lightgrey" alt="7 harnesses">
 </p>
 
@@ -88,14 +88,19 @@ That single command analyzes your codebase, builds a knowledge graph, generates 
 
 Then connect your editor:
 
+**Prerequisite:** Install milens globally on your machine:
+```bash
+npm install -g milens      # one-time setup
+```
+
 ```json
 // .vscode/mcp.json — VS Code / Copilot
 {
   "servers": {
     "milens": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "milens", "serve", "-p", "${workspaceFolder}"]
+      "command": "milens",
+      "args": ["serve", "-p", "${workspaceFolder}"]
     }
   }
 }
@@ -103,7 +108,7 @@ Then connect your editor:
 
 ```bash
 # Claude Code
-claude mcp add milens -- npx -y milens serve -p .
+claude mcp add milens -- milens serve -p .
 ```
 
 <details>
@@ -111,21 +116,21 @@ claude mcp add milens -- npx -y milens serve -p .
 
 ```bash
 # Cursor — .cursor/mcp.json
-{ "mcpServers": { "milens": { "command": "npx", "args": ["-y", "milens", "serve", "-p", "."] } } }
+{ "mcpServers": { "milens": { "command": "milens", "args": ["serve", "-p", "${workspaceFolder}"] } } }
 
-# OpenCode — .opencode/config.json
-{ "mcp": { "milens": { "command": "npx", "args": ["-y", "milens", "serve"] } } }
+# OpenCode — opencode.json
+{ "mcp": { "milens": { "type": "local", "command": ["milens", "serve", "-p", "."] } } }
 
 # Codex — .codex/config.toml
 [mcp_servers.milens]
-command = "npx"
-args = ["-y", "milens", "serve", "-p", "."]
+command = "milens"
+args = ["serve", "-p", "."]
 
 # Gemini — .gemini/settings.json
-{ "mcpServers": { "milens": { "command": "npx", "args": ["-y", "milens", "serve", "-p", "."] } } }
+{ "mcpServers": { "milens": { "command": "milens", "args": ["serve", "-p", "${workspaceFolder}"] } } }
 
 # Zed — .zed/settings.json
-{ "mcp_servers": { "milens": { "command": "npx", "args": ["-y", "milens", "serve", "-p", "."] } } }
+{ "context_servers": { "milens": { "command": "milens serve -p ." } } }
 ```
 
 </details>
@@ -159,7 +164,7 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 |---|---|
 | **Code Intelligence** | 43 MCP tools — search, impact, context, trace, routes |
 | **Security Scanner** | 50+ rules across 9 categories + dependency audit |
-| **Sub-Agent Prompts** | 7 prompts — plan, review, tdd, security, architect, debug, dead_code_remove |
+| **Sub-Agent Prompts** | 6 prompts — plan, review, tdd, security, architect, debugger |
 | **CLI Workflows** | 7 commands — tdd, review, plan, onboard, security-scan, refactor, handoff |
 | **Uninstall** | Full cleanup — 11 trace categories, interactive or auto |
 | **Metrics** | 7 metrics — TER, LR, CQI, BRR, TCGR, DCER, CTR |

@@ -338,6 +338,22 @@
 <section class="timeline" id="timeline">
   <div class="container">
 
+    <!-- v0.6.9 -->
+    <div class="timeline-entry">
+      <div class="timeline-badge">
+        <span class="version">v0.6.9</span>
+        <span class="date">June 2026</span>
+      </div>
+      <div class="timeline-card">
+        <h3><span class="version-dot"></span> Bugfix: Test Plan Existing Tests Fallback + Docs Sync</h3>
+        <ul>
+          <li class="fix">Fixed generateTestPlan existing tests fallback — was global-scoped, changed to per-file detection. .spec.ts and __tests__/ directory test files now correctly detected</li>
+          <li class="new">Docs synced across 10 files: symbols (1,432), links (2,386), files (167), prompts (7→6), security rules (50+→190+), skill count (13+→21)</li>
+          <li>Re-indexed: 1432 symbols, 2386 links across 167 files</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- v0.6.8 -->
     <div class="timeline-entry">
       <div class="timeline-badge">
@@ -349,7 +365,7 @@
         <ul>
           <li class="fix">Fixed RangeError (call stack overflow) in computeC3Order — added visitedParents guard for cyclic inheritance graphs</li>
           <li class="fix">Restored missing src/ui/progress.ts — ProgressPhase, ProgressReporter, createProgressReporter</li>
-          <li>Re-indexed: 1420 symbols, 2331 links across 166 files</li>
+          <li>Re-indexed: 1432 symbols, 2386 links across 167 files</li>
         </ul>
       </div>
     </div>

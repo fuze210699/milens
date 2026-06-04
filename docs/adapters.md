@@ -23,7 +23,7 @@ All adapters are in the `adapters/` directory of the repository.
 ```bash
 cp adapters/claude-code/.claude/mcp.json .claude/
 cp adapters/claude-code/CLAUDE.md CLAUDE.md
-claude mcp add milens -- npx -y milens serve -p .
+claude mcp add milens -- milens serve -p .
 ```
 
 ### OpenCode
@@ -85,20 +85,20 @@ Set via environment variable: `MILENS_PROFILE=standard`
 
 ## MCP Config Reference
 
-All adapters use this pattern:
+All adapters use this pattern (milens installed globally via `npm i -g milens`):
 
 ```json
 {
   "mcpServers": {
     "milens": {
-      "command": "npx",
-      "args": ["-y", "milens", "serve", "-p", "."],
+      "command": "milens",
+      "args": ["serve", "-p", "${workspaceFolder}"],
       "env": { "MILENS_PROFILE": "standard" }
     }
   }
 }
 ```
 
-- **command**: `npx` for zero-install, or `milens` if globally installed
-- **args**: `serve` starts the MCP server, `-p .` sets the project root
+- **command**: `milens` — uses the globally installed CLI (install once: `npm i -g milens`)
+- **args**: `serve` starts the MCP server, `-p ${workspaceFolder}` sets the project root
 - **env.MILENS_PROFILE**: Controls which tools are active (`minimal`/`standard`/`full`)

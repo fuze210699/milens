@@ -22,8 +22,8 @@ This project is indexed by **milens**. You have MCP tools that are faster and mo
 {
   "mcpServers": {
     "milens": {
-      "command": "npx",
-      "args": ["milens", "serve"],
+      "command": "milens",
+      "args": ["serve", "-p", "${workspaceFolder}"],
       "env": { "MILENS_PROFILE": "standard" }
     }
   }

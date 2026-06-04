@@ -89,14 +89,19 @@ Một lệnh duy nhất đó phân tích codebase của bạn, xây dựng đồ
 
 Sau đó kết nối editor của bạn:
 
+**Điều kiện tiên quyết:** Cài milens global trên máy:
+```bash
+npm install -g milens      # cài một lần duy nhất
+```
+
 ```json
 // .vscode/mcp.json — VS Code / Copilot
 {
   "servers": {
     "milens": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "milens", "serve", "-p", "${workspaceFolder}"]
+      "command": "milens",
+      "args": ["serve", "-p", "${workspaceFolder}"]
     }
   }
 }
@@ -104,13 +109,13 @@ Sau đó kết nối editor của bạn:
 
 ```bash
 # Claude Code
-claude mcp add milens -- npx -y milens serve -p .
+claude mcp add milens -- milens serve -p .
 
 # Cursor — .cursor/mcp.json
-{ "mcpServers": { "milens": { "command": "npx", "args": ["-y", "milens", "serve", "-p", "."] } } }
+{ "mcpServers": { "milens": { "command": "milens", "args": ["serve", "-p", "${workspaceFolder}"] } } }
 
-# OpenCode — .opencode/config.json
-{ "mcp": { "milens": { "command": "npx", "args": ["-y", "milens", "serve"] } } }
+# OpenCode — opencode.json
+{ "mcp": { "milens": { "type": "local", "command": ["milens", "serve", "-p", "."] } } }
 ```
 
 Mở AI agent của bạn. Nó tự động tải `AGENTS.md` với ngữ cảnh codebase. Bạn đã sẵn sàng.
@@ -648,8 +653,8 @@ Sử dụng trong MCP config:
 {
   "mcpServers": {
     "milens": {
-      "command": "npx",
-      "args": ["-y", "milens", "serve"],
+      "command": "milens",
+      "args": ["serve", "-p", "${workspaceFolder}"],
       "env": { "MILENS_PROFILE": "standard" }
     }
   }

@@ -348,8 +348,8 @@
         <div class="adapter-card-code">{
   "mcpServers": {
     "milens": {
-      "command": "npx",
-      "args": ["milens", "serve"]
+      "command": "milens",
+      "args": ["serve", "-p", "."]
     }
   }
 }</div>
@@ -364,10 +364,10 @@
         </div>
         <div class="adapter-card-path">Config: <strong>opencode.json</strong></div>
         <div class="adapter-card-code">{
-  "mcpServers": {
+  "mcp": {
     "milens": {
-      "command": "npx",
-      "args": ["milens", "serve"]
+      "type": "local",
+      "command": ["milens", "serve", "-p", "."]
     }
   }
 }</div>
@@ -384,8 +384,8 @@
         <div class="adapter-card-code">{
   "mcpServers": {
     "milens": {
-      "command": "npx",
-      "args": ["milens", "serve"]
+      "command": "milens",
+      "args": ["serve", "-p", "."]
     }
   }
 }</div>
@@ -402,8 +402,8 @@
         <div class="adapter-card-code">{
   "mcpServers": {
     "milens": {
-      "command": "npx",
-      "args": ["milens", "serve"]
+      "command": "milens",
+      "args": ["serve", "-p", "."]
     }
   }
 }</div>
@@ -418,7 +418,7 @@
         </div>
         <div class="adapter-card-path">Config: <strong>.github/copilot-instructions.md</strong></div>
         <div class="adapter-card-code"># MCP Configuration
-npx milens serve
+milens serve -p .
 # Add to VS Code settings.json:
 # "github.copilot.mcp.servers"</div>
         <p class="adapter-card-desc">30+ tools available via adapter layer. Growing support for full MCP protocol. Instructions file with setup guide included.</p>
@@ -434,8 +434,8 @@ npx milens serve
         <div class="adapter-card-code">{
   "mcp": {
     "milens": {
-      "command": "npx",
-      "args": ["milens", "serve"]
+      "command": "milens",
+      "args": ["serve", "-p", "."]
     }
   }
 }</div>
@@ -450,13 +450,12 @@ npx milens serve
         </div>
         <div class="adapter-card-path">Config: <strong>.zed/settings.json</strong></div>
         <div class="adapter-card-code">{
-  "lsp": {
+  "context_servers": {
     "milens": {
-      "binary": {
-        "path": "npx",
-        "args": ["milens", "serve"]
-      }
+      "command": "milens serve -p ."
     }
+  }
+}</div>
   }
 }</div>
         <p class="adapter-card-desc">MCP protocol support via settings. ~20 tools available. Adapter under active development — full support targeted for Q3 2026.</p>

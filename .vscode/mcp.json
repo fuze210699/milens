@@ -2,8 +2,8 @@
   "servers": {
     "milens": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "milens", "serve", "-p", "${workspaceFolder}"]
+      "command": "milens",
+      "args": ["serve", "-p", "${workspaceFolder}"]
     }
   }
 }

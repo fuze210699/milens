@@ -1,7 +1,7 @@
 {
   "context_servers": {
     "milens": {
-      "command": "npx milens serve",
+      "command": "milens serve -p .",
       "env": { "MILENS_PROFILE": "minimal" }
     }
   }

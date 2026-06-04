@@ -8,7 +8,7 @@
 
 | You're a... | Problem | Milens solves it | Cost |
 |---|---|---|---|
-| **Solo dev** | Agent burns tokens reading 15 files blind, edits break things, no memory across sessions | Knowledge graph + blast radius + annotations. All 41 tools, forever free. | $0 |
+| **Solo dev** | Agent burns tokens reading 15 files blind, edits break things, no memory across sessions | Knowledge graph + blast radius + annotations. All 43 tools, forever free. | $0 |
 | **Team of 5+** | Private repos, each dev manually runs milens, PRs get merged without review, security gaps accumulate | GitHub App auto-runs on every PR. review_pr + security_scan posted as comments. Shared knowledge base. | $5/mo |
 
 ---
@@ -21,8 +21,8 @@
 
 | Feature | Included |
 |---|---|
-| All 41 MCP tools | ✓ Forever |
-| 7 sub-agent prompts | ✓ |
+| All 43 MCP tools | ✓ Forever |
+| 6 sub-agent prompts | ✓ |
 | 50+ security rules | ✓ |
 | CLI tools (init, workflow, hooks, security, watch) | ✓ |
 | AGENTS.md auto-generator | ✓ |
@@ -59,7 +59,7 @@
 
 ### Why would I pay when the core is free?
 
-The core MCP server (41 tools) is free forever. You pay for **automation** — the GitHub App that runs milens on every PR without manual intervention. Pro saves teams hours of manual review and thousands of AI tokens per month.
+The core MCP server (43 tools) is free forever. You pay for **automation** — the GitHub App that runs milens on every PR without manual intervention. Pro saves teams hours of manual review and thousands of AI tokens per month.
 
 ### Does Pro really pay for itself?
 

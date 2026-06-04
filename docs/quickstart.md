@@ -72,6 +72,11 @@ milens dashboard
 
 ## Editor Setup
 
+**Prerequisite:** Install milens globally first:
+```bash
+npm install -g milens      # one-time setup
+```
+
 ### VS Code / GitHub Copilot
 Add to `.vscode/mcp.json`:
 ```json
@@ -79,8 +84,8 @@ Add to `.vscode/mcp.json`:
   "servers": {
     "milens": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "milens", "serve", "-p", "${workspaceFolder}"]
+      "command": "milens",
+      "args": ["serve", "-p", "${workspaceFolder}"]
     }
   }
 }
@@ -88,7 +93,7 @@ Add to `.vscode/mcp.json`:
 
 ### Claude Code
 ```bash
-claude mcp add milens -- npx -y milens serve -p .
+claude mcp add milens -- milens serve -p .
 ```
 
 ### Cursor
@@ -97,22 +102,21 @@ Add to `.cursor/mcp.json`:
 {
   "mcpServers": {
     "milens": {
-      "command": "npx",
-      "args": ["-y", "milens", "serve", "-p", "."]
+      "command": "milens",
+      "args": ["serve", "-p", "${workspaceFolder}"]
     }
   }
 }
 ```
 
 ### OpenCode
-Add to `.opencode/config.json`:
+Add to `opencode.json`:
 ```json
 {
   "mcp": {
     "milens": {
-      "command": "npx",
-      "args": ["-y", "milens", "serve"],
-      "env": { "MILENS_PROFILE": "standard" }
+      "type": "local",
+      "command": ["milens", "serve", "-p", "."]
     }
   }
 }
@@ -122,7 +126,7 @@ For other editors (Codex, Gemini, Zed), see `adapters/` in the repository.
 
 ## What's Next?
 
-- [All 41 MCP Tools](tools.md) — Complete tool reference
+- [All 43 MCP Tools](tools.md) — Complete tool reference
 - [Skills & Prompts](../.agents/skills/) — Pre-built agent workflows
 - [Security Rules](security-presets.md) — 50+ rules with OWASP mapping
 - [Adapters](adapters.md) — Connect your harness

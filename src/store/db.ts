@@ -80,12 +80,13 @@ export class Database {
         SELECT DISTINCT s.*, u.depth, u.via FROM upstream u JOIN symbols s ON s.id = u.id ORDER BY u.depth
       `),
       downstream: this.db.prepare(`
-        WITH RECURSIVE downstream(id, depth, via) AS (
-          SELECT to_id, 1, type FROM links WHERE from_id = ? AND type IN ('calls', 'imports', 'extends', 'implements')
+        WITH RECURSIVE downstream(id, depth, via, path) AS (
+          SELECT to_id, 1, type, ',' || to_id || ',' FROM links WHERE from_id = ? AND type IN ('calls', 'imports', 'extends', 'implements')
           UNION
-          SELECT l.to_id, d.depth + 1, l.type
+          SELECT l.to_id, d.depth + 1, l.type, d.path || l.to_id || ','
           FROM links l JOIN downstream d ON l.from_id = d.id
           WHERE d.depth < ? AND l.type IN ('calls', 'imports', 'extends', 'implements')
+            AND d.path NOT LIKE '%,' || l.to_id || ',%'
         )
         SELECT DISTINCT s.*, d.depth, d.via FROM downstream d JOIN symbols s ON s.id = d.id ORDER BY d.depth
       `),
@@ -801,26 +802,27 @@ export class Database {
     for (const link of incoming) targetLinks.add(link.fromId);
     for (const link of outgoing) targetLinks.add(link.toId);
 
-    const siblings = this.getSymbolsByFile(target.filePath).filter(s => s.id !== symbolId);
+    // Search across all exported symbols, not just same-file siblings
+    const allSymbols = this.getAllSymbols().filter(s => s.id !== symbolId && s.exported);
 
     const results: Array<{ symbol: CodeSymbol; similarity: number }> = [];
-    for (const sibling of siblings) {
-      const sibIncoming = this.getIncomingLinks(sibling.id).filter(l => l.type !== 'contains');
-      const sibOutgoing = this.getOutgoingLinks(sibling.id).filter(l => l.type !== 'contains');
+    for (const candidate of allSymbols) {
+      const candIncoming = this.getIncomingLinks(candidate.id).filter(l => l.type !== 'contains');
+      const candOutgoing = this.getOutgoingLinks(candidate.id).filter(l => l.type !== 'contains');
 
-      const siblingLinks = new Set<string>();
-      for (const link of sibIncoming) siblingLinks.add(link.fromId);
-      for (const link of sibOutgoing) siblingLinks.add(link.toId);
+      const candidateLinks = new Set<string>();
+      for (const link of candIncoming) candidateLinks.add(link.fromId);
+      for (const link of candOutgoing) candidateLinks.add(link.toId);
 
       let intersection = 0;
       for (const id of targetLinks) {
-        if (siblingLinks.has(id)) intersection++;
+        if (candidateLinks.has(id)) intersection++;
       }
-      const union = new Set([...targetLinks, ...siblingLinks]).size;
+      const union = new Set([...targetLinks, ...candidateLinks]).size;
       const similarity = union > 0 ? intersection / union : 0;
 
-      if (similarity >= 0.3) {
-        results.push({ symbol: sibling, similarity: Math.round(similarity * 100) / 100 });
+      if (similarity >= 0.15) {
+        results.push({ symbol: candidate, similarity: Math.round(similarity * 100) / 100 });
       }
     }
 

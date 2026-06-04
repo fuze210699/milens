@@ -76,10 +76,11 @@ These appear when the MCP server logs to stdout instead of stderr. Ensure you're
 
 ### npx still loads old version
 ```bash
-# Force specific version
+# Force specific version (via npx for one-time testing)
 npx milens@0.6.5 serve -p .
-
-# Or clear entire npm cache
+# Or use the global install
+npm i -g milens@0.6.5
+milens serve -p .
 npm cache clean --force
 ```
 

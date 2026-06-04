@@ -45,7 +45,7 @@ All tool calls must include `repo` set to the absolute workspace root.
 
 ## Session Workflow
 
-1. **Start** — The milens MCP server connects via `npx milens serve`. Verify with `mcp_milens_status`.
+1. **Start** — The milens MCP server connects via `milens serve -p .`. Verify with `mcp_milens_status`.
 2. **Recall** — When asked to work on a symbol, use `mcp_milens_overview` for a combined view of context, impact, and text references.
 3. **Code** — Make changes following the edit-safety rules below.
 4. **Verify** — Before committing, run `mcp_milens_detect_changes` to confirm only expected files changed.

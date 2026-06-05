@@ -30,7 +30,7 @@ When working with code in **store/**, follow these mandatory safety rules:
 Contains 135 symbols (15 exported) across 5 files.
 
 ## Key Symbols
-- **`Database`** [class] (src/store/db.ts:10) — 79 refs
+- **`Database`** [class] (src/store/db.ts:10) — 80 refs
 - **`AnnotationStore`** [class] (src/store/annotations.ts:10) — 19 refs
 - **`RepoRegistry`** [class] (src/store/registry.ts:18) — 16 refs
 - **`runDecayPass`** [function] (src/store/confidence.ts:85) — 6 refs
@@ -47,8 +47,8 @@ Contains 135 symbols (15 exported) across 5 files.
 - **`SimilarResult`** [interface] (src/store/vectors.ts:23) — 0 refs
 
 ## Entry Points
-- **`Database`** [class] — 79 incoming references
-- **`close`** [method] — 31 incoming references
+- **`Database`** [class] — 80 incoming references
+- **`close`** [method] — 33 incoming references
 - **`get`** [method] — 23 incoming references
 - **`AnnotationStore`** [class] — 19 incoming references
 - **`RepoRegistry`** [class] — 16 incoming references
@@ -60,12 +60,13 @@ Contains 135 symbols (15 exported) across 5 files.
 
 ## Used By
 - **root**: `Database`, `RepoRegistry`, `AnnotationStore`, `runDecayPass`, `getIncomingLinks`, `getAllSymbols`, `getCodebaseSummary`, `register` (+24 more)
-- **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `clearFiles`, `clear`, `isFileUpToDate` (+23 more)
+- **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile` (+22 more)
 - **orchestrator**: `Database`, `findSymbolByName`, `findUpstream`, `clear`, `getTestCoverageGaps`, `findDeadCode`, `close`
 - **server**: `Database`, `AnnotationStore`, `RepoRegistry`, `runDecayPass`, `getCodebaseSummary`, `recall`, `close`, `getStats` (+36 more)
 - **test**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+77 more)
 - **apps**: `remove`, `getAnnotations`, `Database`, `getCodebaseSummary`, `close`
 - **docs**: `remove`
+- **scripts**: `Database`, `getCodebaseSummary`, `close`
 - **parser**: `load`
 
 ## Files

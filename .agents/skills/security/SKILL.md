@@ -26,24 +26,24 @@ When working with code in **security/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 35 symbols (15 exported) across 2 files.
+Contains 44 symbols (15 exported) across 2 files.
 
 ## Key Symbols
-- **`loadRules`** [function] (src/security/rules.ts:1044) — 6 refs
+- **`loadRules`** [function] (src/security/rules.ts:1301) — 6 refs
 - **`auditDependencies`** [function] (src/security/deps.ts:732) — 4 refs
 - **`detectEcosystem`** [function] (src/security/deps.ts:512) — 3 refs
 - **`parseDependencies`** [function] (src/security/deps.ts:524) — 3 refs
 - **`checkVulnerabilities`** [function] (src/security/deps.ts:687) — 3 refs
 - **`Ecosystem`** [type] (src/security/deps.ts:8) — 3 refs
 - **`VulnerabilityReport`** [interface] (src/security/deps.ts:26) — 2 refs
-- **`getRulesByCategory`** [function] (src/security/rules.ts:1051) — 2 refs
-- **`getRulesBySeverity`** [function] (src/security/rules.ts:1055) — 2 refs
+- **`getRulesByCategory`** [function] (src/security/rules.ts:1308) — 2 refs
+- **`getRulesBySeverity`** [function] (src/security/rules.ts:1312) — 2 refs
 - **`SecurityCategory`** [type] (src/security/rules.ts:3) — 1 refs
 - **`Dependency`** [interface] (src/security/deps.ts:10) — 0 refs
 - **`Vulnerability`** [interface] (src/security/deps.ts:16) — 0 refs
-- **`SecurityRule`** [interface] (src/security/rules.ts:14) — 0 refs
-- **`SecurityMatch`** [interface] (src/security/rules.ts:29) — 0 refs
-- **`SecurityReport`** [interface] (src/security/rules.ts:41) — 0 refs
+- **`SecurityRule`** [interface] (src/security/rules.ts:31) — 0 refs
+- **`SecurityMatch`** [interface] (src/security/rules.ts:47) — 0 refs
+- **`SecurityReport`** [interface] (src/security/rules.ts:59) — 0 refs
 
 ## Entry Points
 - **`readManifest`** [function] — 6 incoming references
@@ -53,6 +53,7 @@ Contains 35 symbols (15 exported) across 2 files.
 - **`parseDependencies`** [function] — 3 incoming references
 
 ## Dependencies
+- **scripts**: `version`
 - **test**: `add`
 - **root**: `has`
 

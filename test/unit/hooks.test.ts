@@ -151,6 +151,30 @@ describe('default hook functions', () => {
     await expect(defaultOnSessionStart(ctx, badPath)).rejects.toThrow();
   });
 
+  it('defaultOnSessionStart includes cross-ref context when config exists', async () => {
+    const { writeFileSync } = await import('node:fs');
+    const crossRefConfig = {
+      repos: [
+        { name: 'upstream', visibility: 'Public', license: 'MIT', role: 'Core engine', isUpstream: true },
+        { name: 'milens-cloud', visibility: 'Private', role: 'Backend' },
+      ],
+      contract: { package: '@test/contract', version: '1.0.0' },
+      dependencies: [{ symbol: 'analyze()', source: 'upstream', usedBy: 'cloud-app' }],
+    };
+    writeFileSync(join(testDir, '.milens-cross-ref.json'), JSON.stringify(crossRefConfig));
+
+    const db = new Database(dbPath);
+    seedDatabase(db);
+    db.close();
+
+    const result = await defaultOnSessionStart(ctx, dbPath);
+    expect(result).toContain('## Cross-Repository Context');
+    expect(result).toContain('**upstream**');
+    expect(result).toContain('**milens-cloud**');
+    expect(result).toContain('@test/contract');
+    expect(result).toContain('`analyze()`');
+  });
+
   // ── defaultOnSessionEnd ──
 
   it('defaultOnSessionEnd returns session summary with stats', async () => {

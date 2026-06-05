@@ -22,8 +22,8 @@ milens init --profile full --interactive
 ```
 
 This interactive command walks you through:
-- **Profile selection** — minimal (10 tools), standard (25), or full (33)
-- **Security rules** — include 50+ built-in vulnerability scanners
+- **Profile selection** — minimal (10 tools), standard (25), or full (43)
+- **Security rules** — include 190 built-in vulnerability scanners
 - **CI/CD templates** — GitHub Actions workflows
 - **Git hooks** — pre-commit checks
 - **Harness adapters** — choose which AI agent you use

@@ -41,7 +41,7 @@ Contains 328 symbols (119 exported) across 77 files.
 - **`UserService`** [class] (test/fixtures/accuracy/py-project/src/service.py:4) — 2 refs
 
 ## Entry Points
-- **`add`** [method] — 43 incoming references
+- **`add`** [method] — 46 incoming references
 - **`lang`** [variable] — 12 incoming references
 - **`dbPath`** [function] — 10 incoming references
 - **`User`** [class] — 6 incoming references
@@ -55,6 +55,7 @@ Contains 328 symbols (119 exported) across 77 files.
 - **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `extractVueCompositionApi`, `extractVueTemplateAst`, `spec` (+11 more)
 - **server**: `HookManager`, `HookConfig`, `defaultOnSessionStart`, `defaultOnSessionEnd`, `defaultOnPreCommit`, `defaultOnFileChange`, `defaultOnPreCompact`, `defaultOnPostCompact` (+10 more)
 - **orchestrator**: `Orchestrator`, `formatReport`, `OrchestratorReport`, `subscribe`, `run`, `snapshot`, `compare`, `cancel` (+3 more)
+- **scripts**: `root`
 
 ## Used By
 - **apps**: `add`, `dbPath`

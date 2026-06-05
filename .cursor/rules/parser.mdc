@@ -56,6 +56,7 @@ Contains 83 symbols (31 exported) across 16 files.
 ## Dependencies
 - **root**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+4 more)
 - **test**: `lang`, `add`, `parser`
+- **scripts**: `root`
 - **analyzer**: `resolve`
 - **store**: `load`
 

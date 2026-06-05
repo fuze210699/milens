@@ -11,8 +11,8 @@ Comprehensive guides and reference for the Milens AI-DOS platform.
 
 ## Reference
 
-- [MCP Tools](tools.md) — Complete reference of all 41 MCP tools
-- [Security Presets](security-presets.md) — 50+ security rules with OWASP mapping
+- [MCP Tools](tools.md) — Complete reference of all 43 MCP tools
+- [Security Presets](security-presets.md) — 190 security rules with OWASP mapping
 - [Language Support](languages.md) — 12 languages, Ruby/Vue/CSS/HTML details
 - [Accuracy Engine](accuracy.md) — Type bindings, MRO, import semantics
 - [PR Review](review.md) — review_pr, symbol-level diff, cross-file impact

@@ -1,6 +1,6 @@
 <p align="center">
   <strong>Milens</strong><br>
-  <em>AI-DOS — The Operating System for AI-Driven Development</em>
+  <em>Your AI butler</em>
 </p>
 
 <p align="center">
@@ -12,89 +12,75 @@
   <img src="https://img.shields.io/badge/prompts-6-orange" alt="6 prompts">
   <img src="https://img.shields.io/badge/security-190%2B-red" alt="190+ rules">
   <img src="https://img.shields.io/badge/harnesses-7-lightgrey" alt="7 harnesses">
-</p>
+  <a href="https://github.com/fuze210699/milens/actions/workflows/milens-ci-test.yml"><img src="https://github.com/fuze210699/milens/actions/workflows/milens-ci-test.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/npm/dm/milens" alt="npm downloads">
+  <img src="https://img.shields.io/npm/dt/milens" alt="npm total">
 
----
+</p>
 
 <p align="center">
   <a href="https://github.com/fuze210699/milens">⭐ Star</a> ·
   <a href="https://github.com/sponsors/fuze210699">💖 Sponsor</a> ·
   <a href="https://github.com/fuze210699/milens/discussions">💬 Discussions</a> ·
-  <a href="https://github.com/fuze210699/milens/blob/main/docs/pricing.md">Pro $1/seat</a>
 </p>
 
----
+## The Problem
 
-## Quick Install
+**Burning cash** on AI with **digital amnesia**? Every **blind edit** is a **production bomb** you pay to defuse.
+**Milens** — *Your AI Butler*. Full codebase **memory**, instant **context**, **zero** repeated questions. It knows what's **fragile** before your agent **breaks** it.
 
-```bash
-milens init --profile full
-milens analyze -p . --force
-```
+> **Stop burning cash. Stop burning prod.**
 
 ---
 
 ## What is Milens?
 
-Milens builds a **knowledge graph** of your codebase — functions, classes, imports, calls, and inheritance chains — then exposes it through 43 MCP tools. AI agents query the graph instead of reading files.
+A **free**, self-hosted **knowledge graph** for your codebase — and the **MCP toolkit** that lets your AI agent query it instantly.
 
-- **Parse 12 languages.** Tree-sitter WASM — TS, JS, Python, Java, Go, Rust, PHP, Ruby, Vue, HTML, CSS, Markdown.
-- **Query instantly.** FTS5 + recursive CTE — all in SQLite, no API calls.
-- **Edit safely.** Blast radius before every change. Symbol-level PR review with cross-file impact.
-- **Scan once.** 50+ security rules in one call instead of multiple greps.
-- **Learn continuously.** Annotations persist across sessions. High-confidence patterns can be promoted to rules.
-- **Dual-path resolver.** Legacy proximity + scope-graph compared for parity.
-- **Verify accuracy.** 8 test projects with expected.json validate precision/recall across all languages.
+Instead of reading files blindly, your agent asks the graph.  
+Instead of guessing side effects, it sees **exact blast radius** before editing.  
+Instead of starting from zero, it **remembers** what you taught it last session.
 
-Fully offline. Zero telemetry. MCP server on `127.0.0.1`. Get started with `npx milens init`.
+**12 languages.** One SQLite file. **43 MCP tools.** Zero API costs.  
+
+> Parse locally. Query locally. Learn locally. **Forever free.**
 
 ---
 
-## Architecture
+## Supported Languages
 
-```
-Source files (12 languages)
-  │
-  ▼
-Parser ── tree-sitter WASM → CST
-  │
-  ▼
-Analyzer ── extractFromTree() + dual-path resolver
-  │           ├── Legacy: proximity-based (resolveLinksWithStats)
-  │           └── Scope:  scope-graph-based (resolveWithScopes) → parity check
-  │
-  ▼
-Store ──── SQLite + FTS5 (symbols, links, metadata, embeddings)
-  │
-  ▼
-Server ─── MCP stdio/HTTP (43 tools)
-  │
-  ├── AI Agent (MCP client)
-  └── CLI (terminal)
-```
-
+<p align="center">
+  <img src="https://img.shields.io/badge/TypeScript-.ts%20.tsx-3178C6?logo=typescript&logoColor=white" alt="TS">
+  <img src="https://img.shields.io/badge/JavaScript-.js%20.jsx-F7DF1E?logo=javascript&logoColor=black" alt="JS">
+  <img src="https://img.shields.io/badge/Python-.py-3776AB?logo=python&logoColor=white" alt="PY">
+  <img src="https://img.shields.io/badge/Java-.java-ED8B00?logo=openjdk&logoColor=white" alt="Java">
+  <img src="https://img.shields.io/badge/Go-.go-00ADD8?logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/Rust-.rs-000000?logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/PHP-.php-777BB4?logo=php&logoColor=white" alt="PHP">
+  <img src="https://img.shields.io/badge/Ruby-.rb%20.rake-CC342D?logo=ruby&logoColor=white" alt="Ruby">
+  <img src="https://img.shields.io/badge/Vue-.vue-4FC08D?logo=vuedotjs&logoColor=white" alt="Vue">
+  <img src="https://img.shields.io/badge/HTML-.html%20.htm-E34F26?logo=html5&logoColor=white" alt="HTML">
+  <img src="https://img.shields.io/badge/CSS-.css-1572B6?logo=css3&logoColor=white" alt="CSS">
+  <img src="https://img.shields.io/badge/Markdown-.md%20.mdx-000000?logo=markdown&logoColor=white" alt="MD">
+</p>
 
 ---
 
 ## Quick Start
 
 ```bash
-npm install -g milens                     # install globally
+npm install -g milens
 cd your-project
-milens init --profile full --interactive   # bootstrap everything
+milens init --profile full --interactive
 ```
-
-That single command analyzes your codebase, builds a knowledge graph, generates `AGENTS.md`, installs skill files, configures security rules, and sets up pre-commit hooks.
+One command. Your codebase becomes a queryable graph. AGENTS.md, skills, and hooks ready.
 
 Then connect your editor:
 
-**Prerequisite:** Install milens globally on your machine:
-```bash
-npm install -g milens      # one-time setup
-```
+##### Visual Studio Code
 
 ```json
-// .vscode/mcp.json — VS Code / Copilot
+.vscode/mcp.json
 {
   "servers": {
     "milens": {
@@ -106,9 +92,24 @@ npm install -g milens      # one-time setup
 }
 ```
 
+##### Claude Code
+
 ```bash
-# Claude Code
 claude mcp add milens -- milens serve -p .
+```
+
+Or in .mcp.json at plugin root:
+
+```bash
+{
+  "mcpServers": {
+    "milens": {
+      "type": "stdio",
+      "command": "milens",
+      "args": ["serve", "-p", "${workspaceFolder}"]
+    }
+  }
+}
 ```
 
 <details>
@@ -135,35 +136,46 @@ args = ["serve", "-p", "."]
 
 </details>
 
-Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're ready.
+
+> Verify Milens appears in your IDE's MCP server list. Then ask your agent: milens status. Green light means your codebase is indexed. You're live.
 
 ---
 
-## Without Milens vs With Milens
+## Why Milens
 
-| Situation | Without Milens | With Milens |
+| Capability | Without Milens | With Milens |
 |---|---|---|
-| **Understand a new codebase** | Agent reads many files blind | `codebase_summary()` — compact overview |
-| **Edit a function safely** | No idea what depends on it | `impact({target, depth: 3})` — exact blast radius |
-| **Find all references** | Grep multiple times, read several files | `context({name})` — incoming + outgoing, one call |
-| **Review a PR** | Read diff, guess risk | `review_pr()` — changed symbols scored by blast radius + test coverage |
-| **Review a PR accurately** | Review guesses which functions changed | Symbol-level diff via git show — flags only actually changed symbols |
-| **Clean uninstall** | Manually delete files, hooks, configs | `milens uninstall` — scan 11 categories, interactive or auto |
-| **Security audit** | Multiple manual greps | `security_scan()` — 50+ rules, one tool call |
-| **Start a new session** | Zero context | `recall()` — retrieves past annotations |
-| **Write tests** | Guess what needs testing | `test_plan()` — dependency-aware strategy + scenarios |
-| **Find dead code** | Manual search | `find_dead_code()` — exported symbols with zero references |
+| **Understand a codebase** | ⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Edit safely** | ⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Find references** | ⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Review PRs** | ⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Uninstall cleanly** | ⭐ | ⭐⭐⭐⭐⭐ |
+| **Security audit** | ⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Session memory** | ⭐ | ⭐⭐⭐⭐⭐ |
+| **Write tests** | ⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Find dead code** | ⭐⭐ | ⭐⭐⭐⭐⭐ |
 
-*And many more — see [real-world scenarios →](docs/scenarios.html)*
+*And many more — see [real-world scenarios →](https://milens.vercel.app/scenarios.html)*
 
 ---
 
-## Features
+## Architecture
+
+| Layer | Technology | Output |
+|---|---|---|
+| **Ingestion** | Tree-sitter WASM | CST from 12 languages |
+| **Analysis** | Dual-path resolver | Symbols + verified links |
+| **Storage** | SQLite + FTS5 | Queryable knowledge graph |
+| **Interface** | MCP stdio / HTTP | 43 tools |
+| **Clients** | AI agents, CLI, editors | Context-aware actions |
+---
+
+## Key Features
 
 | Feature | Description |
 |---|---|
 | **Code Intelligence** | 43 MCP tools — search, impact, context, trace, routes |
-| **Security Scanner** | 50+ rules across 9 categories + dependency audit |
+| **Security Scanner** | 190 rules across 9 categories + dependency audit |
 | **Sub-Agent Prompts** | 6 prompts — plan, review, tdd, security, architect, debugger |
 | **CLI Workflows** | 7 commands — tdd, review, plan, onboard, security-scan, refactor, handoff |
 | **Uninstall** | Full cleanup — 11 trace categories, interactive or auto |
@@ -175,6 +187,44 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 | **Accuracy Validation** | 8 test projects with expected.json for precision/recall |
 | **Symbol-Level PR Diff** | `review_pr` diffs actual symbols between commits, not entire files |
 | **7 Editor Adapters** | Claude Code, Cursor, Copilot, OpenCode, Codex, Gemini, Zed |
+
+---
+
+## Security & Privacy
+
+**Zero trust. Zero network. Zero leaks.**
+
+|  |  |
+|:---|:---|
+| 🔒 **Air-gapped** | Runs entirely offline. No outbound connections. No telemetry. |
+| 🏠 **Your code, your disk** | Index lives in `.milens/` per repo. Gitignored by default. Zero source code in registry. |
+| 🛡️ **Localhost-only** | MCP server binds `127.0.0.1` exclusively. External requests blocked. |
+| ⚡ **Safe execution** | `execFileSync` with argument arrays. No shell string interpolation. No path traversal. |
+| 🔍 **Offline audits** | Optional CVE check against local database. No API calls. |
+| 🔐 **Private embeddings** | Optional. Generated locally via Xenova transformers. No data leaves your machine. |
+| 🧱 **Input hardening** | ReDoS-safe regex. FTS5 tokens bound as SQLite literals. |
+
+Everything that touches your code stays on your filesystem. **Built for production. Trust nothing.**
+
+
+---
+
+## Pricing
+
+| | Free | Pro |
+|---|---|---|
+| **Cost** | $0 | $5/seat/month |
+| **43 MCP tools** | ✓ | ✓ |
+| **CLI + workflows** | ✓ | ✓ |
+| **Security scanner** | 190 rules | 190 rules + advanced |
+| **Private repos** | — | ✓ |
+| **PR auto-review** | — | ✓ Every PR |
+| **Push auto-index** | — | ✓ On push to main |
+| **Analyses/month** | 10 (public repos) | 50/seat (pooled) |
+| **Custom skill packs** | — | ✓ |
+| **Priority support** | — | ✓ Email + Slack |
+
+For solo devs: all 43 tools are free forever. For teams: the GitHub App automates review and security on every PR, saving ~$300/month in AI tokens for a team of 5. [Full pricing →](docs/pricing.md)
 
 ---
 
@@ -211,7 +261,7 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 
 | Command | Description |
 |---|---|
-| `security scan` | Scan project for vulnerabilities (50+ rules, scope/severity filterable) |
+| `security scan` | Scan project for vulnerabilities (190 rules, scope/severity filterable) |
 | `security deps` | Audit dependencies for known vulnerabilities |
 
 ### Quality & Evolution
@@ -319,7 +369,7 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 
 | Tool | Description |
 |---|---|
-| `security_scan` | Scan for vulnerabilities — 50+ rules, 9 categories |
+| `security_scan` | Scan for vulnerabilities — 190 rules, 9 categories |
 | `fix_apply` | Apply security fix to a file (creates backup) |
 
 ### Hooks
@@ -346,47 +396,6 @@ Open your AI agent. It auto-loads `AGENTS.md` with codebase context. You're read
 
 ---
 
-## Sub-Agent Prompts
-
-| Prompt | Purpose |
-|---|---|
-| `milens-planner` | Implementation planning with blast radius + test strategy |
-| `milens-reviewer` | PR review — risk scan → deep dive → dead code → security |
-| `milens-tester` | TDD — coverage gaps → test plans → implement → verify |
-| `milens-security` | Security audit — secrets, injection, unicode, crypto, config |
-| `milens-architect` | Architecture analysis — domains, routes, coupling, hierarchy |
-| `milens-debugger` | Root cause analysis — trace → blast radius → hypotheses → fixes |
-| `dead_code_remove` | Safe dead code removal with impact verification |
-
----
-
-## Security (50+ Rules)
-
-Rules cover common vulnerability patterns. One `security_scan()` call replaces multiple manual greps.
-
-| Category | Rules | Detects |
-|---|---|---|
-| **secrets** | 10 | AWS keys, GitHub tokens, OpenAI keys, private keys, hardcoded passwords |
-| **injection** | 9 | SQL injection, XSS, command injection, `eval()`, `exec()`, dangerous DOM |
-| **unicode** | 4 | Zero-width chars, bidi override, homoglyph attacks |
-| **dangerous** | 7 | `os.system`, `subprocess shell`, unsafe deserialization, `spawn shell` |
-| **config** | 5 | CORS wildcards, insecure cookies, debug mode |
-| **data-leak** | 5 | `console.log` of secrets, hardcoded URLs |
-| **crypto** | 4 | MD5, SHA1, `Math.random()` for crypto, hardcoded salt/IV |
-| **auth** | 4 | String comparison, missing middleware, JWT without expiry |
-| **file-access** | 2 | Path traversal, unsafe file reads |
-
-```bash
-milens security scan --scope secrets --severity HIGH --format json
-milens security deps                    # Offline CVE database check
-```
-
-From an AI agent: `security_scan({scope: "all", severity: "HIGH"})`
-
----
-
----
-
 ## Editor Adapters
 
 Milens works with any MCP-compatible agent:
@@ -410,6 +419,52 @@ MILENS_PROFILE=minimal milens serve          # 10 tools — lighter footprint
 MILENS_PROFILE=standard milens serve         # 25 tools — full daily coding
 milens serve --profile full                  # 43 tools — everything
 ```
+
+---
+
+## 🔒 Security Scanner
+
+> **190+ rules. 25 categories. One call.**
+
+Replace ten manual greps with a single `security_scan()`. OWASP Top 10 mapped. Offline. Zero API calls.
+
+| Category | Rules | Detects |
+|:---:|:---:|:---|
+| 🔑 **Secrets** | 70+ | AWS keys, GitHub tokens, JWT secrets, private keys, cloud credentials |
+| 💉 **Injection** | 26 | SQLi, NoSQLi, XSS, SSTI, LDAP, XPath, CRLF, GraphQL |
+| 🧨 **RCE** | 6 | `eval()`, `exec()`, `child_process`, PowerShell, dynamic class loading |
+| 🧬 **Deserialization** | 9 | `pickle`, `yaml.load`, Java `readObject`, PHP `unserialize` |
+| 🌐 **SSRF** | 4 | User-controlled URL fetch, file/gopher protocols, cloud metadata |
+| 📁 **File Access** | 6 | Path traversal, `fs.readFile` with user input, unrestricted upload |
+| 🔐 **Auth** | 12 | Missing middleware, JWT none alg, IDOR, mass assignment, session fixation |
+| 🛡️ **Crypto** | 15 | MD5, SHA1, DES, ECB, weak RSA, custom crypto, `Math.random()` for tokens |
+| ⚙️ **Config** | 5 | CORS wildcard, insecure cookies, debug mode in production |
+| 📤 **Data Leaks** | 5 | `console.log(password)`, hardcoded URLs with credentials |
+| 🔤 **Unicode** | 4 | Bidi override, zero-width chars, homoglyph attacks |
+| 🐳 **IaC** | 3+ | Dockerfile secrets, K8s hardcoded creds, Terraform exposed keys |
+
+**Dependency audit included:**
+```bash
+milens security scan # Full audit, 190+ rules
+milens security scan --scope secrets --severity HIGH
+milens security deps # Offline CVE check: npm, Python, Rust, Go, Java
+```
+
+From an AI agent: `security_scan({scope: "all", severity: "HIGH"})`
+
+---
+
+## Sub-Agent Prompts
+
+| Prompt | Purpose |
+|---|---|
+| `milens-planner` | Implementation planning with blast radius + test strategy |
+| `milens-reviewer` | PR review — risk scan → deep dive → dead code → security |
+| `milens-tester` | TDD — coverage gaps → test plans → implement → verify |
+| `milens-security` | Security audit — secrets, injection, unicode, crypto, config |
+| `milens-architect` | Architecture analysis — domains, routes, coupling, hierarchy |
+| `milens-debugger` | Root cause analysis — trace → blast radius → hypotheses → fixes |
+| `dead_code_remove` | Safe dead code removal with impact verification |
 
 ---
 
@@ -472,42 +527,26 @@ milens hooks disable --hook preCommit        # Turn off one hook
 
 ---
 
-## Security & Privacy
+## Contributing
 
-Milens runs entirely on your machine. **No network calls. No telemetry. No data ever leaves your device.**
+| Type | How | Where |
+|---|---|---|
+| **Skill files** | Create reusable agent workflows | `.agents/skills/` |
+| **Security rules** | Add new vulnerability patterns | `src/security/rules.ts` |
+| **Adapter packs** | Connect milens to new harnesses | `adapters/` |
+| **Core features** | Improve tools, parser, analyzer | `src/` |
+| **Documentation** | Fix docs, add examples | `docs/` |
+| **Bug reports** | Report issues with reproduction | [Issues](https://github.com/fuze210699/milens/issues) |
 
-| What you worry about | How milens protects you |
-|---|---|
-| Source code leaking | Index stored in `.milens/` per repo, gitignored by default. Registry tracks repo paths only — zero source code stored. |
-| Network calls | MCP server binds `127.0.0.1` exclusively. No outbound connections. Works fully offline. |
-| Shell injection | All system calls use `execFileSync` with argument arrays — no string interpolation into shell. |
-| Path traversal | File paths bounded to repo root. Symlinks outside root are rejected. |
-| Dependency CVEs | Optional `security deps` audit against offline CVE database. No external API calls. |
-| Embeddings privacy | Optional. Generated locally via Xenova transformers. No data sent to any service. |
-| Input attacks | Regex validated against ReDoS. FTS5 tokens passed as SQLite literals. |
+```bash
+git clone https://github.com/fuze210699/milens.git
+cd milens
+npm install && npm run build && npm test
+```
 
-Everything that touches your code stays on your filesystem. Built for production use with zero trust required.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full details — skill format, security rule format, PR process, and code of conduct.
 
 ---
-
-## Supported Languages
-
-<p align="center">
-  <img src="https://img.shields.io/badge/TypeScript-.ts%20.tsx-3178C6?logo=typescript&logoColor=white" alt="TS">
-  <img src="https://img.shields.io/badge/JavaScript-.js%20.jsx-F7DF1E?logo=javascript&logoColor=black" alt="JS">
-  <img src="https://img.shields.io/badge/Python-.py-3776AB?logo=python&logoColor=white" alt="PY">
-  <img src="https://img.shields.io/badge/Java-.java-ED8B00?logo=openjdk&logoColor=white" alt="Java">
-  <img src="https://img.shields.io/badge/Go-.go-00ADD8?logo=go&logoColor=white" alt="Go">
-  <img src="https://img.shields.io/badge/Rust-.rs-000000?logo=rust&logoColor=white" alt="Rust">
-  <img src="https://img.shields.io/badge/PHP-.php-777BB4?logo=php&logoColor=white" alt="PHP">
-  <img src="https://img.shields.io/badge/Ruby-.rb%20.rake-CC342D?logo=ruby&logoColor=white" alt="Ruby">
-  <img src="https://img.shields.io/badge/Vue-.vue-4FC08D?logo=vuedotjs&logoColor=white" alt="Vue">
-  <img src="https://img.shields.io/badge/HTML-.html%20.htm-E34F26?logo=html5&logoColor=white" alt="HTML">
-  <img src="https://img.shields.io/badge/CSS-.css-1572B6?logo=css3&logoColor=white" alt="CSS">
-  <img src="https://img.shields.io/badge/Markdown-.md%20.mdx-000000?logo=markdown&logoColor=white" alt="MD">
-</p>
-
-12 languages parsed via tree-sitter WASM. [Full support details →](docs/languages.md)
 
 ## License
 
@@ -523,5 +562,7 @@ See [LICENSE](LICENSE) for details.
   <a href="https://github.com/fuze210699/milens/blob/main/docs/accuracy.md">Accuracy</a> ·
   <a href="https://github.com/fuze210699/milens/blob/main/docs/languages.md">Languages</a> ·
   <a href="https://github.com/fuze210699/milens/blob/main/docs/pricing.md">Pricing</a> ·
-  <a href="https://github.com/fuze210699/milens/blob/main/CONTRIBUTING.md">Contribute</a>
+  <a href="https://github.com/fuze210699/milens/blob/main/CONTRIBUTING.md">Contribute</a> ·
+  <a href="https://github.com/fuze210699/milens/blob/main/CHANGELOG.md">Changelog</a> ·
+  <a href="https://github.com/fuze210699/milens/blob/main/SECURITY.md">Security</a>
 </p>

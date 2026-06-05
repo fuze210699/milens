@@ -26,7 +26,7 @@ When working with code in **docs/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 187 symbols (162 exported) across 23 files.
+Contains 137 symbols (114 exported) across 21 files.
 
 ## Key Symbols
 - **`Accuracy Engine`** [section] (docs/accuracy.md:1) — 0 refs
@@ -50,6 +50,7 @@ Contains 187 symbols (162 exported) across 23 files.
 - **`applyFilters`** [function] — 1 incoming references
 
 ## Dependencies
+- **scripts**: `main`
 - **store**: `remove`
 - **test**: `add`
 
@@ -65,7 +66,6 @@ Contains 187 symbols (162 exported) across 23 files.
 - docs/index.html
 - docs/languages.md
 - docs/learning.html
-- docs/milens-upgrade.md
 - docs/platforms.html
 - docs/pricing.html
 - docs/pricing.md
@@ -76,4 +76,3 @@ Contains 187 symbols (162 exported) across 23 files.
 - docs/security.html
 - docs/skills.html
 - docs/tools.md
-- docs/vi-VN/README.md

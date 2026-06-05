@@ -272,10 +272,10 @@ describe('createMcpServer', () => {
       }
     });
 
-    it('all 42 tools registered plus security_scan', () => {
+    it('all 43 tools registered plus security_scan', () => {
       const server = createMcpServer(TEST_ROOT);
       const tools = (server as any)._registeredTools as Record<string, unknown>;
-      expect(Object.keys(tools).length).toBeGreaterThanOrEqual(42);
+      expect(Object.keys(tools).length).toBeGreaterThanOrEqual(43);
     });
   });
 

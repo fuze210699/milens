@@ -18,6 +18,8 @@ jobs:
 
       - run: npm ci
 
+      - run: npm run build
+
       - name: Analyze fixture project
         run: |
           PROJECT_ROOT="test/fixtures/accuracy/${{ matrix.language }}-project"

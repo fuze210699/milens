@@ -2,32 +2,36 @@
  * scripts/create-pr.js — Auto-generate PR via GitHub API
  *
  * Usage:
- *   node scripts/create-pr.js --branch <branch> --title "<title>" --body "<body>" [--labels label1,label2] [--repo owner/repo] [--base main]
- *   GITHUB_TOKEN=<token> node scripts/create-pr.js --issue <issue-number> --branch <branch>
+ *   node scripts/create-pr.js --branch <branch> [--title "<title>"] [--issue <num>] [--labels l1,l2] [--type feat|fix|docs|...] [--scope <scope>] [--changes "line1\nline2"]
+ *   GITHUB_TOKEN=<token> node scripts/create-pr.js --branch fix/issue-123 --issue 123
  *
  * Environment:
  *   GITHUB_TOKEN - GitHub personal access token (required)
  *   GITHUB_REPO  - owner/repo override (default: detected from git remote)
  *
+ * Auto-generates:
+ *   - Title: Conventional Commits format (<type>(<scope>): <description>)
+ *   - Body: 5-section standard with Goal, Issue, Changes, Breaking, Verification
+ *
  * Examples:
- *   node scripts/create-pr.js --branch feature/x --title "feat: add X" --body "## Goal\n- Add X"
- *   node scripts/create-pr.js --branch fix/y --title "fix: Y" --issue 123
+ *   node scripts/create-pr.js --branch feat/github --title "feat(github): add auto PR"
+ *   node scripts/create-pr.js --branch fix/issue-123 --issue 123
+ *   node scripts/create-pr.js --branch fix/issue-123 --type feat --scope github
  */
 
 const { execSync } = require('child_process');
-const { readFileSync } = require('fs');
-const { join } = require('path');
+const {
+  generatePrPayload,
+  detectRepo: detectRepoFn,
+  parseArgs,
+} = require('./pr-generator.js');
 
 const args = process.argv.slice(2).filter(Boolean);
-const parsed = {};
+const parsed = parseArgs(args.join(' '));
 
-for (let i = 0; i < args.length; i++) {
-  const arg = args[i];
-  if (['--branch', '--title', '--body', '--repo', '--base', '--issue'].includes(arg)) {
-    const key = arg.replace('--', '');
-    parsed[key] = args[++i] || true;
-  } else if (arg.startsWith('--')) {
-    parsed[arg.slice(2)] = args[++i] || true;
+for (const key of Object.keys(parsed)) {
+  if (!['branch', 'title', 'issue', 'labels', 'type', 'scope', 'changes'].includes(key)) {
+    delete parsed[key];
   }
 }
 
@@ -36,8 +40,7 @@ const issueNum = parsed.issue ? String(parsed.issue).replace('#', '') : null;
 
 if (!branch && !issueNum) {
   console.error('Error: --branch or --issue is required');
-  console.error('Usage: node create-pr.js --branch <branch> [--title "..."] [--body "..."] [--labels l1,l2] [--repo owner/repo] [--base main]');
-  console.error('       node create-pr.js --issue <number> --branch <branch> [--title "..."] [--labels l1,l2] [--repo owner/repo] [--base main]');
+  console.error('Usage: node create-pr.js --branch <branch> [--title "..."] [--issue <num>] [--type feat|fix|docs|...] [--scope <scope>] [--labels l1,l2]');
   process.exit(1);
 }
 
@@ -99,38 +102,34 @@ async function getIssue({ repo, number }) {
 async function main() {
   const repo = detectRepo();
   const base = parsed.base || 'main';
-  let title = parsed.title || '';
-  let body = parsed.body || '';
-  const labels = parsed.labels
-    ? String(parsed.labels).split(',').map(l => l.trim()).filter(Boolean)
-    : [];
 
+  let issueData = null;
   if (issueNum) {
     console.log(`Fetching issue #${issueNum} from ${repo}...`);
-    const issue = await getIssue({ repo, number: issueNum });
-    if (issue.title) {
-      title = title || `Fix: ${issue.title}`;
-      body = body || `Fixes #${issueNum}\n\n## Issue\n${issue.body || '(no description)'}\n\n---\n\n## Goal\n<!-- Describe the goal of this PR -->\n\n## Changes Made\n<!-- List the changes -->\n\n## Verification\n<!-- How was this verified -->`;
-      if (issue.labels) {
-        const labelNames = issue.labels.map(l => l.name).filter(n => !['bug', 'feature', 'security'].includes(n));
-        if (labelNames.length) labels.push(...labelNames);
-      }
-    } else {
+    issueData = await getIssue({ repo, number: issueNum });
+    if (!issueData.title) {
       throw new Error(`Issue #${issueNum} not found or inaccessible`);
     }
   }
 
-  if (!title) {
-    console.error('Error: --title is required when not using --issue');
-    process.exit(1);
-  }
+  const { title, body, labels: autoLabels, isBreaking } = generatePrPayload({
+    branch,
+    issue: issueData ? { title: issueData.title, body: issueData.body, labels: issueData.labels, number: issueData.number } : null,
+    typeOverride: parsed.type || null,
+    scopeOverride: parsed.scope || null,
+    changes: parsed.changes || null,
+    verification: null,
+  });
+
+  const finalLabels = [...new Set([...(parsed.labels || []), ...autoLabels])];
 
   console.log(`\nCreating PR on ${repo}:`);
   console.log(`  Branch: ${branch} → ${base}`);
   console.log(`  Title:  ${title}`);
-  if (labels.length) console.log(`  Labels: ${labels.join(', ')}`);
+  if (isBreaking) console.log(`  ⚠️  Breaking changes detected`);
+  if (finalLabels.length) console.log(`  Labels: ${finalLabels.join(', ')}`);
 
-  const prUrl = await createPr({ repo, title, body, head: branch, base, labels });
+  const prUrl = await createPr({ repo, title, body, head: branch, base, labels: finalLabels });
   console.log(`\n✅ PR created: ${prUrl}`);
 
   return prUrl;

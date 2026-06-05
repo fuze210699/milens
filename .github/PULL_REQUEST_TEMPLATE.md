@@ -15,19 +15,28 @@ body:
         ## 🎯 Goal
         <!-- What does this PR do? Be specific. -->
 
+        ## 🔗 Issue
+        <!-- Link to issue: Fixes #123 or Closes #456 -->
+
         ## ✅ Changes Made
         <!-- List concrete changes: files edited, functions modified, tests added -->
 
-        ## ⚠️ Constraints & Preferences
-        <!-- Any architectural decisions, non-functional requirements, things to avoid -->
+        ## ⚠️ Breaking Changes
+        <!-- **Yes** or **No** — describe if this PR contains breaking changes -->
 
-        ## 📊 Verification
+        ## 🔍 Verification
         <!-- How did you verify the changes work? Which tests ran? -->
 
-        ## 🔗 Related Issue
-        <!-- Link to issue: Fixes #123 or Closes #456 -->
-
         ---
+
+        ## 📋 PR Checklist
+        - [ ] Tests added/updated
+        - [ ] Docs updated (if needed)
+        - [ ] No hardcoded numbers or magic strings
+        - [ ] Milens pre-commit check passed
+        - [ ] Lint passes: `npm run lint`
+        - [ ] Build succeeds: `npm run build`
+
         > ⚡ Run `milens detect-changes` before committing to see affected symbols and risk scores.
         > 🛡️ Run `milens security scan` to check for security issues in your changes.
 
@@ -44,6 +53,14 @@ body:
     attributes:
       label: "Changes made"
       placeholder: "- Fixed X in src/file.ts:45\n- Added Y to src/file.ts\n- Updated tests for..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: breaking
+    attributes:
+      label: "Breaking Changes"
+      placeholder: "**No** — no breaking changes.\n\nOr: **Yes** — describe the breaking changes..."
     validations:
       required: true
 

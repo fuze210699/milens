@@ -20,11 +20,6 @@ jobs:
 
       - run: npm run build
 
-      - name: Analyze fixture project
-        run: |
-          PROJECT_ROOT="test/fixtures/accuracy/${{ matrix.language }}-project"
-          npx milens analyze -p "$PROJECT_ROOT" --force
-
       - name: Run accuracy tests
         id: accuracy
         run: npx vitest run test/unit/accuracy.test.ts --reporter=json | tee accuracy-result.json

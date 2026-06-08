@@ -10,7 +10,7 @@
     "dev": "electron . --dev"
   },
   "dependencies": {
-    "electron": "^30.0.0",
+    "electron": "^42.3.3",
     "milens": "file:../.."
   }
 }

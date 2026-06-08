@@ -7,3 +7,4 @@ standalone/
 *.sqlite-journal
 coverage/
 test/tmp/
+.env

@@ -1,41 +1,25 @@
 /**
- * scripts/pr-generator.js — Conventional Commits PR title & body generator
+ * scripts/pr-generator.cjs — Conventional Commits PR title & body generator
  *
  * Shared module for auto-generating PR titles and bodies following:
  *   - Conventional Commits v1.0.0 (https://www.conventionalcommits.org/)
  *   - Keep a Changelog 1.1.0 (https://keepachangelog.com/)
  *
  * Used by:
- *   - scripts/create-pr.js (standalone CLI)
+ *   - scripts/create-pr.cjs (standalone CLI)
  *   - apps/github/app.js (GitHub App /milens pr handler)
- *
- * Usage:
- *   const { generateTitle, generateBody, detectTypeFromBranch } = require('./pr-generator.js');
- *   const title = generateTitle({ branch: 'fix/issue-123', issue: { title: 'Parser fails' } });
- *   const body = generateBody({ issue, breakingChange: false });
  */
 
 const VALID_TYPES = ['feat', 'fix', 'docs', 'style', 'refactor', 'perf', 'test', 'build', 'ci', 'chore', 'revert'];
-const TYPE_LABELS = {
-  feat: 'Feature',
-  fix: 'Bug Fix',
-  docs: 'Documentation',
-  style: 'Code Style',
-  refactor: 'Refactoring',
-  perf: 'Performance',
-  test: 'Tests',
-  build: 'Build',
-  ci: 'CI',
-  chore: 'Chore',
-  revert: 'Revert',
-};
 
 function slugify(text, maxLen = 72) {
   if (!text) return '';
   return text
     .toLowerCase()
     .replace(/\[.*?\]/g, '')
-    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[^a-z0-9\s\-\.\/\_]/g, '')
+    .replace(/[\s_]+/g, ' ')
+    .replace(/\//g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, maxLen)
@@ -46,13 +30,9 @@ function slugify(text, maxLen = 72) {
 function detectTypeFromBranch(branch) {
   if (!branch) return null;
   const lower = branch.toLowerCase();
-
   for (const type of VALID_TYPES) {
-    if (lower.startsWith(`${type}/`) || lower.startsWith(`${type}!`) || lower === type) {
-      return type;
-    }
+    if (lower.startsWith(`${type}/`) || lower.startsWith(`${type}!`) || lower === type) return type;
   }
-
   const match = branch.match(/^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/i);
   return match ? match[1].toLowerCase() : null;
 }
@@ -64,56 +44,40 @@ function detectBreakingFromBranch(branch) {
 
 function detectBreakingFromLabels(labels) {
   if (!labels || !labels.length) return false;
-  const labelNames = Array.isArray(labels) ? labels.map(l => typeof l === 'string' ? l : l.name) : [];
-  return labelNames.some(n =>
-    n.toLowerCase().includes('breaking') ||
-    n.toLowerCase().includes('breaking-change') ||
-    n.toLowerCase() === 'breaking'
-  );
+  const labelNames = labels.map(l => typeof l === 'string' ? l : l.name);
+  return labelNames.some(n => n.toLowerCase().includes('breaking'));
 }
 
 function detectBreakingFromIssue(issue) {
   if (!issue) return false;
-  const labels = issue.labels || [];
-  if (detectBreakingFromLabels(labels)) return true;
-
+  if (detectBreakingFromLabels(issue.labels || [])) return true;
   if (issue.body && /breaking\s*change/i.test(issue.body)) return true;
-  if (issue.body && /breaking:\s*yes/i.test(issue.body)) return true;
-
   return false;
 }
 
 function detectScopeFromBranch(branch) {
   if (!branch) return null;
-
   const match = branch.match(/^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)\(([^/)]+)\)/i);
   if (match && match[2]) {
-    const scope = match[2].toLowerCase().replace(/[^a-z0-9-]/g, '');
-    return scope || null;
+    return match[2].toLowerCase().replace(/[^a-z0-9-]/g, '') || null;
   }
-
   return null;
 }
 
-function detectScopeFromGitDiff(workDir) {
-  return null;
-}
+function generateTitle({ branch, issue, typeOverride, scopeOverride, titleOverride }) {
+  if (titleOverride) return titleOverride;
 
-function generateTitle({ branch, issue, typeOverride, scopeOverride }) {
   const type = typeOverride || detectTypeFromBranch(branch) || 'chore';
   let scope = scopeOverride || detectScopeFromBranch(branch);
-
   let description = '';
+
   if (issue && issue.title) {
     description = slugify(issue.title);
   } else if (branch) {
     const cleanBranch = branch.replace(/^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)[\/!]*/i, '');
     description = slugify(cleanBranch);
   }
-
-  if (!description) {
-    description = 'update project';
-  }
+  if (!description) description = 'update project';
 
   const scopePart = scope ? `(${scope})` : '';
   return `${type}${scopePart}: ${description}`;
@@ -124,8 +88,9 @@ function generateBody({ issue, changes, breakingChange, verification, type, labe
 
   lines.push('## 🎯 Goal');
   if (issue && issue.title) {
-    const cleanTitle = issue.title.replace(/\[.*?\]\s*/g, '').trim();
-    lines.push(cleanTitle);
+    lines.push(issue.title.replace(/\[.*?\]\s*/g, '').trim());
+  } else if (changes && changes.length) {
+    lines.push(changes[0].replace(/^[a-f0-9]+\s/, ''));
   } else {
     lines.push('<!-- Describe the goal of this PR -->');
   }
@@ -141,35 +106,19 @@ function generateBody({ issue, changes, breakingChange, verification, type, labe
 
   lines.push('## ✅ Changes Made');
   if (changes && changes.length) {
-    for (const change of changes) {
-      lines.push(`- ${change}`);
-    }
+    for (const change of changes) lines.push(`- ${change}`);
   } else {
-    lines.push('<!-- List concrete changes: -->');
-    lines.push('<!-- - Fixed X in src/file.ts:45 -->');
-    lines.push('<!-- - Added Y to src/file.ts -->');
-    lines.push('<!-- - Updated tests for... -->');
+    lines.push('<!-- List concrete changes -->');
   }
   lines.push('');
 
   const isBreaking = breakingChange ||
     (issue && detectBreakingFromIssue(issue)) ||
-    (issue && issue.labels && detectBreakingFromLabels(issue.labels)) ||
-    detectBreakingFromBranch(issue && issue.body && '');
+    (issue && issue.labels && detectBreakingFromLabels(issue.labels));
 
   lines.push('## ⚠️ Breaking Changes');
   if (isBreaking) {
     lines.push('**Yes** — this PR contains breaking changes.');
-    if (issue && issue.body) {
-      const breakMatch = issue.body.match(/breaking.*?[:\n](.+?)(?=\n\n|\n--|$)/gi);
-      if (breakMatch) {
-        lines.push('');
-        lines.push('Details:');
-        for (const m of breakMatch) {
-          lines.push(`- ${m.replace(/^breaking.*?[:\n]/i, '').trim()}`);
-        }
-      }
-    }
   } else {
     lines.push('**No** — no breaking changes.');
   }
@@ -193,28 +142,19 @@ function generateBody({ issue, changes, breakingChange, verification, type, labe
   lines.push('- [ ] Milens pre-commit check passed');
   lines.push('');
 
-  if (issue && issue.number) {
-    lines.push(`Fixes #${issue.number}`);
-  }
+  if (issue && issue.number) lines.push(`Fixes #${issue.number}`);
 
   return lines.join('\n');
 }
 
-function generatePrPayload({ branch, issue, typeOverride, scopeOverride, changes, verification, labels }) {
+function generatePrPayload({ branch, issue, typeOverride, scopeOverride, changes, verification, labels, titleOverride }) {
   const breakingFromBranch = detectBreakingFromBranch(branch);
   const breakingFromLabels = issue && detectBreakingFromLabels(issue.labels || []);
   const breakingFromBody = issue && issue.body && /breaking\s*change/i.test(issue.body);
   const isBreaking = breakingFromBranch || breakingFromLabels || breakingFromBody;
 
-  const title = generateTitle({ branch, issue, typeOverride, scopeOverride });
-  const body = generateBody({
-    issue,
-    changes,
-    breakingChange: isBreaking,
-    verification,
-    type: typeOverride || detectTypeFromBranch(branch),
-    labels,
-  });
+  const title = generateTitle({ branch, issue, typeOverride, scopeOverride, titleOverride });
+  const body = generateBody({ issue, changes, breakingChange: isBreaking, verification, type: typeOverride || detectTypeFromBranch(branch), labels });
 
   const autoLabels = [];
   if (issue && issue.labels) {
@@ -241,7 +181,7 @@ function parseArgs(commentBody) {
   const branchMatch = commentBody.match(/--branch\s+(\S+)/);
   if (branchMatch) result.branch = branchMatch[1];
 
-  const titleMatch = commentBody.match(/--title\s+"([^"]+)"/) || commentBody.match(/--title\s+(\S.+)/);
+  const titleMatch = commentBody.match(/--title\s+"([^"]+)"/) || commentBody.match(/--title\s+(.+?)(?=\s+--\w|$)/);
   if (titleMatch) result.title = titleMatch[1];
 
   const issueMatch = commentBody.match(/--issue\s+(\d+)/);
@@ -259,6 +199,9 @@ function parseArgs(commentBody) {
   const changesMatch = commentBody.match(/--changes\s+(.+?)(?=--|$)/s);
   if (changesMatch) result.changes = changesMatch[1].split('\n').map(l => l.trim()).filter(Boolean);
 
+  const updateMatch = commentBody.match(/--update\s+(\d+)/);
+  if (updateMatch) result.update = parseInt(updateMatch[1]);
+
   return result;
 }
 
@@ -273,6 +216,5 @@ module.exports = {
   detectBreakingFromIssue,
   parseArgs,
   VALID_TYPES,
-  TYPE_LABELS,
   slugify,
 };

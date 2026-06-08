@@ -338,6 +338,27 @@
 <section class="timeline" id="timeline">
   <div class="container">
 
+    <!-- v0.7.0 -->
+    <div class="timeline-entry">
+      <div class="timeline-badge">
+        <span class="version">v0.7.0</span>
+        <span class="date">June 2026</span>
+      </div>
+      <div class="timeline-card">
+        <h3><span class="version-dot"></span> Conventional Commits PR Generator + CI Parity Fix</h3>
+        <ul>
+          <li class="new">Issue templates: bug report, feature request, security issue</li>
+          <li class="new">PR template with 5-section Conventional Commits standard</li>
+          <li class="new">scripts/pr-generator.cjs — shared Conventional Commits v1.0.0 title/body generator</li>
+          <li class="new">Auto-detect type from branch, scope from feat(scope)/, breaking from !</li>
+          <li class="new">scripts/create-pr.cjs — CLI with dotenv + Node https, auto-fills from git log, --update</li>
+          <li class="new">GitHub App /milens pr handler</li>
+          <li class="fix">Fixed accuracy-parity CI — removed redundant npx milens analyze step</li>
+          <li class="fix">Fixed countFiles bug — file_hashes → symbols table</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- v0.6.9 -->
     <div class="timeline-entry">
       <div class="timeline-badge">

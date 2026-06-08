@@ -10,7 +10,7 @@ const { execSync } = require('node:child_process');
 const { readFileSync, mkdirSync, existsSync, rmSync } = require('node:fs');
 const { join } = require('node:path');
 const crypto = require('node:crypto');
-const { generatePrPayload, parseArgs } = require('../../scripts/pr-generator.js');
+const { generatePrPayload, parseArgs } = require('../../scripts/pr-generator.cjs');
 
 // ── Rate limiting ──
 

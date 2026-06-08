@@ -33,15 +33,16 @@ const args = process.argv.slice(2).filter(Boolean);
 const parsed = parseArgs(args.join(' '));
 
 for (const key of Object.keys(parsed)) {
-  if (!['branch', 'title', 'issue', 'labels', 'type', 'scope', 'changes', 'update'].includes(key)) {
+  if (!['branch', 'title', 'issue', 'labels', 'type', 'scope', 'changes', 'update', 'base'].includes(key)) {
     delete parsed[key];
   }
 }
 
 const prNumber = parsed.update || null;
-const branch = parsed.branch || (() => {
+const rawBranch = parsed.branch || (() => {
   try { return exec('git branch --show-current'); } catch { return null; }
 })();
+const branch = safeBranch(rawBranch) || rawBranch;
 const issueNum = parsed.issue ? String(parsed.issue).replace('#', '') : null;
 
 if (!prNumber && !branch) {
@@ -58,6 +59,12 @@ function exec(cmd, opts) {
   } catch(err) {
     throw new Error(`Command failed: ${cmd}\n${err.stderr || err.message}`);
   }
+}
+
+function safeBranch(name) {
+  if (!name || typeof name !== 'string') return null;
+  if (/^[a-zA-Z0-9][a-zA-Z0-9._\/-]*$/.test(name) && name.length <= 256) return name;
+  return null;
 }
 
 function checkToken() {
@@ -141,7 +148,7 @@ function detectRepo() {
 
 async function main() {
   const repo = detectRepo();
-  let base = parsed.base || 'main';
+  let base = safeBranch(parsed.base) || 'main';
 
   let issueData = null;
   if (issueNum) {
@@ -152,14 +159,15 @@ async function main() {
 
   if (prNumber) {
     const pr = await ghApi('GET', `/repos/${repo}/pulls/${prNumber}`);
-    base = parsed.base || pr.base.ref;
+    base = safeBranch(parsed.base) || pr.base.ref || 'main';
     console.log(`Base branch: ${base}`);
   }
 
   let changes = parsed.changes || null;
   if (!changes && !issueData && branch) {
     try {
-      const compareRef = `origin/${base}..HEAD`;
+      const safeBase = safeBranch(base);
+      const compareRef = safeBase ? `origin/${safeBase}..HEAD` : 'HEAD~10..HEAD';
       const log = exec(`git log ${compareRef} --oneline --no-merges`);
       if (log) {
         changes = log.split('\n').map(l => l.trim()).filter(Boolean);

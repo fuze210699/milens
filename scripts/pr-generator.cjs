@@ -196,6 +196,9 @@ function parseArgs(commentBody) {
   const scopeMatch = commentBody.match(/--scope\s+(\S+)/);
   if (scopeMatch) result.scope = scopeMatch[1];
 
+  const baseMatch = commentBody.match(/--base\s+(\S+)/);
+  if (baseMatch) result.base = baseMatch[1];
+
   const changesMatch = commentBody.match(/--changes\s+(.+?)(?=--|$)/s);
   if (changesMatch) result.changes = changesMatch[1].split('\n').map(l => l.trim()).filter(Boolean);
 

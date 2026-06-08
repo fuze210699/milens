@@ -18,10 +18,7 @@ jobs:
 
       - run: npm ci
 
-      - name: Analyze fixture project
-        run: |
-          PROJECT_ROOT="test/fixtures/accuracy/${{ matrix.language }}-project"
-          npx milens analyze -p "$PROJECT_ROOT" --force
+      - run: npm run build
 
       - name: Run accuracy tests
         id: accuracy

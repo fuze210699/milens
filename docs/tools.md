@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-Milens exposes **41 MCP tools** for AI coding agents. All tools accept an optional `repo` parameter when multiple repositories are indexed.
+Milens exposes **43 MCP tools** for AI coding agents. All tools accept an optional `repo` parameter when multiple repositories are indexed.
 
 ## Search & Navigation
 

@@ -1210,7 +1210,7 @@ program
       console.log('Choose a profile:');
       console.log('  1. minimal  — Core tools only (10 tools, ~500 token overhead)');
       console.log('  2. standard — Full vibe coding toolkit (25 tools) [Recommended]');
-      console.log('  3. full     — Everything including experimental features (33 tools)');
+      console.log('  3. full     — Everything including experimental features (43 tools)');
       const profileChoice = await ask('\nProfile [2]: ');
       const profileMap: Record<string, string> = { '1': 'minimal', '2': 'standard', '3': 'full', '': 'standard' };
       opts.profile = profileMap[profileChoice.trim()] || 'standard';

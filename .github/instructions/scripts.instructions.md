@@ -25,20 +25,29 @@ When working with code in **scripts/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 29 symbols (0 exported) across 1 files.
+Contains 47 symbols (0 exported) across 3 files.
 
 ## Entry Points
+- **`root`** [variable] — 37 incoming references
+- **`version`** [variable] — 4 incoming references
 - **`ROOT`** [variable] — 2 incoming references
 - **`outDir`** [variable] — 2 incoming references
-- **`resolveTargets`** [function] — 1 incoming references
-- **`run`** [function] — 1 incoming references
-- **`__dirname`** [variable] — 1 incoming references
+- **`main`** [function] — 2 incoming references
 
 ## Dependencies
 - **analyzer**: `resolve`
+- **store**: `Database`, `getCodebaseSummary`, `close`
 
 ## Used By
-- **root**: `outDir`
+- **docs**: `main`
+- **analyzer**: `root`
+- **root**: `version`, `outDir`, `root`
+- **parser**: `root`
+- **security**: `version`
+- **server**: `root`
+- **test**: `root`
 
 ## Files
 - scripts/build-standalone.mjs
+- scripts/generate-release-stats.js
+- scripts/update-docs.js

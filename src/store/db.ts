@@ -92,7 +92,7 @@ export class Database {
       `),
       countSymbols: this.db.prepare('SELECT COUNT(*) as c FROM symbols'),
       countLinks: this.db.prepare('SELECT COUNT(*) as c FROM links'),
-      countFiles: this.db.prepare('SELECT COUNT(*) as c FROM file_hashes'),
+      countFiles: this.db.prepare('SELECT COUNT(DISTINCT file_path) as c FROM symbols'),
       deleteFileLinks: this.db.prepare(
         'DELETE FROM links WHERE from_id IN (SELECT id FROM symbols WHERE file_path = ?)'
       ),
@@ -559,7 +559,6 @@ export class Database {
   clear(): void {
     this.db.exec('DELETE FROM symbols');
     this.db.exec('DELETE FROM links');
-    this.db.exec('DELETE FROM file_hashes');
   }
 
   /** Clear only symbols, links, and file hashes for specific files (incremental re-index) */
@@ -575,9 +574,6 @@ export class Database {
     `).run(...filePaths);
     this.db.prepare(`
       DELETE FROM symbols WHERE file_path IN (${placeholders})
-    `).run(...filePaths);
-    this.db.prepare(`
-      DELETE FROM file_hashes WHERE path IN (${placeholders})
     `).run(...filePaths);
   }
 

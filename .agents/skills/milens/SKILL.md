@@ -6,7 +6,7 @@ description: Code intelligence MCP tools — symbol search, text grep, impact an
 <!-- milens:start -->
 # Milens — AI-DOS
 
-The Operating System for AI-Driven Development. This project is indexed by milens (1363 symbols, 2273 links, 165 files).
+The Operating System for AI-Driven Development. This project is indexed by milens (1366 symbols, 2347 links, 166 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
@@ -307,6 +307,7 @@ After significant code changes: `npx milens analyze -p . --force` (replace `.` w
 | Work in the Security area | `.agents/skills/security/SKILL.md` |
 | Work in the Server area | `.agents/skills/server/SKILL.md` |
 | Work in the Store area | `.agents/skills/store/SKILL.md` |
+| Work in the Ui area | `.agents/skills/ui/SKILL.md` |
 | Execute milens-plan workflow | `.agents/skills/milens-plan/SKILL.md` |
 | Execute milens-code-review workflow | `.agents/skills/milens-code-review/SKILL.md` |
 | Execute milens-tdd workflow | `.agents/skills/milens-tdd/SKILL.md` |

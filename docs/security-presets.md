@@ -1,6 +1,6 @@
-# Milens Security — 50+ Built-in Rules
+# Milens Security — 190 Built-in Rules
 
-> Milens ships with 50+ security rules covering OWASP Top 10. Use `security_scan()` MCP tool or `milens security scan` CLI instead of manual grep patterns.
+> Milens ships with 190 security rules covering OWASP Top 10. Use `security_scan()` MCP tool or `milens security scan` CLI instead of manual grep patterns.
 
 ## Quick Usage
 

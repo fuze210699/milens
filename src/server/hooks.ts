@@ -157,6 +157,16 @@ export async function defaultOnSessionStart(ctx: SessionContext, dbPath: string)
     lines.push('');
   }
 
+  try {
+    const { generateCrossRefSection } = await import('../agents-md.js');
+    const crossRef = generateCrossRefSection(ctx.rootPath);
+    if (crossRef) {
+      lines.push(crossRef);
+    }
+  } catch {
+    // no cross-ref config — skip silently
+  }
+
   db.close();
   return lines.join('\n');
 }

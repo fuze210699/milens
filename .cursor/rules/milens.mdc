@@ -7,7 +7,7 @@ alwaysApply: true
 <!-- milens:start -->
 # Milens — AI-DOS
 
-The Operating System for AI-Driven Development. This project is indexed by milens (1363 symbols, 2273 links, 165 files).
+The Operating System for AI-Driven Development. This project is indexed by milens (1366 symbols, 2347 links, 166 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
@@ -308,6 +308,7 @@ After significant code changes: `npx milens analyze -p . --force` (replace `.` w
 | Work in the Security area | `.cursor/rules/security.mdc` |
 | Work in the Server area | `.cursor/rules/server.mdc` |
 | Work in the Store area | `.cursor/rules/store.mdc` |
+| Work in the Ui area | `.cursor/rules/ui.mdc` |
 | Execute milens-plan workflow | `.cursor/rules/milens-plan.mdc` |
 | Execute milens-code-review workflow | `.cursor/rules/milens-code-review.mdc` |
 | Execute milens-tdd workflow | `.cursor/rules/milens-tdd.mdc` |

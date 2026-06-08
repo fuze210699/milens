@@ -1,6 +1,6 @@
 # Milens Pricing
 
-> **The value proposition:** Milens saves ~70% AI token costs per session. The GitHub App automates this across your team. Pro pays for itself after 1-2 sessions per developer per month.
+> **The value proposition:** Milens saves ~70% AI token costs per session. The GitHub App automates this across your team. Pro at $5/seat pays for itself after 1-2 sessions per developer per month.
 
 ---
 
@@ -23,7 +23,7 @@
 |---|---|
 | All 43 MCP tools | ✓ Forever |
 | 6 sub-agent prompts | ✓ |
-| 50+ security rules | ✓ |
+| 190 security rules | ✓ |
 | CLI tools (init, workflow, hooks, security, watch) | ✓ |
 | AGENTS.md auto-generator | ✓ |
 | `/milens analyze` on public repos | 10/month |
@@ -32,7 +32,7 @@
 
 [Get Started](https://github.com/fuze210699/milens)
 
-### Pro — $1/seat/month
+### Pro — $5/seat/month
 
 **For professional teams.** The GitHub App automation layer.
 
@@ -63,7 +63,7 @@ The core MCP server (43 tools) is free forever. You pay for **automation** — t
 
 ### Does Pro really pay for itself?
 
-Yes. A single `review_pr()` call in the GitHub App replaces ~15K tokens of manual AI review work. With 100 PRs/month, the manual approach costs significant time and tokens. Pro costs just $5/month for 5 seats — the savings are immediate.
+Yes. A single `review_pr()` call in the GitHub App replaces ~15K tokens of manual AI review work. With 100 PRs/month, the manual approach costs significant time and tokens. Pro costs just $25/month for 5 seats — the savings are immediate.
 
 ### What's the difference between Free and Pro GitHub App?
 

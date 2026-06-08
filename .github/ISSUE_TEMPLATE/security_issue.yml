@@ -1,0 +1,83 @@
+name: "🔒 Security Issue"
+description: Report a security vulnerability (CVSS 7.0+)
+title: "[Security] "
+labels: ["security", "critical"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🔒 Security Issue
+
+        <!-- ⚠️ DO NOT include sensitive data, tokens, or credentials in this report -->
+
+        **Severity**
+        [ ] Low (CVSS 3.0-3.9)
+        [ ] Medium (CVSS 4.0-6.9)
+        [ ] High (CVSS 7.0-8.9)
+        [ ] Critical (CVSS 9.0-10.0)
+
+        **Vulnerability type**
+        e.g. SQL injection, XSS, hardcoded secret, prototype pollution, etc.
+
+        **Affected component**
+        File path and function/symbol name if known.
+
+        **Description**
+        Clear description of the vulnerability.
+
+        **Proof of concept**
+        Minimal reproduction (no real credentials/secrets).
+
+        **Impact**
+        What happens if this is exploited?
+
+        **Remediation**
+        Suggested fix or mitigation.
+
+        ---
+        > 🛡️ Run `milens security scan --scope secrets,injection,rce --severity HIGH` to check for common vulnerabilities.
+        > ⚡ For critical issues, contact maintainers directly via GitHub Security.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: "Severity level"
+      options:
+        - Low (CVSS 3.0-3.9)
+        - Medium (CVSS 4.0-6.9)
+        - High (CVSS 7.0-8.9)
+        - Critical (CVSS 9.0-10.0)
+    validations:
+      required: true
+
+  - type: textarea
+    id: vulnerability-type
+    attributes:
+      label: "Vulnerability type"
+      placeholder: "e.g. SQL injection, hardcoded secret, XSS..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "Description"
+      placeholder: "Full description of the vulnerability..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: "Impact if exploited"
+      placeholder: "What happens when exploited..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: remediation
+    attributes:
+      label: "Suggested remediation"
+      placeholder: "How to fix this..."

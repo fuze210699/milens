@@ -26,7 +26,7 @@ When working with code in **root/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 229 symbols (153 exported) across 13 files.
+Contains 242 symbols (164 exported) across 13 files.
 
 ## Key Symbols
 - **`CodeSymbol`** [interface] (src/types.ts:8) — 53 refs
@@ -40,14 +40,14 @@ Contains 229 symbols (153 exported) across 13 files.
 - **`RawAssignmentBinding`** [interface] (src/types.ts:88) — 6 refs
 - **`RawReturnType`** [interface] (src/types.ts:96) — 5 refs
 - **`RawCallResultBinding`** [interface] (src/types.ts:104) — 5 refs
-- **`generateAgentsMd`** [function] (src/agents-md.ts:43) — 4 refs
+- **`AnalysisStats`** [interface] (src/types.ts:113) — 5 refs
+- **`generateAgentsMd`** [function] (src/agents-md.ts:93) — 4 refs
 - **`computeMetrics`** [function] (src/metrics.ts:21) — 4 refs
 - **`formatMetricsReport`** [function] (src/metrics.ts:62) — 4 refs
-- **`MilensMetrics`** [interface] (src/metrics.ts:4) — 4 refs
 
 ## Entry Points
 - **`CodeSymbol`** [interface] — 53 incoming references
-- **`has`** [function] — 47 incoming references
+- **`has`** [function] — 50 incoming references
 - **`SymbolLink`** [interface] — 24 incoming references
 - **`RawCall`** [interface] — 15 incoming references
 - **`isTestFile`** [function] — 12 incoming references
@@ -55,20 +55,22 @@ Contains 229 symbols (153 exported) across 13 files.
 ## Dependencies
 - **store**: `Database`, `RepoRegistry`, `AnnotationStore`, `runDecayPass`, `getIncomingLinks`, `getAllSymbols`, `getCodebaseSummary`, `register` (+24 more)
 - **analyzer**: `loadAliases`, `analyze`, `resolve`, `clear`
+- **ui**: `createProgressReporter`, `finalize`
 - **server**: `startHttp`, `startStdio`, `HookManager`, `get`, `enableHook`, `loadConfig`, `saveConfig`, `disableHook`
 - **security**: `loadRules`, `auditDependencies`
 - **orchestrator**: `Orchestrator`, `subscribe`, `runAndFormat`
 - **test**: `add`, `dbPath`
-- **scripts**: `outDir`
+- **scripts**: `version`, `outDir`, `root`
 
 ## Used By
 - **analyzer**: `isTestFile`, `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding` (+8 more)
 - **orchestrator**: `CodeSymbol`, `has`
 - **parser**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+4 more)
+- **server**: `generateCrossRefSection`, `has`
 - **store**: `Annotation`, `AnnotationKey`, `Session`, `EvolutionEvent`, `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has` (+1 more)
+- **ui**: `AnalysisStats`
 - **test**: `generateAgentsMd`, `AnnotationKey`, `CodeSymbol`, `SymbolLink`, `computeMetrics`, `formatMetricsReport`, `MilensMetrics`, `RawImport` (+17 more)
 - **security**: `has`
-- **server**: `has`
 
 ## Files
 - AGENTS.md

@@ -25,23 +25,23 @@ Contains 128 symbols (29 exported) across 8 files.
 
 ## Key Symbols
 - **`resolveLinksWithStats`** [function] (src/analyzer/resolver.ts:37) — 9 refs
-- **`reviewPr`** [function] (src/analyzer/review.ts:280) — 9 refs
-- **`analyze`** [function] (src/analyzer/engine.ts:137) — 8 refs
+- **`reviewPr`** [function] (src/analyzer/review.ts:284) — 9 refs
+- **`analyze`** [function] (src/analyzer/engine.ts:139) — 8 refs
 - **`loadAliases`** [function] (src/analyzer/config.ts:10) — 6 refs
 - **`ResolutionResult`** [interface] (src/analyzer/resolver.ts:24) — 6 refs
-- **`diffResolutions`** [function] (src/analyzer/scope-resolver.ts:736) — 5 refs
+- **`diffResolutions`** [function] (src/analyzer/scope-resolver.ts:768) — 5 refs
 - **`enrichMetadata`** [function] (src/analyzer/enrich.ts:21) — 4 refs
 - **`ReviewResult`** [interface] (src/analyzer/review.ts:17) — 4 refs
 - **`scanFiles`** [function] (src/analyzer/scanner.ts:11) — 4 refs
 - **`resolveWithScopes`** [function] (src/analyzer/scope-resolver.ts:48) — 4 refs
-- **`clearTreeCache`** [function] (src/analyzer/engine.ts:28) — 3 refs
+- **`clearTreeCache`** [function] (src/analyzer/engine.ts:29) — 3 refs
 - **`resolveLinks`** [function] (src/analyzer/resolver.ts:32) — 3 refs
-- **`computeDiffStats`** [function] (src/analyzer/scope-resolver.ts:774) — 3 refs
-- **`getCachedTree`** [function] (src/analyzer/engine.ts:25) — 2 refs
-- **`reviewSymbol`** [function] (src/analyzer/review.ts:392) — 2 refs
+- **`computeDiffStats`** [function] (src/analyzer/scope-resolver.ts:806) — 3 refs
+- **`getCachedTree`** [function] (src/analyzer/engine.ts:26) — 2 refs
+- **`reviewSymbol`** [function] (src/analyzer/review.ts:396) — 2 refs
 
 ## Entry Points
-- **`resolve`** [method] — 23 incoming references
+- **`resolve`** [method] — 25 incoming references
 - **`find`** [function] — 14 incoming references
 - **`ScopeNode`** [interface] — 11 incoming references
 - **`resolveLinksWithStats`** [function] — 9 incoming references
@@ -50,8 +50,10 @@ Contains 128 symbols (29 exported) across 8 files.
 ## Dependencies
 - **parser**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `extractVueScript`, `extractVueTemplateRefs` (+9 more)
 - **root**: `isTestFile`, `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding` (+8 more)
-- **store**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `clearFiles`, `clear`, `isFileUpToDate` (+23 more)
+- **store**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile` (+22 more)
+- **ui**: `ProgressPhase`, `ProgressReporter`, `startPhase`, `tick`, `endPhase`, `done`, `finalize`
 - **test**: `add`, `parser`, `lang`
+- **scripts**: `root`
 
 ## Used By
 - **root**: `loadAliases`, `analyze`, `resolve`, `clear`

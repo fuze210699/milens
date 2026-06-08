@@ -402,7 +402,7 @@ When the user says... → do this FIRST:
 | "compare impact of \`X\`" | \`${t('compare_impact')}({name: "X", action: "snapshot"|"compare", repo: "<workspaceRoot>"})\` |
 | "check pre-commit" | \`${t('pre_commit_check')}({repo: "<workspaceRoot>"})\` |
 | "save/restore context" | \`${t('hook_preCompact')}()\` / \`${t('hook_postCompact')}()\` |
-| "scan security / audit security" | \`${t('security_scan')}({repo: "<workspaceRoot>"})\` — full audit across all 50+ rules |
+| "scan security / audit security" | \`${t('security_scan')}({repo: "<workspaceRoot>"})\` — full audit across all 190 rules |
 | "end session" / "finish work" | \`${t('session_end')}({session_id: "..."})\` — record stats, trigger onSessionEnd hook |
 | "what did session X do" | \`${t('session_context')}({session_id: "..."})\` — get annotations + tool calls |
 | "file changed to X" | \`${t('hook_onFileChange')}({files: ["path/to/file"], repo: "<workspaceRoot>"})\` |
@@ -474,7 +474,7 @@ Every time you discover something important about a symbol, annotate it. The sys
 | Find what needs testing most | \`${t('test_coverage_gaps')}()\` — sorted by risk |
 | Get a test strategy | \`${t('test_plan')}({name: "functionName"})\` — mocks + scenarios |
 | Review your changes | \`${t('review_pr')}()\` — risk scores for changed symbols |
-| Check for security issues | \`${t('security_scan')}()\` — 50+ rules in one call |
+| Check for security issues | \`${t('security_scan')}()\` — 190 rules in one call |
 | Remove dead code safely | \`${t('find_dead_code')}()\` then use \`dead_code_remove\` prompt |
 | Trace how code executes | \`${t('trace')}({name: "functionName", direction: "to"})\` |
 | Find API endpoints | \`${t('routes')}()\` — auto-detect across 7 frameworks |
@@ -551,7 +551,7 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` sy
 | \`${t('test_coverage_gaps')}\` | Untested symbols sorted by risk | Finding test priorities |
 | \`${t('test_impact')}\` | Maps changes → test files | After making edits |
 | \`${t('test_generate')}\` | Auto-generate test file | Starting tests from scratch |
-| \`${t('security_scan')}\` | 50+ security rules | Security audit requested |
+| \`${t('security_scan')}\` | 190 security rules | Security audit requested |
 | \`${t('trace')}\` | Call chains from entrypoints | Debugging execution flow |
 | \`${t('routes')}\` | Framework routes/endpoints | Finding API endpoints |
 | \`${t('smart_context')}\` | Intent-aware context | Understand/edit/debug/test modes |

@@ -1,0 +1,51 @@
+name: "✨ Feature Request"
+description: Suggest a new feature or improvement
+title: "[Feature] "
+labels: ["feature"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ✨ Feature Request
+
+        <!-- Replace everything in brackets [] with your info -->
+
+        **Is your feature related to a problem?**
+        Describe the problem you are solving.
+
+        **Describe the solution you'd like**
+        A clear description of what you want to happen.
+
+        **Describe alternatives you've considered**
+        Any alternative solutions you've considered.
+
+        **Additional context**
+        Any other context, mockups, or examples.
+
+        ---
+        > 💡 Use `/milens:plan "<feature>"` in an AI coding session to generate an implementation plan automatically.
+        > 🔍 Use `milens:architect` to understand how the feature fits the existing architecture.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Problem being solved"
+      placeholder: "What problem does this solve..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: "Proposed solution"
+      placeholder: "What should be built..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternatives considered"
+      placeholder: "Other approaches considered..."

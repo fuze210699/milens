@@ -11,7 +11,7 @@ const {
   parseArgs,
   slugify,
   VALID_TYPES,
-} = await import('../../scripts/pr-generator.js');
+} = await import('../../scripts/pr-generator.cjs');
 
 describe('detectTypeFromBranch', () => {
   it('detects fix type', () => {

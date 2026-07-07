@@ -80,7 +80,7 @@ export const OWASP_CATEGORIES: Record<string, string> = {
   'A10:2021': 'Server-Side Request Forgery (SSRF)',
 };
 
-const DEFAULT_EXCLUDE = '**/*.test.*,**/*.spec.*,**/node_modules/**,**/security/rules.ts,**/metric-milens-tool*.md,**/docs/**,**/*.html';
+const DEFAULT_EXCLUDE = '**/*.test.*,**/*.spec.*,**/node_modules/**,**/security/rules.ts,**/metric-milens-tool*.md,**/docs/**,**/*.html,**/mcp-prompts.ts';
 
 // ── Language-specific fileGlobs for cross-language coverage ──
 const JS_TS = '**/*.{js,jsx,ts,tsx,mjs,cjs}';

@@ -483,7 +483,7 @@ function resolveImportsInScopes(
 
     // F8: Full wildcard import expansion
     const semantics = input.perFileImportSemantics?.get(imp.filePath);
-    if (imp.isWildcard && (semantics === 'wildcard-leaf' || semantics === 'wildcard-transitive')) {
+    if (imp.isWildcard && (semantics === 'wildcard-leaf' || semantics === 'wildcard-transitive' || imp.isDynamic)) {
       const targetSymbols = input.symbolsByFile.get(targetFile);
       if (targetSymbols) {
         for (const sym of targetSymbols.filter(s => s.exported)) {

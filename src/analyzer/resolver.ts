@@ -64,7 +64,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     }
     // Wildcard-leaf semantics: expand wildcard import to include all exported symbols
     const semantics = input.perFileImportSemantics?.get(imp.filePath);
-    if (imp.isWildcard && semantics === 'wildcard-leaf') {
+    if (imp.isWildcard && (semantics === 'wildcard-leaf' || imp.isDynamic)) {
       const targetSymbols = input.symbolsByFile.get(targetFile);
       if (targetSymbols) {
         for (const sym of targetSymbols.filter(s => s.exported)) {

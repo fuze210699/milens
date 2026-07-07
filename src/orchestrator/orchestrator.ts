@@ -7,6 +7,16 @@ import type { ReviewResult } from '../analyzer/review.js';
 import type { CodeSymbol } from '../types.js';
 import { formatReport, type OrchestratorReport, type ReportOptions } from './reporter.js';
 
+function getGitChangedFiles(rootPath: string): string[] {
+  try {
+    const output = execFileSync('git', ['diff', '--name-only', 'HEAD'], { cwd: rootPath, encoding: 'utf-8' });
+    const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: rootPath, encoding: 'utf-8' });
+    return [...new Set([...output.trim().split('\n'), ...staged.trim().split('\n')])].filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 export interface OrchestratorConfig {
   rootPath: string;
   dbPath: string;
@@ -113,8 +123,13 @@ export class Orchestrator {
   async run(): Promise<OrchestratorReport> {
     this.cycleNumber++;
     const t0 = Date.now();
-    const files = [...this.changedFiles];
+    let files = [...this.changedFiles];
     this.changedFiles.clear();
+
+    // Fallback: when called from MCP tool (not live-watcher), compute from git diff
+    if (files.length === 0) {
+      files = getGitChangedFiles(this.config.rootPath);
+    }
 
     if (files.length === 0) {
       return { cycleNumber: this.cycleNumber, changedFiles: [], review: createEmptyReview(), coverageGaps: [], deadSymbols: [], durationMs: 0 };

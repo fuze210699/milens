@@ -6,6 +6,12 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadAliases } from './analyzer/config.js';
 
+const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
+if (nodeMajor < 20) {
+  process.stderr.write(`milens requires Node.js >= 20.0.0 (current: ${process.version})\n`);
+  process.exit(1);
+}
+
 const program = new Command();
 
 const __filename = fileURLToPath(import.meta.url);

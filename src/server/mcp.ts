@@ -1,11 +1,11 @@
-import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { resolve, relative, join, dirname, basename } from 'node:path';
-import { execSync, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import ignore from 'ignore';
@@ -14,13 +14,13 @@ import { RepoRegistry } from '../store/registry.js';
 import { getParser, loadLanguage } from '../parser/loader.js';
 import { ALL_LANGS } from '../parser/languages.js';
 import { fileURLToPath } from 'node:url';
-import { generateTestPlan } from './test-plan.js';
 import { AnnotationStore } from '../store/annotations.js';
-import { join as pathJoin } from 'node:path';
-import { registerAllPrompts, MILENS_PROMPT_NAMES } from './mcp-prompts.js';
-import { loadRules } from '../security/rules.js';
-import { HookManager, defaultOnSessionStart, defaultOnSessionEnd, defaultOnPreCommit, defaultOnFileChange, defaultOnPreCompact, defaultOnPostCompact } from './hooks.js';
+import { registerAllPrompts } from './mcp-prompts.js';
 import { Orchestrator } from '../orchestrator/orchestrator.js';
+import { registerResources } from './tools/resources.js';
+import { registerSessionTools } from './tools/session.js';
+import { registerTestingTools } from './tools/testing.js';
+import { registerSecurityTools } from './tools/security.js';
 import { FileWatcher } from './watcher.js';
 import { reviewPr } from '../analyzer/review.js';
 
@@ -944,7 +944,8 @@ export function createMcpServer(rootPath?: string): McpServer {
               lines.push(`  domains: ${summary.domains.join(', ')}`);
             }
             if (summary.staleCount > 0) {
-              lines.push(`  ⏳ ${summary.staleCount} stale files`);
+              const stalePct = summary.files > 0 ? Math.round(summary.staleCount / summary.files * 100) : 0;
+              lines.push(`  ⏳ ${summary.staleCount} stale files (>24h)${stalePct > 20 ? ' — ⚠ run `milens analyze` to refresh' : ''}`);
             }
             if (!pools.has(entry.rootPath)) tempDb.close();
           }
@@ -1063,12 +1064,20 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
     async ({ from, to, repo }) => {
       const { db } = getDb(repo);
+      const fromSyms = db.findSymbolByName(from);
+      const toSyms = db.findSymbolByName(to);
+      if (fromSyms.length === 0) {
+        return { content: [{ type: 'text' as const, text: `Symbol "${from}" not found in index. Try \`grep\`.` }] };
+      }
+      if (toSyms.length === 0) {
+        return { content: [{ type: 'text' as const, text: `Symbol "${to}" not found in index. Try \`grep\`.` }] };
+      }
       const path = db.findPath(from, to);
       if (!path) {
         return { content: [{ type: 'text' as const, text: `No path between "${from}" and "${to}".` }] };
       }
 
-      const fromSym = db.findSymbolByName(from)[0];
+      const fromSym = fromSyms[0];
       const lines = [`FROM: ${fmtSymbol(fromSym)}`, ''];
       for (const { symbol, depth, via } of path) {
         lines.push(`  ${'→'.repeat(depth)} [${via}] ${fmtSymbol(symbol)}`);
@@ -1935,278 +1944,10 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
-  // ═══ test_coverage_gaps ═══
-  server.tool(
-    'test_coverage_gaps',
-    'Untested exported symbols sorted by risk. Prioritize writing tests for these.',
-    { limit: z.number().optional().default(20), repo: z.string().optional() },
-    async ({ limit, repo }) => {
-      const { db } = getDb(repo);
-      const coverage = db.getTestCoverage();
-      const gaps = db.getTestCoverageGaps(limit);
-      const lines = [`Test Coverage: ${coverage.testedSymbols}/${coverage.exportedProductionSymbols} (${coverage.exportedProductionSymbols > 0 ? Math.round(coverage.testedSymbols / coverage.exportedProductionSymbols * 100) : 0}%) from ${coverage.testFiles} test files\n`];
-      if (gaps.length === 0) {
-        lines.push('All exported symbols have test coverage!');
-      } else {
-        lines.push(`Top ${gaps.length} untested symbols:\n`);
-        for (const g of gaps) {
-          const incoming = db.getIncomingLinks(g.id).filter(l => l.type !== 'contains');
-          const risk = (g.heat ?? 0) > 80 ? 'CRITICAL' : (g.heat ?? 0) > 50 ? 'HIGH' : (g.heat ?? 0) > 30 ? 'MEDIUM' : 'LOW';
-          lines.push(`  ${g.name} [${g.kind}] ${g.filePath}:${g.startLine} — heat:${g.heat ?? 0} deps:${incoming.length} risk:${risk}`);
-        }
-      }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
+  registerTestingTools(server, { getDb, fmtSymbol, fmtImpact, rootPath, toolCallCounts, resolveRoot, guard, getToolCallCount });
 
-  // ═══ test_impact ═══
-  server.tool(
-    'test_impact',
-    'Map changed code -> which test files to run. Use after making changes.',
-    { ref: z.string().optional().default('HEAD'), repo: z.string().optional() },
-    async ({ ref, repo }) => {
-      const { db, root } = getDb(repo);
-      let changedFiles: string[] = [];
-      try {
-        const { execSync } = await import('node:child_process');
-        const diff = execSync(`git diff --name-only ${ref}`, { cwd: root, encoding: 'utf-8' }).trim();
-        changedFiles = diff ? diff.split('\n').filter(Boolean) : [];
-      } catch {}
-      if (changedFiles.length === 0) return { content: [{ type: 'text' as const, text: 'No changed files.' }] };
-      const changedIds: string[] = [];
-      const changedNames: string[] = [];
-      for (const file of changedFiles) {
-        for (const sym of db.getSymbolsByFile(file)) {
-          changedIds.push(sym.id);
-          changedNames.push(sym.name);
-        }
-      }
-      if (changedIds.length === 0) return { content: [{ type: 'text' as const, text: 'No symbols in changed files.' }] };
-      const impact = db.getTestImpact(changedIds);
-      const lines = [`Changed symbols (${changedNames.length}): ${changedNames.join(', ')}`];
-      lines.push(`\nAffected test files (${impact.testFiles.length}):`);
-      for (const f of impact.testFiles) lines.push(`  ${f}`);
-      if (impact.testFiles.length > 0) {
-        lines.push(`\nSuggested command: npx vitest run ${impact.testFiles.join(' ')}`);
-      }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
 
-  // ═══ test_plan ═══
-  server.tool(
-    'test_plan',
-    'Generate a test strategy for a symbol: mock plan + >=3 test scenarios.',
-    { name: z.string(), repo: z.string().optional() },
-    async ({ name, repo }) => {
-      const { db, root } = getDb(repo);
-      const plan = generateTestPlan(db, name, root);
-      if (!plan) return { content: [{ type: 'text' as const, text: `"${name}" not found.` }] };
-      return { content: [{ type: 'text' as const, text: plan.planText }] };
-    },
-  );
-
-  // ═══ annotate ═══
-  server.tool(
-    'annotate',
-    'Record a note about a symbol for future sessions. Use after discovering bugs, patterns, or important caveats.',
-    {
-      symbol: z.string(),
-      key: z.enum(['note', 'bug', 'security', 'architecture', 'workflow', 'test', 'dependency', 'refactor']),
-      value: z.string(),
-      agent: z.string().optional(),
-      session_id: z.string().optional(),
-      confidence: z.number().optional().default(0.5),
-    },
-    async ({ symbol, key, value, agent, session_id, confidence }) => {
-      const { db } = getDb();
-      const store = new AnnotationStore(db.connection);
-      const ann = store.annotate(symbol, key as any, value, { agent, sessionId: session_id });
-      return { content: [{ type: 'text' as const, text: `Annotation saved: ${ann.id}\n  symbol: ${ann.symbol}\n  key: ${ann.key}\n  confidence: ${ann.confidence}` }] };
-    },
-  );
-
-  // ═══ recall ═══
-  server.tool(
-    'recall',
-    'Retrieve annotations saved in previous sessions. Filter by symbol, key, or agent.',
-    {
-      symbol: z.string().optional(), key: z.enum(['note', 'bug', 'security', 'architecture', 'workflow', 'test', 'dependency', 'refactor']).optional(),
-      agent: z.string().optional(), limit: z.number().optional().default(50),
-    },
-    async ({ symbol, key, agent, limit }) => {
-      const { db } = getDb();
-      const store = new AnnotationStore(db.connection);
-      const results = store.recall({ symbol, key, agent, limit });
-      if (results.length === 0) return { content: [{ type: 'text' as const, text: 'No annotations found.' }] };
-      const lines = [`${results.length} annotation(s):\n`];
-      for (const a of results) {
-        lines.push(`[${a.key}] ${a.symbol} — ${a.value.slice(0, 120)}`);
-        lines.push(`  confidence: ${a.confidence.toFixed(1)} | agent: ${a.agent ?? '?'} | ${a.updatedAt}\n`);
-      }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
-
-  // ═══ session_start ═══
-  server.tool(
-    'session_start',
-    'Start a new session. Returns a session ID to use with annotate, session_end, and handoff.',
-    { agent: z.string().describe('Agent name (e.g. vibe-coder, reviewer)') },
-    async ({ agent }) => {
-      const { db, root, dbPath } = getDb();
-      const store = new AnnotationStore(db.connection);
-      const sessionId = store.sessionStart(agent);
-
-      let hookOutput = '';
-      try {
-        const manager = new HookManager();
-        const config = manager.loadConfig(root);
-        if (config.enabled && config.onSessionStart) {
-          hookOutput = await defaultOnSessionStart({ agent, sessionId, rootPath: root }, dbPath);
-        }
-      } catch { /* hooks are best-effort */ }
-
-      const text = `Session started: ${sessionId}\nAgent: ${agent}\nUse this ID with annotate() and session_end().`;
-      return { content: [{ type: 'text' as const, text: hookOutput ? `${hookOutput}\n\n${text}` : text }] };
-    },
-  );
-
-  // ═══ session_context ═══
-  server.tool(
-    'session_context',
-    'Get metadata about a session: annotations, tool calls, duration.',
-    { session_id: z.string() },
-    async ({ session_id }) => {
-      const { db, root } = getDb();
-      const store = new AnnotationStore(db.connection);
-      const ctx = store.sessionContext(session_id);
-      if (!ctx.session) return { content: [{ type: 'text' as const, text: `Session "${session_id}" not found.` }] };
-      const s = ctx.session;
-      const liveCalls = getToolCallCount(root);
-      const displayCalls = s.toolCallsCount > 0 ? s.toolCallsCount : liveCalls;
-      const lines = [
-        `Session: ${s.id}`,
-        `Agent: ${s.agent} | Status: ${s.status}`,
-        `Started: ${s.startedAt} | Ended: ${s.endedAt ?? 'in progress'}`,
-        `Tool calls: ${displayCalls}${s.toolCallsCount === 0 ? ' (live count, resets on restart)' : ''} | Annotations: ${s.annotationsCount}`,
-      ];
-      if (s.context) lines.push(`Context: ${s.context}`);
-      if (ctx.annotations.length > 0) {
-        lines.push(`\nAnnotations (${ctx.annotations.length}):`);
-        for (const a of ctx.annotations) {
-          lines.push(`  [${a.key}] ${a.symbol}: ${a.value.slice(0, 80)}`);
-        }
-      }
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
-
-  // ═══ session_end ═══
-  server.tool(
-    'session_end',
-    'End a session and record its stats. Shows audit trail: which symbols were safety-checked vs total edit operations. Use at the end of every session.',
-    { session_id: z.string(), status: z.enum(['completed', 'failed']).optional().default('completed') },
-    async ({ session_id, status }) => {
-      const { db, root, dbPath } = getDb();
-      const store = new AnnotationStore(db.connection);
-      const summary = store.sessionEnd(session_id, status);
-
-      // Audit trail from SessionGuard
-      const audit = guard.getAudit(session_id);
-      guard.clear(session_id);
-
-      let hookOutput = '';
-      try {
-        const ctx = store.sessionContext(session_id);
-        const manager = new HookManager();
-        const config = manager.loadConfig(root);
-        if (config.enabled && config.onSessionEnd) {
-          hookOutput = await defaultOnSessionEnd({ agent: ctx.session.agent, sessionId: session_id, rootPath: root }, dbPath);
-        }
-      } catch { /* hooks are best-effort */ }
-
-      const lines = [
-        `Session ended: ${session_id}`,
-        `Status: ${status}`,
-        `Annotations: ${summary.annotationCount}`,
-        `───`,
-        `Audit Trail:`,
-        `  safety checks performed: ${audit.checked.length}`,
-        audit.checked.length > 0 ? `  symbols checked: ${audit.checked.join(', ')}` : '  ⚠ no symbols were checked via guard_edit_check',
-        audit.editOps > 0 ? `  edit operations reported: ${audit.editOps}` : null,
-      ].filter(Boolean);
-      const text = lines.join('\n');
-      return { content: [{ type: 'text' as const, text: hookOutput ? `${text}\n\n${hookOutput}` : text }] };
-    },
-  );
-
-  // ═══ handoff ═══
-  server.tool(
-    'handoff',
-    'Transfer context from one agent session to another. Ends the source session and creates a new one for the target agent.',
-    {
-      from_session: z.string(), to_agent: z.string(),
-      context: z.string().describe('Summary of what was done, key decisions, and caveats for the next agent'),
-    },
-    async ({ from_session, to_agent, context }) => {
-      const { db } = getDb();
-      const store = new AnnotationStore(db.connection);
-      const result = store.handoff(from_session, to_agent, context);
-      return { content: [{ type: 'text' as const, text: `Handoff complete.\nNew session: ${result.newSessionId}\nAgent: ${to_agent}\nAnnotations copied: ${result.annotationsCopied}` }] };
-    },
-  );
-
-  // ═══ pre_commit_check ═══
-  server.tool(
-    'pre_commit_check',
-    'Run pre-commit risk analysis: detect_changes + review_pr + dead code + coverage gaps. Use before committing.',
-    { repo: z.string().optional().describe('Repository root path') },
-    async ({ repo }) => {
-      const { root } = getDb(repo);
-      const report = await defaultOnPreCommit(root);
-      return { content: [{ type: 'text' as const, text: report }] };
-    },
-  );
-
-  // ═══ hook_onFileChange ═══
-  server.tool(
-    'hook_onFileChange',
-    'Trigger the onFileChange hook. Call this when files are modified to get impact summary.',
-    {
-      files: z.array(z.string()).describe('List of changed file paths'),
-      repo: z.string().optional(),
-    },
-    async ({ files, repo }) => {
-      const { root } = getDb(repo);
-      const report = await defaultOnFileChange(files, root);
-      return { content: [{ type: 'text' as const, text: report }] };
-    },
-  );
-
-  // ═══ hook_preCompact ═══
-  server.tool(
-    'hook_preCompact',
-    'Trigger pre-compaction hook. Saves a metrics snapshot before context window compaction.',
-    { repo: z.string().optional() },
-    async ({ repo }) => {
-      const { root, dbPath } = getDb(repo);
-      const report = await defaultOnPreCompact(root, dbPath);
-      return { content: [{ type: 'text' as const, text: report }] };
-    },
-  );
-
-  // ═══ hook_postCompact ═══
-  server.tool(
-    'hook_postCompact',
-    'Trigger post-compaction hook. Recalls annotations to restore context after compaction.',
-    { repo: z.string().optional() },
-    async ({ repo }) => {
-      const { root } = getDb(repo);
-      const report = await defaultOnPostCompact(root);
-      return { content: [{ type: 'text' as const, text: report }] };
-    },
-  );
+  registerSessionTools(server, { getDb, fmtSymbol, fmtImpact, rootPath, toolCallCounts, resolveRoot, guard, getToolCallCount });
 
   // ═══ semantic_search ═══
   server.tool(
@@ -2249,134 +1990,17 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ══════════════════════════════════════════════
   // ── MCP Resources ──
   // ══════════════════════════════════════════════
+  registerResources(server, {
+    getDb,
+    fmtSymbol,
+    fmtImpact,
+    rootPath,
+    toolCallCounts,
+    resolveRoot,
+    guard,
+    getToolCallCount,
+  });
 
-  // ── Resource: milens://symbol/{name} ──
-  server.resource(
-    'symbol',
-    new ResourceTemplate('milens://symbol/{name}', { list: undefined }),
-    { description: 'Symbol context: definition, incoming refs, outgoing deps, role/heat metadata' },
-    async (uri, { name }) => {
-      const { db } = getDb();
-      const symbols = db.findSymbolByName(name as string);
-      if (symbols.length === 0) {
-        return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: `"${name}" not found.` }] };
-      }
-      const lines: string[] = [];
-      for (const sym of symbols) {
-        lines.push(`${fmtSymbol(sym, 'L2')}${sym.exported ? ' (exported)' : ''}`);
-        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-        if (incoming.length > 0) {
-          lines.push(`incoming (${incoming.length}):`);
-          for (const l of incoming) {
-            const from = db.findSymbolById(l.fromId);
-            lines.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
-          }
-        }
-        const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
-        if (outgoing.length > 0) {
-          lines.push(`outgoing (${outgoing.length}):`);
-          for (const l of outgoing) {
-            const to = db.findSymbolById(l.toId);
-            lines.push(`  ${l.type}: ${to ? fmtSymbol(to) : l.toId}`);
-          }
-        }
-        lines.push('');
-      }
-      return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: lines.join('\n') }] };
-    },
-  );
-
-  // ── Resource: milens://file/{path} ──
-  server.resource(
-    'file-symbols',
-    new ResourceTemplate('milens://file/{+path}', { list: undefined }),
-    { description: 'All symbols in a file with ref/dep counts' },
-    async (uri, { path }) => {
-      const { db } = getDb();
-      const filePath = decodeURIComponent(path as string);
-      const symbols = db.getSymbolsByFile(filePath);
-      if (symbols.length === 0) {
-        return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: `No symbols in "${filePath}".` }] };
-      }
-      const lines: string[] = [`${filePath}: ${symbols.length} symbols\n`];
-      for (const sym of symbols) {
-        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-        const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
-        const exp = sym.exported ? ' (exported)' : '';
-        lines.push(`${fmtSymbol(sym, 'L2')}${exp} ← ${incoming.length} refs, → ${outgoing.length} deps`);
-      }
-      return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: lines.join('\n') }] };
-    },
-  );
-
-  // ── Resource: milens://domain/{name} ──
-  server.resource(
-    'domain',
-    new ResourceTemplate('milens://domain/{name}', { list: undefined }),
-    { description: 'Domain cluster details: files and top symbols in a domain' },
-    async (uri, { name }) => {
-      const { db } = getDb();
-      const domainName = name as string;
-      // Find files in this domain
-      const allFiles = db.db_getFilesByZone(domainName);
-      if (allFiles.length === 0) {
-        return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: `Domain "${domainName}" not found.` }] };
-      }
-      const lines: string[] = [`domain: ${domainName} (${allFiles.length} files)\n`];
-      let totalSymbols = 0;
-      for (const file of allFiles) {
-        const syms = db.getSymbolsByFile(file);
-        totalSymbols += syms.length;
-        const exported = syms.filter(s => s.exported);
-        lines.push(`${file}: ${syms.length} symbols (${exported.length} exported)`);
-      }
-      lines.push(`\ntotal: ${totalSymbols} symbols in ${allFiles.length} files`);
-      return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: lines.join('\n') }] };
-    },
-  );
-
-  // ── Resource: milens://overview ──
-  server.resource(
-    'overview',
-    'milens://overview',
-    { description: 'Index overview: stats, domains, unresolved, test coverage, staleness' },
-    async (uri) => {
-      const { db, root, lazy } = getDb();
-      const stats = lazy.getCachedStats();
-      const unresolved = db.getUnresolvedStats();
-      const coverage = db.getTestCoverage();
-      const domains = lazy.getCachedDomainStats();
-      const staleFiles = db.getStaleFiles(24);
-
-      const lines: string[] = [
-        `repo: ${root}`,
-        `symbols: ${stats.symbols}`,
-        `links: ${stats.links}`,
-        `files: ${stats.files}`,
-      ];
-      if (unresolved.imports > 0 || unresolved.calls > 0) {
-        lines.push(`⚠ unresolved (internal): ${unresolved.imports} imports, ${unresolved.calls} calls`);
-      }
-      if (unresolved.externalImports > 0 || unresolved.externalCalls > 0) {
-        lines.push(`external (expected): ${unresolved.externalImports} imports, ${unresolved.externalCalls} calls`);
-      }
-      if (coverage.testFiles > 0) {
-        const pct = coverage.exportedProductionSymbols > 0
-          ? Math.round(coverage.testedSymbols / coverage.exportedProductionSymbols * 100) : 0;
-        lines.push(`test coverage: ${coverage.testedSymbols}/${coverage.exportedProductionSymbols} (${pct}%) from ${coverage.testFiles} test files`);
-      }
-      if (domains.length > 0) {
-        lines.push(`\ndomains (${domains.length}):`);
-        for (const d of domains) {
-          lines.push(`  ${d.domain}: ${d.files} files, ${d.symbols} symbols`);
-        }
-      }
-      if (staleFiles.length > 0) {
-        lines.push(`\n⏳ ${staleFiles.length} stale files (>24h)`);
-      }
-      return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: lines.join('\n') }] };
-    },
-  );
 
   // ── Prompt: delete-feature ──
   server.prompt(
@@ -2538,142 +2162,8 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Register MCP Prompts (W1) ──
   registerAllPrompts(server);
 
-  // ── Tool: security_scan (S2) ──
-  server.tool(
-    'security_scan',
-    'Scan codebase for security vulnerabilities using 190+ built-in rules across 25 categories. Replaces multiple manual grep() calls. Categories: secrets, injection, rce, xss, deserialization, ssrf, xxe, path-traversal, file-upload, unicode, dangerous, config, data-leak, crypto, auth, jwt, cors-headers, dependency, cloud, docker, kubernetes, iac, business-logic, api-security, misc, file-access.',
-    {
-      scope: z.enum(['all', 'secrets', 'injection', 'rce', 'xss', 'deserialization', 'ssrf', 'xxe', 'path-traversal', 'file-upload', 'unicode', 'dangerous', 'config', 'data-leak', 'crypto', 'auth', 'jwt', 'cors-headers', 'dependency', 'cloud', 'docker', 'kubernetes', 'iac', 'business-logic', 'api-security', 'misc', 'file-access']).optional().default('all').describe('Scan scope'),
-      repo: z.string().optional().describe('Repository root path'),
-      severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional().describe('Minimum severity filter'),
-      limit: z.number().optional().default(50).describe('Max findings'),
-    },
-    async ({ scope, repo, severity, limit }) => {
-      const { db, root } = getDb(repo);
-      const rules = loadRules();
-      
-      // Filter rules by scope and severity
-      const filtered = rules.filter(r => {
-        if (scope !== 'all' && r.category !== scope) return false;
-        if (severity) {
-          const sevOrder: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
-          if ((sevOrder[r.severity] || 0) < (sevOrder[severity] || 0)) return false;
-        }
-        return r.enabled;
-      });
+  registerSecurityTools(server, { getDb, fmtSymbol, fmtImpact, rootPath, toolCallCounts, resolveRoot, guard, getToolCallCount });
 
-      // Get all source files from the DB
-      const symbols = db.getAllSymbols();
-      const fileSet = new Set<string>();
-      for (const s of symbols) {
-        if (s.filePath && !s.filePath.includes('node_modules') && !s.filePath.includes('.git')) {
-          fileSet.add(s.filePath);
-        }
-      }
-      const files = [...fileSet].slice(0, 1000); // cap at 1000 files
-
-      const { readFileSync: rfs, existsSync: es } = await import('node:fs');
-      const { resolve: resolvePath } = await import('node:path');
-
-      const findings: any[] = [];
-      const byCategory: Record<string, number> = {};
-      const bySeverity: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-
-      for (const file of files) {
-        const fullPath = resolvePath(root, file);
-        if (!es(fullPath)) continue;
-        
-        // Apply excludeGlob from each rule's exclusion pattern
-        let shouldExclude = false;
-        for (const rule of filtered) {
-          if (rule.excludeGlob) {
-            const excludePatterns = rule.excludeGlob.split(',');
-            for (const pattern of excludePatterns) {
-              const regex = new RegExp(
-                '^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\*\*/g, '.*') + '$'
-              );
-              if (regex.test(file) || regex.test('/' + file)) {
-                shouldExclude = true;
-                break;
-              }
-            }
-          }
-          if (shouldExclude) break;
-        }
-        if (shouldExclude) continue;
-
-        // Skip files that don't match rule fileGlobs (simple check)
-        const applicableRules = filtered.filter(r => {
-          if (!r.fileGlob) return true;
-          // Simple glob: just check extension
-          const ext = r.fileGlob.replace('**/*.', '').replace('**/*', '');
-          return file.endsWith(ext) || r.fileGlob === '**/*';
-        });
-
-        if (applicableRules.length === 0) continue;
-
-        try {
-          const content = rfs(fullPath, 'utf-8');
-          const lines = content.split('\n');
-
-          for (const rule of applicableRules) {
-            for (const pattern of rule.patterns) {
-              let match;
-              // Reset regex lastIndex for global patterns
-              pattern.lastIndex = 0;
-              while ((match = pattern.exec(content)) !== null) {
-                const lineNum = content.substring(0, match.index).split('\n').length;
-                const ctxStart = Math.max(0, lineNum - 3);
-                const ctxEnd = Math.min(lines.length, lineNum + 2);
-                const context = lines.slice(ctxStart, ctxEnd).join('\n');
-                
-                findings.push({
-                  ruleId: rule.id,
-                  category: rule.category,
-                  severity: rule.severity,
-                  owasp: rule.owasp,
-                  file,
-                  line: lineNum,
-                  match: match[0].length > 100 ? match[0].slice(0, 97) + '...' : match[0],
-                  context,
-                  fix: rule.fix,
-                });
-
-                byCategory[rule.category] = (byCategory[rule.category] || 0) + 1;
-                bySeverity[rule.severity] = (bySeverity[rule.severity] || 0) + 1;
-              }
-            }
-          }
-        } catch {
-          // Skip unreadable files
-        }
-      }
-
-      // Calculate security score (100 - deductions)
-      const deduction = findings.filter((f: any) => f.severity === 'CRITICAL').length * 5 +
-        findings.filter((f: any) => f.severity === 'HIGH').length * 2 +
-        findings.filter((f: any) => f.severity === 'MEDIUM').length * 0.5;
-      const score = Math.max(0, Math.round(100 - deduction));
-
-      const limited = findings.slice(0, limit);
-
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({
-            summary: {
-              totalScanned: files.length,
-              findings: findings.length,
-              byCategory,
-              bySeverity,
-              score,
-            },
-            findings: limited,
-          }, null, 2),
-        }],
-      };
-    },
-  );
 
   // ═══ compare_impact ═══
   server.tool(
@@ -2744,100 +2234,6 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
-  // ═══ fix_apply ═══
-  server.tool(
-    'fix_apply',
-    'Apply a security fix suggestion to a file. Creates a backup before modifying. CRITICAL rules require confirm: true.',
-    {
-      ruleId: z.string().describe('Security rule ID (e.g. "hardcoded_secret")'),
-      file: z.string().describe('File path relative to repo root'),
-      line: z.number().describe('Line number where the issue was found'),
-      confirm: z.boolean().optional().default(false).describe('Confirmation required for CRITICAL rules'),
-      repo: z.string().optional(),
-    },
-    async ({ ruleId, file, line, confirm, repo }) => {
-      const { root } = getDb(repo);
-      const rules = loadRules();
-      const rule = rules.find(r => r.id === ruleId);
-      if (!rule) return { content: [{ type: 'text' as const, text: `Rule not found: "${ruleId}"` }] };
-      if (rule.severity === 'CRITICAL' && !confirm) {
-        return { content: [{ type: 'text' as const, text: `CRITICAL rule "${ruleId}" requires confirmation. Set confirm: true to proceed.` }] };
-      }
-
-      const fullPath = resolve(root, file);
-      if (!existsSync(fullPath)) return { content: [{ type: 'text' as const, text: `File not found: ${file}` }] };
-
-      const content = readFileSync(fullPath, 'utf-8');
-      const lines = content.split('\n');
-      if (line < 1 || line > lines.length) return { content: [{ type: 'text' as const, text: `Line ${line} out of range (file has ${lines.length} lines).` }] };
-
-      // Backup original
-      const backupDir = join(root, '.milens', 'backups');
-      mkdirSync(backupDir, { recursive: true });
-      const backupPath = join(backupDir, `${file.replace(/[\\/]/g, '_')}_${Date.now()}.bak`);
-      writeFileSync(backupPath, content, 'utf-8');
-
-      // Apply fix: add comment above the affected line with the fix suggestion
-      const targetLine = lines[line - 1];
-      const indent = targetLine.match(/^(\s*)/)?.[1] ?? '';
-      const fixComment = `${indent}// milens(fix): rule=${rule.id} — ${rule.fix ?? 'Review manually'}`;
-      lines.splice(line - 1, 0, fixComment);
-      const newContent = lines.join('\n');
-      writeFileSync(fullPath, newContent, 'utf-8');
-
-      return { content: [{ type: 'text' as const, text: `Fix applied for rule "${ruleId}" at ${file}:${line}\nSeverity: ${rule.severity}\nBackup: ${relative(root, backupPath)}\nFix: ${rule.fix ?? 'Manual review needed'}\n\nAdded fix comment above line ${line}.` }] };
-    },
-  );
-
-  // ═══ test_generate ═══
-  server.tool(
-    'test_generate',
-    'Generate a test file for a symbol using its test plan. Detects test framework and follows project conventions.',
-    {
-      symbol: z.string().describe('Symbol name to generate tests for'),
-      repo: z.string().optional(),
-    },
-    async ({ symbol, repo }) => {
-      const { db, root } = getDb(repo);
-      const plan = generateTestPlan(db, symbol, root);
-      if (!plan) return { content: [{ type: 'text' as const, text: `Symbol not found: "${symbol}"` }] };
-
-      // Detect test framework
-      const framework = detectTestFramework(root);
-      const testExt = framework === 'pytest' ? '.py' : '.test.ts';
-
-      // Determine test file path
-      const srcFile = plan.file;
-      const srcDir = dirname(srcFile);
-      const srcName = basename(srcFile, srcFile.includes('.') ? '.' + srcFile.split('.').pop()! : '');
-      const testFileName = `${srcName}${testExt}`;
-      const testDir = join(srcDir, '__tests__');
-      const testPath = join(testDir, testFileName);
-
-      // Don't overwrite existing test files
-      if (existsSync(join(root, testPath))) {
-        return { content: [{ type: 'text' as const, text: `Test file already exists at ${testPath}. Skipping to avoid overwrite.` }] };
-      }
-
-      // Check if a sister test file exists alongside the source
-      const altTestPath = join(srcDir, testFileName);
-      const existingTestDir = existsSync(join(root, testDir));
-      const altExists = existsSync(join(root, altTestPath));
-      if (altExists) {
-        return { content: [{ type: 'text' as const, text: `Test file exists at ${altTestPath}. Skipping to avoid overwrite.` }] };
-      }
-
-      // Generate test code
-      const testCode = generateTestCode(plan, framework, srcFile);
-
-      // Write the test file
-      const writePath = existingTestDir ? testPath : altTestPath;
-      mkdirSync(dirname(join(root, writePath)), { recursive: true });
-      writeFileSync(join(root, writePath), testCode, 'utf-8');
-
-      return { content: [{ type: 'text' as const, text: `Test file generated: ${writePath}\nFramework: ${framework}\nScenarios: ${plan.testScenarios.length}\nMock deps: ${plan.mockStrategy.length}` }] };
-    },
-  );
 
   // ── Prompt: dead_code_remove ──
   server.prompt(
@@ -2872,104 +2268,6 @@ export function createMcpServer(rootPath?: string): McpServer {
 
 // ── Helpers ──
 
-function detectTestFramework(rootPath: string): 'jest' | 'vitest' | 'mocha' | 'pytest' {
-  try {
-    const pkgPath = resolve(rootPath, 'package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    const deps = { ...pkg.devDependencies, ...pkg.dependencies };
-    if (deps.vitest) return 'vitest';
-    if (deps.jest) return 'jest';
-    if (deps.mocha) return 'mocha';
-  } catch {}
-  // Check for Python
-  try {
-    const cfg = readFileSync(resolve(rootPath, 'pytest.ini'), 'utf-8');
-    return 'pytest';
-  } catch {}
-  try {
-    const cfg = readFileSync(resolve(rootPath, 'setup.cfg'), 'utf-8');
-    if (cfg.includes('[tool:pytest]')) return 'pytest';
-  } catch {}
-  return 'vitest'; // default (Vitest is most common for TS projects)
-}
-
-function generateTestCode(plan: import('./test-plan.js').TestPlan, framework: string, srcFile: string): string {
-  const lines: string[] = [];
-
-  if (framework === 'pytest') {
-    lines.push(`# Generated by milens — test plan for ${plan.symbol}`);
-    lines.push(`import pytest`);
-    lines.push(`from ${srcFile.replace(/[/\\]/g, '.').replace(/\.(ts|tsx|js|jsx|py)$/, '')} import ${plan.symbol}`);
-    lines.push('');
-    lines.push(`class Test${capitalize(plan.symbol)}:`);
-    for (const s of plan.testScenarios) {
-      lines.push(`    def test_${s.name.toLowerCase().replace(/\s+/g, '_')}(self):`);
-      lines.push(`        """${s.description}"""`);
-      lines.push(`        pass  # TODO: implement`);
-      lines.push('');
-    }
-  } else {
-    const hasTypescript = srcFile.endsWith('.ts') || srcFile.endsWith('.tsx');
-    const ext = hasTypescript ? '.ts' : '.js';
-
-    lines.push(`// Generated by milens — test plan for ${plan.symbol}`);
-    if (framework === 'vitest') {
-      lines.push(`import { describe, it, expect${plan.mockStrategy.length > 0 ? ', vi' : ''} } from 'vitest';`);
-      lines.push(`import { ${plan.symbol} } from '${relativeImport(srcFile, hasTypescript)}';`);
-    } else if (framework === 'mocha') {
-      lines.push(`import { expect } from 'chai';`);
-      lines.push(`import { ${plan.symbol} } from '${relativeImport(srcFile, hasTypescript)}';`);
-    } else {
-      lines.push(`import { ${plan.symbol} } from '${relativeImport(srcFile, hasTypescript)}';`);
-    }
-
-    // Mock imports
-    for (const m of plan.mockStrategy) {
-      if (framework === 'vitest') {
-        lines.push(`vi.mock('${m.dependency}');`);
-      } else if (framework === 'jest') {
-        lines.push(`jest.mock('${m.dependency}');`);
-      }
-    }
-
-    lines.push('');
-
-    const describeFn = framework === 'mocha' ? `describe('${plan.symbol}'` : framework === 'vitest' ? `describe('${plan.symbol}', () =>` : `describe('${plan.symbol}', () =>`;
-    const beforeEachHook = framework === 'mocha' ? `  beforeEach(() => {` : `  beforeEach(() => {`;
-    const endBrace = framework === 'mocha' ? `});` : `});`;
-
-    lines.push(`${describeFn} {`);
-    lines.push(`${beforeEachHook}`);
-    lines.push(`    // Setup mocks`);
-    lines.push(`  });`);
-    lines.push('');
-
-    for (const s of plan.testScenarios) {
-      const testFn = framework === 'mocha' ? `it('${s.name}'` : `it('${s.name}', () =>`;
-      lines.push(`    ${testFn} {`);
-      lines.push(`      // ${s.description}`);
-      lines.push(`      const result = ${plan.symbol}();`);
-      lines.push(`      expect(result).toBeDefined();`);
-      lines.push(`    });`);
-      lines.push('');
-    }
-
-    lines.push(`});`);
-  }
-
-  return lines.join('\n');
-}
-
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-function relativeImport(srcFile: string, hasTypescript: boolean): string {
-  // Convert src/foo/bar.ts → ../foo/bar (relative import for __tests__/bar.test.ts)
-  const withoutExt = srcFile.replace(/\.(ts|tsx|js|jsx)$/, '');
-  return `.${hasTypescript ? '' : '.js'}/${withoutExt.split('/').pop()!}`;
-}
-
 // ── Transport: stdio ──
 
 export async function startStdio(rootPath?: string): Promise<void> {
@@ -2999,14 +2297,26 @@ export async function startStdio(rootPath?: string): Promise<void> {
     }
   }
 
-  // Cleanup on exit
+  // Cleanup on exit — registering a custom SIGINT/SIGTERM handler replaces
+  // Node's default terminate-on-signal behavior, so we must exit explicitly
+  // or the process hangs forever waiting for the (already-closed) stdio transport.
   const cleanup = () => {
     if (watcher) watcher.stop();
+    process.exit(0);
   };
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
 
-  await server.connect(transport);
+  try {
+    await server.connect(transport);
+  } catch (err: any) {
+    server.server.sendLoggingMessage({
+      level: 'error',
+      data: `[milens:stdio] Failed to start: ${err.message}`,
+    });
+    if (watcher) watcher.stop();
+    process.exit(1);
+  }
 }
 
 // ── Transport: HTTP (Streamable) ──
@@ -3038,9 +2348,18 @@ export async function startHttp(port: number, rootPath?: string): Promise<void> 
     }
   }
 
-  // Cleanup on exit
+  // Cleanup on exit — registering a custom SIGINT/SIGTERM handler replaces
+  // Node's default terminate-on-signal behavior, so we must exit explicitly
+  // or the process hangs forever with the HTTP server still listening.
+  let shuttingDown = false;
   const cleanup = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     if (watcher) watcher.stop();
+    clearInterval(evictTimer);
+    httpServer.close(() => process.exit(0));
+    // Force-exit if some connection keeps the server from closing in time
+    setTimeout(() => process.exit(0), 3000).unref();
   };
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
@@ -3100,7 +2419,19 @@ export async function startHttp(port: number, rootPath?: string): Promise<void> 
               sessions.set(id, { transport: transport!, lastActive: Date.now() });
             },
           });
-          await server.connect(transport);
+          try {
+            await server.connect(transport);
+          } catch (err: any) {
+            server.server.sendLoggingMessage({
+              level: 'error',
+              data: `[milens:http] Failed to connect transport: ${err.message}`,
+            });
+            if (!res.headersSent) {
+              res.writeHead(500);
+              res.end('Internal server error');
+            }
+            return;
+          }
         }
 
         await transport.handleRequest(req, res, parsed);
@@ -3118,7 +2449,7 @@ export async function startHttp(port: number, rootPath?: string): Promise<void> 
 
   // Bind to localhost only — prevents network exposure without auth
   httpServer.listen(port, '127.0.0.1', () => {
-    console.log(`milens MCP server listening on http://127.0.0.1:${port}/mcp`);
+    process.stderr.write(`milens MCP server listening on http://127.0.0.1:${port}/mcp\n`);
   });
 }
 

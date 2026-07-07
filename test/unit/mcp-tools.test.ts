@@ -627,12 +627,12 @@ describe('createMcpServer', () => {
       expect(text).toContain('main');
     });
 
-    it('returns no path for directionally disconnected symbols', async () => {
+    it('returns not found for symbols missing from index', async () => {
       const server = createMcpServer(TEST_ROOT);
       const handler = getToolHandler(server, 'explain_relationship');
-      const result = await handler({ from: 'helper', to: 'main', repo: TEST_ROOT });
+      const result = await handler({ from: 'NonExistentSymbol', to: 'AuthService', repo: TEST_ROOT });
 
-      expect(result.content[0].text).toContain('No path');
+      expect(result.content[0].text).toContain('not found in index');
     });
   });
 

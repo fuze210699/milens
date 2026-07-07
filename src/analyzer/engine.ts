@@ -465,6 +465,11 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   });
   reporter?.endPhase();
 
+  // Prune stale file_hashes for deleted files (incremental analyze self-healing)
+  const fileRelativePaths = files.map(f => f.relativePath);
+  const prunedCount = db.pruneOrphanFileHashes(fileRelativePaths);
+  if (opts.verbose && prunedCount > 0) console.error(`[prune] Removed ${prunedCount} stale file_hashes entries`);
+
   // Phase 8: Generate embeddings (optional)
   if (opts.embeddings) {
     const provider = new TfIdfProvider();

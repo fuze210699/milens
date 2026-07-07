@@ -38,6 +38,7 @@ export interface RawImport {
   names: Array<{ name: string; alias?: string }>;
   isDefault: boolean;
   isWildcard: boolean;
+  isDynamic?: boolean;
   line: number;
 }
 

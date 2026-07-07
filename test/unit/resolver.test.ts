@@ -611,4 +611,73 @@ describe('Resolver', () => {
     expect(importLinks.some(l => l.toId === 'models.ts#interface:User:1')).toBe(true);
     expect(importLinks.some(l => l.toId === 'models.ts#type:UserRole:7')).toBe(true);
   });
+
+  it('resolves destructured dynamic import links', () => {
+    const callerSymbols: CodeSymbol[] = [
+      { id: 'caller.ts#function:main:10', name: 'main', kind: 'function', filePath: 'caller.ts', startLine: 10, endLine: 15, exported: true },
+      { id: 'caller.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'caller.ts', startLine: 0, endLine: 20, exported: true },
+    ];
+    const targetSymbols: CodeSymbol[] = [
+      { id: 'foo.ts#function:foo:1', name: 'foo', kind: 'function', filePath: 'foo.ts', startLine: 1, endLine: 3, exported: true },
+      { id: 'foo.ts#function:bar:5', name: 'bar', kind: 'function', filePath: 'foo.ts', startLine: 5, endLine: 7, exported: true },
+      { id: 'foo.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'foo.ts', startLine: 0, endLine: 10, exported: true },
+    ];
+
+    const imports: RawImport[] = [{
+      filePath: 'caller.ts',
+      modulePath: './foo',
+      names: [{ name: 'foo' }],
+      isDefault: false,
+      isWildcard: false,
+      isDynamic: true,
+      line: 1,
+    }];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['caller.ts', callerSymbols], ['foo.ts', targetSymbols]]),
+      allSymbols: [...callerSymbols, ...targetSymbols],
+      imports,
+      calls: [],
+      heritage: [],
+      resolvedImportPaths: new Map([['caller.ts::./foo', 'foo.ts']]),
+    });
+
+    const importLinks = result.links.filter(l => l.type === 'imports');
+    // Should create one import link: caller.ts → foo
+    expect(importLinks.length).toBe(1);
+    expect(importLinks[0].toId).toBe('foo.ts#function:foo:1');
+    expect(importLinks[0].fromId).toBe('caller.ts#module:_top:0');
+  });
+
+  it('resolves namespace-style dynamic import as wildcard', () => {
+    const callerSymbols: CodeSymbol[] = [
+      { id: 'caller.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'caller.ts', startLine: 0, endLine: 20, exported: true },
+    ];
+    const targetSymbols: CodeSymbol[] = [
+      { id: 'lib.ts#function:foo:1', name: 'foo', kind: 'function', filePath: 'lib.ts', startLine: 1, endLine: 3, exported: true },
+      { id: 'lib.ts#function:bar:5', name: 'bar', kind: 'function', filePath: 'lib.ts', startLine: 5, endLine: 7, exported: true },
+    ];
+
+    const imports: RawImport[] = [{
+      filePath: 'caller.ts',
+      modulePath: './lib',
+      names: [],
+      isDefault: false,
+      isWildcard: true,
+      isDynamic: true,
+      line: 1,
+    }];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['caller.ts', callerSymbols], ['lib.ts', targetSymbols]]),
+      allSymbols: [...callerSymbols, ...targetSymbols],
+      imports,
+      calls: [],
+      heritage: [],
+      resolvedImportPaths: new Map([['caller.ts::./lib', 'lib.ts']]),
+    });
+
+    const importLinks = result.links.filter(l => l.type === 'imports');
+    expect(importLinks.length).toBe(targetSymbols.filter(s => s.exported && s.kind !== 'module').length);
+  });
 });

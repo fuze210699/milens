@@ -388,6 +388,7 @@ export function extractFromTree(
         names,
         isDefault: isDef,
         isWildcard: !isDef && names.length === 0,
+        isDynamic: defNode.type === 'call_expression',
         line: defNode.startPosition.row + 1,
       });
     }

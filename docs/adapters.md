@@ -6,7 +6,7 @@ Connect milens to any AI coding harness. Each adapter includes the MCP server co
 
 | Harness | Configuration | Instructions | Profile |
 |---|---|---|---|
-| **Claude Code** | `.claude/mcp.json` | `CLAUDE.md` | standard |
+| **Claude Code** | `.claude-plugin/plugin.json` + `.mcp.json` (plugin) or `.claude/mcp.json` (manual) | `CLAUDE.md` | standard |
 | **OpenCode** | `.opencode/config.json` | `AGENTS.md` | standard |
 | **Codex** | `.codex/codex.md` | `codex.md` | standard |
 | **Cursor** | `.cursorrules` | `.cursorrules` | standard |
@@ -20,11 +20,30 @@ All adapters are in the `adapters/` directory of the repository.
 
 ### Claude Code
 
+**Method 1: Plugin (recommended)**
+
+`.claude-plugin/plugin.json` holds the plugin metadata; `.mcp.json` at the plugin root is what actually registers milens as an MCP server (Claude Code currently drops an `mcpServers` block placed directly inside `plugin.json` — see [anthropics/claude-code#16143](https://github.com/anthropics/claude-code/issues/16143) — so keep the two files separate). Copy both into your project and install from the local directory:
+
+```bash
+cp -r adapters/claude-code/.claude-plugin/ .claude-plugin/
+cp adapters/claude-code/.mcp.json .mcp.json
+```
+
+```text
+/plugin install .
+```
+
+> No public marketplace listing yet — `/plugin install .` installs directly from the folder in your project. Once milens is published to a plugin marketplace, this doc will be updated with the marketplace install command.
+
+**Method 2: Manual MCP Registration**
+
 ```bash
 cp adapters/claude-code/.claude/mcp.json .claude/
 cp adapters/claude-code/CLAUDE.md CLAUDE.md
 claude mcp add milens -- milens serve -p .
 ```
+
+> **Prerequisite:** `npm i -g milens` (required for both methods)
 
 ### OpenCode
 
@@ -79,7 +98,7 @@ Different harnesses benefit from different tool profiles:
 |---|---|---|
 | `minimal` | 10 | Gemini, Zed (limited context windows) |
 | `standard` | 25 | Claude Code, OpenCode, Codex, Cursor, Copilot (daily coding) |
-| `full` | 41 | Security audits, architecture reviews (all tools) |
+| `full` | 43 | Security audits, architecture reviews (all tools) |
 
 Set via environment variable: `MILENS_PROFILE=standard`
 

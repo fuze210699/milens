@@ -311,12 +311,12 @@ export class Database {
     const sql = kind
       ? `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
-         WHERE s.exported = 1 AND s.kind = ? AND l.id IS NULL
+         WHERE s.exported = 1 AND s.kind = ? AND s.kind != 'section' AND l.id IS NULL
          ${frameworkExclude}
          LIMIT ?`
       : `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
-         WHERE s.exported = 1 AND l.id IS NULL
+         WHERE s.exported = 1 AND s.kind != 'section' AND l.id IS NULL
          ${frameworkExclude}
          LIMIT ?`;
     const rows = kind
@@ -360,10 +360,11 @@ export class Database {
     if (fromSyms.length === 0 || toSyms.length === 0) return null;
 
     const fromId = fromSyms[0].id;
+    const toId = toSyms[0].id;
     const toIds = new Set(toSyms.map(s => s.id));
 
-    // BFS outgoing from source
-    const rows = this.db.prepare(`
+    // Direct outgoing path check first
+    const directPath = this.db.prepare(`
       WITH RECURSIVE path(id, depth, via) AS (
         SELECT to_id, 1, type FROM links WHERE from_id = ? AND type != 'contains'
         UNION
@@ -374,15 +375,83 @@ export class Database {
       SELECT DISTINCT s.*, p.depth, p.via FROM path p JOIN symbols s ON s.id = p.id ORDER BY p.depth
     `).all(fromId, maxDepth) as any[];
 
-    const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
-    for (const r of rows) {
-      result.push({ symbol: rowToSymbol(r), depth: r.depth, via: r.via });
-      if (toIds.has(r.id)) break;
+    const directFound = directPath.find((r: any) => toIds.has(r.id));
+    if (directFound) {
+      const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
+      for (const r of directPath) {
+        result.push({ symbol: rowToSymbol(r), depth: r.depth, via: r.via });
+        if (toIds.has(r.id)) break;
+      }
+      return result;
     }
 
-    const found = result.find(r => toIds.has(r.symbol.id));
-    if (!found) return null;
-    return result.filter(r => r.depth <= found.depth);
+    // Bidirectional: find common ancestor via incoming from source + outgoing to target
+    // Collect all nodes reachable via INCOMING from source (upstream)
+    const upstreamRows = this.db.prepare(`
+      WITH RECURSIVE upstream(id, depth) AS (
+        SELECT from_id, 1 FROM links WHERE to_id = ? AND type != 'contains'
+        UNION
+        SELECT l.from_id, u.depth + 1
+        FROM links l JOIN upstream u ON l.to_id = u.id
+        WHERE l.type != 'contains' AND u.depth < ?
+      )
+      SELECT DISTINCT u.id, u.depth FROM upstream u
+    `).all(fromId, maxDepth) as any[];
+
+    // Collect all nodes reachable via OUTGOING from target (downstream from target = what target depends on)
+    const targetDownstream = this.db.prepare(`
+      WITH RECURSIVE downstream(id, depth) AS (
+        SELECT to_id, 1 FROM links WHERE from_id = ? AND type != 'contains'
+        UNION
+        SELECT l.to_id, d.depth + 1
+        FROM links l JOIN downstream d ON l.from_id = d.id
+        WHERE l.type != 'contains' AND d.depth < ?
+      )
+      SELECT DISTINCT d.id, d.depth FROM downstream d
+    `).all(toId, maxDepth) as any[];
+
+    // Also check: is target itself reachable via incoming from source?
+    if (upstreamRows.some((r: any) => toIds.has(r.id))) {
+      // Build the path: from source, follow incoming to common node, then describe reaching target
+      const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
+      for (const r of upstreamRows) {
+        const sym = rowToSymbol(r);
+        result.push({ symbol: sym, depth: r.depth, via: 'in:calls/imports' });
+        if (toIds.has(r.id)) break;
+      }
+      return result;
+    }
+
+    // Find intersection: any node reachable upstream from source AND downstream from target
+    const upstreamSet = new Set(upstreamRows.map((r: any) => r.id));
+    const commonNodes = targetDownstream.filter((r: any) => upstreamSet.has(r.id));
+    if (commonNodes.length > 0) {
+      const common = commonNodes[0];
+      const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
+      // Upstream path from source → through common node
+      for (const r of upstreamRows) {
+        result.push({ symbol: rowToSymbol(r), depth: r.depth, via: 'in:calls/imports' });
+        if (r.id === common.id) break;
+      }
+      // Downstream path from common node → target
+      const targetDownstreamRows = this.db.prepare(`
+        WITH RECURSIVE downstream(id, depth, via) AS (
+          SELECT to_id, 1, type FROM links WHERE from_id = ? AND type != 'contains'
+          UNION
+          SELECT l.to_id, d.depth + 1, l.type
+          FROM links l JOIN downstream d ON l.from_id = d.id
+          WHERE l.type != 'contains' AND d.depth < ?
+        )
+        SELECT DISTINCT s.*, d.depth, d.via FROM downstream d JOIN symbols s ON s.id = d.id ORDER BY d.depth
+      `).all(common.id, maxDepth) as any[];
+      for (const r of targetDownstreamRows) {
+        result.push({ symbol: rowToSymbol(r), depth: (common as any).depth + r.depth, via: r.via });
+        if (toIds.has(r.id)) break;
+      }
+      return result;
+    }
+
+    return null;
   }
 
   getChangedFiles(): string[] {
@@ -559,6 +628,7 @@ export class Database {
   clear(): void {
     this.db.exec('DELETE FROM symbols');
     this.db.exec('DELETE FROM links');
+    this.db.exec('DELETE FROM file_hashes');
   }
 
   /** Clear only symbols, links, and file hashes for specific files (incremental re-index) */
@@ -575,6 +645,16 @@ export class Database {
     this.db.prepare(`
       DELETE FROM symbols WHERE file_path IN (${placeholders})
     `).run(...filePaths);
+  }
+
+  /** Delete file_hashes rows for paths not in the given set (orphan cleanup after incremental analyze) */
+  pruneOrphanFileHashes(knownPaths: string[]): number {
+    if (knownPaths.length === 0) return 0;
+    const placeholders = knownPaths.map(() => '?').join(',');
+    const result = this.db.prepare(`
+      DELETE FROM file_hashes WHERE path NOT IN (${placeholders})
+    `).run(...knownPaths);
+    return result.changes;
   }
 
   // ── Tool usage tracking ──

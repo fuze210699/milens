@@ -81,6 +81,7 @@ export const OWASP_CATEGORIES: Record<string, string> = {
 };
 
 const DEFAULT_EXCLUDE = '**/*.test.*,**/*.spec.*,**/node_modules/**,**/security/rules.ts,**/metric-milens-tool*.md,**/docs/**,**/*.html,**/mcp-prompts.ts,**/.agents/skills/**';
+const SECRETS_EXCLUDE = DEFAULT_EXCLUDE + ',**/*.md,**/*.mdx';
 
 // ── Language-specific fileGlobs for cross-language coverage ──
 const JS_TS = '**/*.{js,jsx,ts,tsx,mjs,cjs}';
@@ -111,7 +112,7 @@ export const ALL_RULES: SecurityRule[] = [
       /(?:password|passwd|pwd)\s*[:=]\s*['"`][^'"`\n]{4,}['"`]/i,
       /(?:password|passwd|pwd)\s*=\s*(?!process\.env\.)[^'"`\s;]{4,}/i,
     ],
-    excludeGlob: DEFAULT_EXCLUDE,
+    excludeGlob: SECRETS_EXCLUDE,
     fix: 'Replace hardcoded password with process.env.DB_PASSWORD or a secrets manager.',
     confidence: 0.92,
     falsePositiveRisk: 'low', enabled: true,
@@ -128,7 +129,7 @@ export const ALL_RULES: SecurityRule[] = [
       /(?:secret|secretKey|secret_key|clientSecret)\s*[:=]\s*['"`][A-Za-z0-9_\-+=/]{16,}['"`]/i,
       /(?:signingKey|signing_key|encryptionKey|encryption_key)\s*[:=]\s*['"`][A-Za-z0-9_\-+=/]{16,}['"`]/i,
     ],
-    excludeGlob: DEFAULT_EXCLUDE,
+    excludeGlob: SECRETS_EXCLUDE,
     fix: 'Store secrets in a vault (HashiCorp Vault, AWS Secrets Manager, etc.) or environment variables.',
     confidence: 0.90,
     falsePositiveRisk: 'low', enabled: true,
@@ -145,7 +146,7 @@ export const ALL_RULES: SecurityRule[] = [
       /(?:api[_-]?key|apiKey|apikey)\s*[:=]\s*['"`][A-Za-z0-9_\-]{20,}['"`]/i,
       /(?:api[_-]?secret|apiSecret)\s*[:=]\s*['"`][A-Za-z0-9_\-]{20,}['"`]/i,
     ],
-    excludeGlob: DEFAULT_EXCLUDE,
+    excludeGlob: SECRETS_EXCLUDE,
     fix: 'Move the API key to process.env.API_KEY and never commit credentials.',
     confidence: 0.93,
     falsePositiveRisk: 'low', enabled: true,
@@ -162,7 +163,7 @@ export const ALL_RULES: SecurityRule[] = [
       /\bAKIA[0-9A-Z]{16}\b/,
       /(?:aws[_-]?access[_-]?key|AWS_ACCESS_KEY_ID)\s*[:=]\s*['"`]AKIA[0-9A-Z]{16}['"`]/i,
     ],
-    excludeGlob: DEFAULT_EXCLUDE,
+    excludeGlob: SECRETS_EXCLUDE,
     fix: 'Use IAM roles, instance profiles, or AWS Secrets Manager. If the key is leaked, deactivate it in the AWS console immediately.',
     confidence: 0.95,
     falsePositiveRisk: 'low', enabled: true,
@@ -179,7 +180,7 @@ export const ALL_RULES: SecurityRule[] = [
       /\b(sk-(?:live|test|ant|admin)-[A-Za-z0-9_\-]{30,})\b/,
       /(?:stripe[_-]?key|openai[_-]?key|OPENAI_API_KEY)\s*[:=]\s*['"`]sk-[A-Za-z0-9_\-]+['"`]/i,
     ],
-    excludeGlob: DEFAULT_EXCLUDE,
+    excludeGlob: SECRETS_EXCLUDE,
     fix: 'Use environment variables (STRIPE_SECRET_KEY, OPENAI_API_KEY) and never commit sk- keys.',
     confidence: 0.95,
     falsePositiveRisk: 'low', enabled: true,
@@ -196,7 +197,7 @@ export const ALL_RULES: SecurityRule[] = [
       /\bghp_[A-Za-z0-9_]{36,}\b/,
       /(?:github[_-]?token|GITHUB_TOKEN|gh[_-]?token)\s*[:=]\s*['"`]ghp_[A-Za-z0-9_]+['"`]/i,
     ],
-    excludeGlob: DEFAULT_EXCLUDE,
+    excludeGlob: SECRETS_EXCLUDE,
     fix: 'Use GITHUB_TOKEN in Actions workflows, or store PATs in repository secrets.',
     confidence: 0.95,
     falsePositiveRisk: 'low', enabled: true,
@@ -213,7 +214,7 @@ export const ALL_RULES: SecurityRule[] = [
       /-----BEGIN\s+(?:RSA|ENCRYPTED)\s+PRIVATE\s+KEY-----/,
       /['"`]-----BEGIN\s+(?:RSA|ENCRYPTED)\s+PRIVATE\s+KEY-----/,
     ],
-    excludeGlob: DEFAULT_EXCLUDE,
+    excludeGlob: SECRETS_EXCLUDE,
     fix: 'Store private keys outside the repository; use a secrets manager or PKI infrastructure.',
     confidence: 0.95,
     falsePositiveRisk: 'low', enabled: true,
@@ -230,7 +231,7 @@ export const ALL_RULES: SecurityRule[] = [
       /-----BEGIN\s+EC\s+PRIVATE\s+KEY-----/,
       /['"`]-----BEGIN\s+EC\s+PRIVATE\s+KEY-----/,
     ],
-    excludeGlob: DEFAULT_EXCLUDE,
+    excludeGlob: SECRETS_EXCLUDE,
     fix: 'Store private keys outside the repository; use a secrets manager or PKI infrastructure.',
     confidence: 0.95,
     falsePositiveRisk: 'low', enabled: true,
@@ -247,7 +248,7 @@ export const ALL_RULES: SecurityRule[] = [
       /(?:token|authToken|accessToken|bearerToken)\s*[:=]\s*['"`][A-Za-z0-9_\-+=.]{20,}['"`]/i,
       /(?:authorization|Authorization)\s*[:=]\s*['"`]Bearer\s+[A-Za-z0-9_\-+=.]+['"`]/i,
     ],
-    excludeGlob: DEFAULT_EXCLUDE,
+    excludeGlob: SECRETS_EXCLUDE,
     fix: 'Use environment variables or a secure token store. Rotate the exposed token.',
     confidence: 0.88,
     falsePositiveRisk: 'low', enabled: true,
@@ -265,7 +266,7 @@ export const ALL_RULES: SecurityRule[] = [
       /(?:\.env\s*(?:file)?\s*[:=]\s*['"`][^'"`]*['"`])/i,
       /process\.env\.([A-Z_]+)\s*=\s*['"`][^'"`]{8,}['"`]/,
     ],
-    excludeGlob: DEFAULT_EXCLUDE,
+    excludeGlob: SECRETS_EXCLUDE,
     fix: 'Never assign secret values to process.env in code. Use external .env files (gitignored) or a secrets manager.',
     confidence: 0.85,
     falsePositiveRisk: 'low', enabled: true,
@@ -1214,7 +1215,7 @@ export const ALL_RULES: SecurityRule[] = [
   { id: 'SEC-148', category: 'data-leak', owasp: 'A09:2021', severity: 'HIGH', name: 'Stack Trace Exposure', description: 'Error details sent to client.', patterns: [/res\.send\s*\(\s*err\.stack/, /\.status.*\.send.*err/, /\.json\s*\(\s*\{\s*error\s*:\s*err/, /traceback\.format_exc\s*\(\s*\)/], fileGlob: JS_TS_PY, excludeGlob: DEFAULT_EXCLUDE, fix: 'Log errors server-side. Send generic error messages.', confidence: 0.90, falsePositiveRisk: 'low', enabled: true },
   { id: 'SEC-149', category: 'data-leak', owasp: 'A09:2021', severity: 'MEDIUM', name: 'Source Map Exposure', description: 'Source maps deployed to production.', patterns: [/\.map['"`]\s*\)/, /sourceMap.*true.*production/i, /devtool.*source-map/], fileGlob: JS_TS, excludeGlob: DEFAULT_EXCLUDE, fix: 'Do not deploy source maps to production.', confidence: 0.55, falsePositiveRisk: 'medium', enabled: true },
   { id: 'SEC-150', category: 'data-leak', owasp: 'A09:2021', severity: 'HIGH', name: 'Git Directory Exposure', description: '.git directory accessible.', patterns: [/\.git\/HEAD/, /\.git\/config/], fileGlob: '**/*.{json,yaml,yml}', fix: 'Ensure .git directory is not deployed.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
-  { id: 'SEC-151', category: 'data-leak', owasp: 'A09:2021', severity: 'MEDIUM', name: 'Backup File Exposure', description: 'Backup files deployed.', patterns: [/\.bak['"`]/, /\.backup['"`]/, /\.old['"`]/, /\.swp['"`]/, /~\s*$/], excludeGlob: DEFAULT_EXCLUDE, fix: 'Remove backup files before deployment.', confidence: 0.50, falsePositiveRisk: 'high', enabled: true },
+  { id: 'SEC-151', category: 'data-leak', owasp: 'A09:2021', severity: 'MEDIUM', name: 'Backup File Exposure', description: 'Backup files deployed.', patterns: [/\.bak['"`]/, /\.backup['"`]/, /\.old['"`]/, /\.swp['"`]/, /~\s*$/], excludeGlob: DEFAULT_EXCLUDE + ',src/server/tools/security.ts', fix: 'Remove backup files before deployment.', confidence: 0.50, falsePositiveRisk: 'high', enabled: true },
 
   // ═══════════════════════════════════════════════════════════════
   // SEC-152 – SEC-156 : Docker Security (A05:2021)

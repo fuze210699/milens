@@ -4,6 +4,7 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname, basename, join } from 'node:path';
 import { generateTestPlan } from '../test-plan.js';
 import type { TestPlan } from '../test-plan.js';
+import { countDependentFiles } from '../../analyzer/risk.js';
 import type { Deps } from './deps.js';
 
 export function registerTestingTools(server: McpServer, deps: Deps): void {
@@ -23,9 +24,9 @@ export function registerTestingTools(server: McpServer, deps: Deps): void {
       } else {
         lines.push(`Top ${gaps.length} untested symbols:\n`);
         for (const g of gaps) {
-          const incoming = db.getIncomingLinks(g.id).filter(l => l.type !== 'contains');
+          const depsCount = countDependentFiles(db, g.id).count;
           const risk = (g.heat ?? 0) > 80 ? 'CRITICAL' : (g.heat ?? 0) > 50 ? 'HIGH' : (g.heat ?? 0) > 30 ? 'MEDIUM' : 'LOW';
-          lines.push(`  ${g.name} [${g.kind}] ${g.filePath}:${g.startLine} — heat:${g.heat ?? 0} deps:${incoming.length} risk:${risk}`);
+          lines.push(`  ${g.name} [${g.kind}] ${g.filePath}:${g.startLine} — heat:${g.heat ?? 0} deps:${depsCount} risk:${risk}`);
         }
       }
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };

@@ -18,6 +18,7 @@ import { AnnotationStore } from '../store/annotations.js';
 import { registerAllPrompts } from './mcp-prompts.js';
 import { Orchestrator } from '../orchestrator/orchestrator.js';
 import { registerResources } from './tools/resources.js';
+import { countDependentFiles } from '../analyzer/risk.js';
 import { registerSessionTools } from './tools/session.js';
 import { registerTestingTools } from './tools/testing.js';
 import { registerSecurityTools } from './tools/security.js';
@@ -726,13 +727,7 @@ export function createMcpServer(rootPath?: string): McpServer {
           lines.push(`No ${direction} deps found.`);
         } else {
           // Dedupe depth-1 by calling file — same real dependent, same blast radius
-          const seenFilesD1 = new Set<string>();
-          const depth1Refs = refs.filter(r => r.depth === 1);
-          const depth1Count = depth1Refs.filter(r => {
-            if (seenFilesD1.has(r.symbol.filePath)) return false;
-            seenFilesD1.add(r.symbol.filePath);
-            return true;
-          }).length;
+          const depth1Count = countDependentFiles(db, sym.id).count;
           lines.push(`${direction} (${refs.length} symbols, depth-1: ${depth1Count}):`);
           lines.push(fmtImpact(refs, detail));
 
@@ -1037,11 +1032,11 @@ export function createMcpServer(rootPath?: string): McpServer {
         const unchangedNote = unchangedCount > 0 ? ` (${unchangedCount} unchanged not shown)` : '';
         lines.push(`${file}: ${displaySyms.length} changed symbols${unchangedNote}`);
         for (const sym of displaySyms) {
-          const upstream = db.findUpstream(sym.id, 1);
+          const depsCount = countDependentFiles(db, sym.id).count;
           totalChanged++;
-          if (upstream.length > 0) {
-            lines.push(`  ${sym.name} [${sym.kind}] :${sym.startLine} → ${upstream.length} direct dependents`);
-            totalAffected += upstream.length;
+          if (depsCount > 0) {
+            lines.push(`  ${sym.name} [${sym.kind}] :${sym.startLine} → ${depsCount} direct dependents`);
+            totalAffected += depsCount;
           } else {
             lines.push(`  ${sym.name} [${sym.kind}] :${sym.startLine}`);
           }
@@ -1098,13 +1093,28 @@ export function createMcpServer(rootPath?: string): McpServer {
     async ({ kind, limit, repo }) => {
       const { db } = getDb(repo);
       const dead = db.findDeadCode(kind, limit);
-      if (dead.length === 0) {
+      const testOnly = db.findTestOnlyReferenced(limit);
+      const lines: string[] = [];
+
+      if (dead.length === 0 && testOnly.length === 0) {
         return { content: [{ type: 'text' as const, text: 'No unreferenced exported symbols found.' }] };
       }
-      const lines = [`${dead.length} unreferenced exported symbols (code-level only — verify with grep before removing):\n`];
-      for (const sym of dead) {
-        lines.push(fmtSymbol(sym));
+
+      if (dead.length > 0) {
+        lines.push(`${dead.length} unreferenced exported symbols (code-level only — verify with grep before removing):\n`);
+        for (const sym of dead) {
+          lines.push(fmtSymbol(sym));
+        }
       }
+
+      if (testOnly.length > 0) {
+        if (dead.length > 0) lines.push('');
+        lines.push(`─── Symbols referenced only by test files (likely orphaned) — ${testOnly.length} found:\n`);
+        for (const sym of testOnly) {
+          lines.push(fmtSymbol(sym));
+        }
+      }
+
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },
   );
@@ -1316,15 +1326,7 @@ export function createMcpServer(rootPath?: string): McpServer {
         sections.push(`${fmtSymbol(sym)}${sym.exported ? ' (exported)' : ''}`);
 
         const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-        // Dedupe by calling file — imports + calls from the same file = 1 real dependent
-        const seenFiles = new Set<string>();
-        const depsCount = incoming.filter(l => {
-          const from = db.findSymbolById(l.fromId);
-          if (!from || isTestFilePath(from.filePath)) return false;
-          if (seenFiles.has(from.filePath)) return false;
-          seenFiles.add(from.filePath);
-          return true;
-        }).length;
+        const depsCount = countDependentFiles(db, sym.id, { excludeTestFiles: true }).count;
 
         if (session_id) guard.recordCheck(session_id, name);
 
@@ -1933,7 +1935,7 @@ export function createMcpServer(rootPath?: string): McpServer {
           return true;
         });
         const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
-        const depsCount = incoming.length;
+        const depsCount = countDependentFiles(db, sym.id).count;
         const depsTop = incoming.slice(0, 5).map(l => { const s = db.findSymbolById(l.fromId); return s?.name ?? l.fromId; });
         const outCount = outgoing.length;
         const outTop = outgoing.slice(0, 5).map(l => { const s = db.findSymbolById(l.toId); return s?.name ?? l.toId; });

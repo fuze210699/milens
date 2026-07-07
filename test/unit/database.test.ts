@@ -556,3 +556,82 @@ describe('Database', () => {
     expect(statsAfter.files).toBe(0);
   });
 });
+
+// Separate describe with fresh DB for test-only-referenced detection
+describe('findTestOnlyReferenced', () => {
+  const TEST_DB2 = join(import.meta.dirname, '..', 'tmp', 'test-tor.db');
+  let db: Database;
+
+  beforeAll(() => {
+    mkdirSync(join(import.meta.dirname, '..', 'tmp'), { recursive: true });
+    if (existsSync(TEST_DB2)) unlinkSync(TEST_DB2);
+    db = new Database(TEST_DB2);
+  });
+
+  afterAll(() => {
+    db.close();
+    if (existsSync(TEST_DB2)) unlinkSync(TEST_DB2);
+  });
+
+  it('returns symbol referenced only by test files', () => {
+    db.insertSymbol({ id: 'src/orphan.ts#function:orphanFn:1', name: 'orphanFn', kind: 'function',
+      filePath: 'src/orphan.ts', startLine: 1, endLine: 5, exported: true });
+    db.insertSymbol({ id: 'test/orphan.test.ts#function:test_fn:5', name: 'test_fn', kind: 'function',
+      filePath: 'test/orphan.test.ts', startLine: 5, endLine: 10, exported: false });
+    db.insertLink({ id: 'torl1', fromId: 'test/orphan.test.ts#function:test_fn:5',
+      toId: 'src/orphan.ts#function:orphanFn:1', type: 'calls', confidence: 0.9 });
+
+    const results = db.findTestOnlyReferenced(20);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results.some(r => r.name === 'orphanFn')).toBe(true);
+  });
+
+  it('does not return symbol also referenced by non-test file', () => {
+    db.insertSymbol({ id: 'src/used.ts#function:usedFn:1', name: 'usedFn', kind: 'function',
+      filePath: 'src/used.ts', startLine: 1, endLine: 5, exported: true });
+    db.insertSymbol({ id: 'test/used.test.ts#function:test_fn2:5', name: 'test_fn2', kind: 'function',
+      filePath: 'test/used.test.ts', startLine: 5, endLine: 10, exported: false });
+    db.insertSymbol({ id: 'src/prod.ts#function:prodUser:10', name: 'prodUser', kind: 'function',
+      filePath: 'src/prod.ts', startLine: 10, endLine: 15, exported: true });
+    db.insertLink({ id: 'torl2', fromId: 'test/used.test.ts#function:test_fn2:5',
+      toId: 'src/used.ts#function:usedFn:1', type: 'calls', confidence: 0.9 });
+    db.insertLink({ id: 'torl3', fromId: 'src/prod.ts#function:prodUser:10',
+      toId: 'src/used.ts#function:usedFn:1', type: 'calls', confidence: 0.9 });
+
+    const results = db.findTestOnlyReferenced(20);
+    expect(results.some(r => r.name === 'usedFn')).toBe(false);
+  });
+
+  it('returns empty for symbol with zero incoming links', () => {
+    db.insertSymbol({ id: 'src/alone.ts#function:aloneFn:1', name: 'aloneFn', kind: 'function',
+      filePath: 'src/alone.ts', startLine: 1, endLine: 5, exported: true });
+
+    const results = db.findTestOnlyReferenced(20);
+    expect(results.some(r => r.name === 'aloneFn')).toBe(false);
+  });
+
+  it('finds a low-heat orphan even when many higher-heat non-orphan candidates exist (limit must not truncate before filtering)', () => {
+    // 25 high-heat symbols each with a real (non-test) caller — not orphaned.
+    for (let i = 0; i < 25; i++) {
+      db.insertSymbol({ id: `src/busy${i}.ts#function:busyFn${i}:1`, name: `busyFn${i}`, kind: 'function',
+        filePath: `src/busy${i}.ts`, startLine: 1, endLine: 5, exported: true, heat: 90 });
+      db.insertSymbol({ id: `src/caller${i}.ts#function:callerFn${i}:1`, name: `callerFn${i}`, kind: 'function',
+        filePath: `src/caller${i}.ts`, startLine: 1, endLine: 5, exported: true, heat: 90 });
+      db.insertLink({ id: `busyl${i}`, fromId: `src/caller${i}.ts#function:callerFn${i}:1`,
+        toId: `src/busy${i}.ts#function:busyFn${i}:1`, type: 'calls', confidence: 0.9 });
+    }
+
+    // A single low-heat orphan referenced only by a test file — ranks below all 25 above by heat.
+    db.insertSymbol({ id: 'src/lowheat.ts#function:lowHeatOrphan:1', name: 'lowHeatOrphan', kind: 'function',
+      filePath: 'src/lowheat.ts', startLine: 1, endLine: 5, exported: true, heat: 1 });
+    db.insertSymbol({ id: 'test/lowheat.test.ts#function:test_low:5', name: 'test_low', kind: 'function',
+      filePath: 'test/lowheat.test.ts', startLine: 5, endLine: 10, exported: false });
+    db.insertLink({ id: 'lowheatl1', fromId: 'test/lowheat.test.ts#function:test_low:5',
+      toId: 'src/lowheat.ts#function:lowHeatOrphan:1', type: 'calls', confidence: 0.9 });
+
+    // Default-ish small limit (30) — the orphan must still be found, not truncated away
+    // by an internal SQL LIMIT applied before the test-only filter.
+    const results = db.findTestOnlyReferenced(30);
+    expect(results.some(r => r.name === 'lowHeatOrphan')).toBe(true);
+  });
+});

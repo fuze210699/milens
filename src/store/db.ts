@@ -325,6 +325,47 @@ export class Database {
     return rows.map(rowToSymbol);
   }
 
+  /**
+   * Find exported symbols that have incoming references, but ALL of those references
+   * originate from test files — meaning the symbol is "test-only referenced" and
+   * likely orphaned from production code. Returns symbols missed by the standard
+   * findDeadCode (which requires zero incoming links of any kind).
+   */
+  findTestOnlyReferenced(limit = 50): CodeSymbol[] {
+    const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE 'app/%/layout.%'
+      AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE 'app/layout.%'
+      AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE 'jest.config.%'
+      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE 'src/routes/+layout.%'`;
+    // Get ALL exported symbols that HAVE at least one incoming link (not caught by findDeadCode).
+    // No SQL LIMIT here: the JS post-filter below narrows this down to test-only-referenced
+    // symbols, which can be a small minority of low-heat candidates — applying `limit` before
+    // that filter would silently drop real orphans that don't happen to rank in the top N by heat.
+    const sql = `SELECT s.*, COUNT(l.id) as incoming_count FROM symbols s
+         JOIN links l ON l.to_id = s.id AND l.type != 'contains'
+         WHERE s.exported = 1 AND s.kind != 'section'
+         ${frameworkExclude}
+         GROUP BY s.id
+         HAVING incoming_count > 0
+         ORDER BY s.heat DESC`;
+    const rows = this.db.prepare(sql).all() as any[];
+    const candidates = rows.map(rowToSymbol);
+
+    // Post-filter: check if ALL incoming links come from test files
+    const results: CodeSymbol[] = [];
+    for (const sym of candidates) {
+      const incoming = this.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+      if (incoming.length === 0) continue;
+      const allFromTests = incoming.every(l => {
+        const from = this.findSymbolById(l.fromId);
+        return from && this.isTestFile(from.filePath);
+      });
+      if (allFromTests) {
+        results.push(sym);
+      }
+    }
+    return results.slice(0, limit);
+  }
+
   getTypeHierarchy(symbolId: string): { ancestors: Array<{ symbol: CodeSymbol; depth: number }>; descendants: Array<{ symbol: CodeSymbol; depth: number }> } {
     const ancestors = this.db.prepare(`
       WITH RECURSIVE up(id, depth) AS (

@@ -267,6 +267,30 @@ describe('Database', () => {
     expect(deadNames).toContain('unusedHelper');
   });
 
+  it('findDeadCode excludes section kind symbols (markdown headings)', () => {
+    db.upsertFileHash('README.md', 'hash');
+    db.insertSymbol({
+      id: 'README.md#section:overview:5', name: 'Overview', kind: 'section',
+      filePath: 'README.md', startLine: 5, endLine: 5, exported: true,
+    });
+    db.insertSymbol({
+      id: 'README.md#section:usage:20', name: 'Usage', kind: 'section',
+      filePath: 'README.md', startLine: 20, endLine: 20, exported: true,
+    });
+    db.upsertFileHash('src/real-unused.ts', 'hash');
+    db.insertSymbol({
+      id: 'src/real-unused.ts#function:realUnused:1', name: 'realUnused', kind: 'function',
+      filePath: 'src/real-unused.ts', startLine: 1, endLine: 5, exported: true,
+    });
+
+    const dead = db.findDeadCode(undefined, 100);
+    const deadNames = dead.map(s => s.name);
+
+    expect(deadNames).not.toContain('Overview');
+    expect(deadNames).not.toContain('Usage');
+    expect(deadNames).toContain('realUnused');
+  });
+
   it('getCodebaseSummary returns correct structure', () => {
     const summary = db.getCodebaseSummary();
     expect(summary.symbols).toBeGreaterThanOrEqual(2);

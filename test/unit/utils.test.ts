@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isTestFile } from '../../src/utils.js';
+import { isTestFile, globToRegex } from '../../src/utils.js';
 
 describe('isTestFile', () => {
   it('returns true for .test.ts', () => {
@@ -96,5 +96,92 @@ describe('isTestFile', () => {
 
   it('returns false for test_ prefix on non-Python file', () => {
     expect(isTestFile('test_utils.ts')).toBe(false);
+  });
+});
+
+describe('globToRegex', () => {
+  it('converts * to match any non-slash characters', () => {
+    const re = globToRegex('*.ts');
+    expect(re.test('file.ts')).toBe(true);
+    expect(re.test('src/file.ts')).toBe(false);
+  });
+
+  it('converts ** to match paths including slashes', () => {
+    const re = globToRegex('**/*.ts');
+    expect(re.test('src/file.ts')).toBe(true);
+    expect(re.test('src/sub/file.ts')).toBe(true);
+    expect(re.test('file.ts')).toBe(false); // **/* requires at least one slash before filename
+  });
+
+  it('converts **.ts to match at any depth including root', () => {
+    const re = globToRegex('**.ts');
+    expect(re.test('file.ts')).toBe(true);
+    expect(re.test('src/file.ts')).toBe(true);
+    expect(re.test('readme.md')).toBe(false);
+  });
+
+  it('converts ? to match single character', () => {
+    const re = globToRegex('file?.ts');
+    expect(re.test('file1.ts')).toBe(true);
+    expect(re.test('fileX.ts')).toBe(true);
+    expect(re.test('file.ts')).toBe(false);
+  });
+
+  it('escapes regex metacharacters: .', () => {
+    const re = globToRegex('*.ts');
+    expect(re.test('fileXts')).toBe(false);
+  });
+
+  it('escapes regex metacharacters: +', () => {
+    const re = globToRegex('file+.ts');
+    expect(re.test('file+.ts')).toBe(true);
+    expect(re.test('fileeeee.ts')).toBe(false);
+  });
+
+  it('escapes regex metacharacters: ( )', () => {
+    const re = globToRegex('file().ts');
+    expect(re.test('file().ts')).toBe(true);
+    expect(re.test('file.ts')).toBe(false);
+  });
+
+  it('escapes regex metacharacters: [ ]', () => {
+    const re = globToRegex('file[0].ts');
+    expect(re.test('file[0].ts')).toBe(true);
+    expect(re.test('file0.ts')).toBe(false);
+  });
+
+  it('escapes regex metacharacters: { }', () => {
+    const re = globToRegex('file{name}.ts');
+    expect(re.test('file{name}.ts')).toBe(true);
+    expect(re.test('filename.ts')).toBe(false);
+  });
+
+  it('escapes regex metacharacters: ^ $', () => {
+    const re = globToRegex('$file^.ts');
+    expect(re.test('$file^.ts')).toBe(true);
+    expect(re.test('file.ts')).toBe(false);
+  });
+
+  it('escapes backslashes correctly', () => {
+    const re = globToRegex('src\\file.ts');
+    expect(re.test('src\\file.ts')).toBe(true);
+  });
+
+  it('regression: SECURITY-001 task excludes mcp-prompts.ts', () => {
+    const re = globToRegex('**/mcp-prompts.ts');
+    expect(re.test('src/server/mcp-prompts.ts')).toBe(true);
+    expect(re.test('src/server/mcp.ts')).toBe(false);
+  });
+
+  it('regression: SECURITY-001 task excludes .agents/skills/', () => {
+    const re = globToRegex('**/.agents/skills/**');
+    expect(re.test('some/prefix/.agents/skills/milens-security/SKILL.md')).toBe(true);
+    expect(re.test('src/server/mcp.ts')).toBe(false);
+  });
+
+  it('case-insensitive by default', () => {
+    const re = globToRegex('*.TS');
+    expect(re.test('file.ts')).toBe(true);
+    expect(re.test('FILE.TS')).toBe(true);
   });
 });

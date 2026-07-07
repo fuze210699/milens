@@ -2,7 +2,7 @@
 import { Command } from 'commander';
 import { resolve, join, dirname, basename } from 'node:path';
 import { mkdirSync, readFileSync, rmSync, existsSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadAliases } from './analyzer/config.js';
 
@@ -1370,13 +1370,68 @@ program
   .command('hooks <action>')
   .description('Manage milens hook system')
   .option('-p, --path <path>', 'Repository root path', '.')
+  .option('--repo <path>', 'Repository root path (alias for --path)')
+  .option('--agent <name>', 'Agent name (for session-start/session-end)')
   .option('--hook <hook>', 'Hook name (sessionStart, sessionEnd, preCommit, fileChange, preCompact, postCompact)')
   .action(async (action: string, opts) => {
-    const { HookManager } = await import('./server/hooks.js');
+    const { HookManager, defaultOnSessionStart, defaultOnSessionEnd, defaultOnPreCompact, defaultOnPostCompact } = await import('./server/hooks.js');
     const manager = new HookManager();
-    const projectPath = resolve(opts.path);
+    const projectPath = resolve(opts.repo || opts.path);
 
     switch (action) {
+      case 'session-start': {
+        const agent = opts.agent || 'cli';
+        const rootPath = projectPath;
+        const dbPath = join(rootPath, '.milens', 'milens.db');
+        const sessionId = randomUUID();
+        const ctx = { agent, sessionId, rootPath };
+        try {
+          const output = await defaultOnSessionStart(ctx, dbPath);
+          console.log(output);
+        } catch (e: any) {
+          console.error(`Session start hook failed: ${e.message || e}`);
+          process.exit(1);
+        }
+        break;
+      }
+      case 'session-end': {
+        const agent = opts.agent || 'cli';
+        const rootPath = projectPath;
+        const dbPath = join(rootPath, '.milens', 'milens.db');
+        const sessionId = randomUUID();
+        const ctx = { agent, sessionId, rootPath };
+        try {
+          const output = await defaultOnSessionEnd(ctx, dbPath);
+          console.log(output);
+        } catch (e: any) {
+          console.error(`Session end hook failed: ${e.message || e}`);
+          process.exit(1);
+        }
+        break;
+      }
+      case 'pre-compact': {
+        const rootPath = projectPath;
+        const dbPath = join(rootPath, '.milens', 'milens.db');
+        try {
+          const output = await defaultOnPreCompact(rootPath, dbPath);
+          console.log(output);
+        } catch (e: any) {
+          console.error(`Pre-compact hook failed: ${e.message || e}`);
+          process.exit(1);
+        }
+        break;
+      }
+      case 'post-compact': {
+        const rootPath = projectPath;
+        try {
+          const output = await defaultOnPostCompact(rootPath);
+          console.log(output);
+        } catch (e: any) {
+          console.error(`Post-compact hook failed: ${e.message || e}`);
+          process.exit(1);
+        }
+        break;
+      }
       case 'enable': {
         if (opts.hook) {
           manager.enableHook(opts.hook, projectPath);
@@ -1435,7 +1490,7 @@ program
         break;
       }
       default:
-        console.log(`Unknown action: ${action}. Use: enable, disable, list, profile`);
+        console.log(`Unknown action: ${action}. Use: enable, disable, list, profile, session-start, session-end, pre-compact, post-compact`);
     }
   });
 

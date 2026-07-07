@@ -345,4 +345,31 @@ describe('AnnotationStore', () => {
       expect(after).toBe(before + 2);
     });
   });
+
+  describe('update preserves agent/sessionId', () => {
+    it('updates agent on repeat annotation with different agent', () => {
+      const first = store.annotate('agent-test', 'bug', 'first value', { agent: 'agent-alpha' });
+      expect(first.agent).toBe('agent-alpha');
+
+      const second = store.annotate('agent-test', 'bug', 'second value', { agent: 'agent-beta' });
+      expect(second.id).toBe(first.id);
+      expect(second.agent).toBe('agent-beta');
+      expect(second.value).toBe('second value');
+
+      const recalled = store.recall({ symbol: 'agent-test' });
+      expect(recalled).toHaveLength(1);
+      expect(recalled[0].agent).toBe('agent-beta');
+      expect(recalled[0].value).toBe('second value');
+    });
+
+    it('keeps existing agent when repeat annotation omits agent', () => {
+      store.annotate('keep-agent-test', 'note', 'v1', { agent: 'original-agent' });
+
+      const second = store.annotate('keep-agent-test', 'note', 'v2');
+      expect(second.agent).toBe('original-agent');
+
+      const recalled = store.recall({ symbol: 'keep-agent-test' });
+      expect(recalled[0].agent).toBe('original-agent');
+    });
+  });
 });

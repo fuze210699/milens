@@ -15,7 +15,7 @@
     "adapters/"
   ],
   "scripts": {
-    "build": "tsc && node -e \"require('fs').copyFileSync('src/store/schema.sql','dist/store/schema.sql')\"",
+    "build": "node scripts/gen-build-info.mjs && tsc && node -e \"require('fs').copyFileSync('src/store/schema.sql','dist/store/schema.sql')\"",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",

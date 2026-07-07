@@ -116,6 +116,37 @@ describe('Database — annotations, sessions, graph methods', () => {
     it('returns null for unknown symbols', () => {
       expect(db.findPath('NonExistent', 'Animal')).toBeNull();
     });
+
+    it('returns exact single-hop path, not BFS-flat prefix with siblings', () => {
+      // Add fan-out: A calls B, C, D at depth 1; D calls E at depth 2
+      const syms: CodeSymbol[] = [
+        { id: 'fanout#function:A:1', name: 'A', kind: 'function', filePath: 'fanout.ts', startLine: 1, endLine: 10, exported: true },
+        { id: 'fanout#function:B:2', name: 'B', kind: 'function', filePath: 'fanout.ts', startLine: 2, endLine: 3, exported: true },
+        { id: 'fanout#function:C:3', name: 'C', kind: 'function', filePath: 'fanout.ts', startLine: 3, endLine: 4, exported: true },
+        { id: 'fanout#function:D:4', name: 'D', kind: 'function', filePath: 'fanout.ts', startLine: 4, endLine: 5, exported: true },
+        { id: 'fanout#function:E:5', name: 'E', kind: 'function', filePath: 'fanout.ts', startLine: 5, endLine: 6, exported: true },
+      ];
+      for (const s of syms) db.insertSymbol(s);
+      const lnks: SymbolLink[] = [
+        { id: 'fa1', fromId: 'fanout#function:A:1', toId: 'fanout#function:B:2', type: 'calls', confidence: 1.0 },
+        { id: 'fa2', fromId: 'fanout#function:A:1', toId: 'fanout#function:C:3', type: 'calls', confidence: 1.0 },
+        { id: 'fa3', fromId: 'fanout#function:A:1', toId: 'fanout#function:D:4', type: 'calls', confidence: 1.0 },
+        { id: 'fa4', fromId: 'fanout#function:D:4', toId: 'fanout#function:E:5', type: 'calls', confidence: 1.0 },
+      ];
+      for (const l of lnks) db.insertLink(l);
+
+      // A → E: path should be [A, D, E], not [A, B, C, D, E]
+      const pathAE = db.findPath('A', 'E');
+      expect(pathAE).not.toBeNull();
+      const namesAE = pathAE!.map(p => p.symbol.name);
+      expect(namesAE).toEqual(['A', 'D', 'E']);
+
+      // A → B: path should be [A, B], single hop
+      const pathAB = db.findPath('A', 'B');
+      expect(pathAB).not.toBeNull();
+      const namesAB = pathAB!.map(p => p.symbol.name);
+      expect(namesAB).toEqual(['A', 'B']);
+    });
   });
 
   // ── getAllSymbols ──
@@ -123,7 +154,7 @@ describe('Database — annotations, sessions, graph methods', () => {
   describe('getAllSymbols', () => {
     it('returns all symbols', () => {
       const all = db.getAllSymbols();
-      expect(all.length).toBe(6);
+      expect(all.length).toBe(11); // 6 from setup + 5 from fan-out test
     });
   });
 

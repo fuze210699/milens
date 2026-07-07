@@ -7,4 +7,5 @@ standalone/
 *.sqlite-journal
 coverage/
 test/tmp/
+src/build-info.ts
 .env

@@ -4,6 +4,10 @@ import { join, resolve } from 'node:path';
 import { Database } from '../../src/store/db.js';
 import { RepoRegistry } from '../../src/store/registry.js';
 import { createMcpServer } from '../../src/server/mcp.js';
+import { registerSecurityTools } from '../../src/server/tools/security.js';
+import { registerSessionTools } from '../../src/server/tools/session.js';
+import { registerTestingTools } from '../../src/server/tools/testing.js';
+import { registerResources } from '../../src/server/tools/resources.js';
 import type { CodeSymbol, SymbolLink } from '../../src/types.js';
 
 const TEST_ROOT = resolve(join(import.meta.dirname, '..', 'tmp', 'mcp-tools-test'));
@@ -771,6 +775,91 @@ describe('createMcpServer', () => {
       const result = await handler({ target: 'helper', direction: 'upstream', depth: 1, repo: TEST_ROOT });
       expect(result.content[0].text).toContain('upstream');
       expect(result.content[0].text).toContain('depth 1:');
+    });
+  });
+
+  // ── Register function smoke tests ──
+
+  describe('registerSecurityTools', () => {
+    it('registers security_scan tool on the server', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['security_scan']).toBeDefined();
+      expect(typeof (tools['security_scan'] as any).handler).toBe('function');
+    });
+
+    it('registers fix_apply tool on the server', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['fix_apply']).toBeDefined();
+    });
+
+    it('security_scan handler runs without throwing on valid input', async () => {
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'security_scan');
+      const result = await handler({ scope: 'all', repo: TEST_ROOT, limit: 5 });
+      const text = result.content[0].text;
+      const parsed = JSON.parse(text);
+      expect(parsed.summary).toBeDefined();
+      expect(typeof parsed.summary.totalScanned).toBe('number');
+      expect(typeof parsed.summary.score).toBe('number');
+      expect(Array.isArray(parsed.findings)).toBe(true);
+    });
+  });
+
+  describe('registerSessionTools', () => {
+    it('registers session_start tool on the server', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['session_start']).toBeDefined();
+      expect(typeof (tools['session_start'] as any).handler).toBe('function');
+    });
+
+    it('registers annotate and recall tools', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['annotate']).toBeDefined();
+      expect(tools['recall']).toBeDefined();
+    });
+  });
+
+  describe('registerTestingTools', () => {
+    it('registers test_plan tool on the server', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['test_plan']).toBeDefined();
+      expect(typeof (tools['test_plan'] as any).handler).toBe('function');
+    });
+
+    it('registers test_coverage_gaps tool on the server', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['test_coverage_gaps']).toBeDefined();
+    });
+
+    it('test_plan handler returns a valid plan', async () => {
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'test_plan');
+      const result = await handler({ name: 'AuthService', repo: TEST_ROOT });
+      expect(result.content[0].text).toBeDefined();
+      expect(result.content[0].text.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('registerResources', () => {
+    it('registers milens://overview resource', async () => {
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'codebase_summary');
+      expect(handler).toBeDefined();
+      expect(typeof handler).toBe('function');
+    });
+
+    it('codebase_summary returns non-empty result', async () => {
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'codebase_summary');
+      const result = await handler({ repo: TEST_ROOT });
+      expect(result.content[0].text).toBeDefined();
+      expect(result.content[0].text.length).toBeGreaterThan(0);
     });
   });
 });

@@ -358,36 +358,36 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   }
   reporter?.endPhase();
 
-  // Phase 5.5: Dual-path resolution — compare legacy vs scope-based
-  try {
-    const scopeT0 = Date.now();
-    if (opts.verbose) console.error(`[dual] Starting scope-based resolution (${allSymbols.length} symbols, ${allCalls.length} calls, ${allImports.length} imports)...`);
-    const scopeResolution = resolveWithScopes({
-      symbolsByFile,
-      allSymbols,
-      imports: allImports,
-      calls: allCalls,
-      heritage: allHeritage,
-      reExports: allReExports,
-      typeBindings: allTypeBindings,
-      assignmentBindings: allAssignmentBindings,
-      returnTypes: allReturnTypes,
-      callResultBindings: allCallResultBindings,
-      resolvedImportPaths,
-      perFileImportSemantics,
-      perFileMroStrategy,
-      treeCache,
-    });
-    if (opts.verbose) console.error(`[dual] Scope resolution completed in ${Date.now() - scopeT0}ms (${scopeResolution.links.length} links)`);
-    const diffs = diffResolutions(resolution, scopeResolution);
-    if (opts.verbose) {
+  // Phase 5.5: Dual-path resolution — compare legacy vs scope-based (opt-in diagnostic)
+  if (opts.verbose) {
+    try {
+      const scopeT0 = Date.now();
+      console.error(`[dual] Starting scope-based resolution (${allSymbols.length} symbols, ${allCalls.length} calls, ${allImports.length} imports)...`);
+      const scopeResolution = resolveWithScopes({
+        symbolsByFile,
+        allSymbols,
+        imports: allImports,
+        calls: allCalls,
+        heritage: allHeritage,
+        reExports: allReExports,
+        typeBindings: allTypeBindings,
+        assignmentBindings: allAssignmentBindings,
+        returnTypes: allReturnTypes,
+        callResultBindings: allCallResultBindings,
+        resolvedImportPaths,
+        perFileImportSemantics,
+        perFileMroStrategy,
+        treeCache,
+      });
+      console.error(`[dual] Scope resolution completed in ${Date.now() - scopeT0}ms (${scopeResolution.links.length} links)`);
+      const diffs = diffResolutions(resolution, scopeResolution);
       const matchPct = resolution.links.length > 0
         ? ((resolution.links.length - diffs.length) / resolution.links.length * 100).toFixed(1)
         : '0.0';
       console.error(`[dual] Legacy: ${resolution.links.length} links, Scope: ${scopeResolution.links.length} links, Diff: ${diffs.length} (${matchPct}% match)`);
+    } catch (err) {
+      console.error(`[dual] Scope resolution failed (non-fatal): ${err}`);
     }
-  } catch (err) {
-    if (opts.verbose) console.error(`[dual] Scope resolution failed (non-fatal): ${err}`);
   }
 
   // Release raw extraction data — no longer needed after resolution
@@ -431,6 +431,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
 
   // Phase 7: Persist to database in single transaction
   reporter?.startPhase(ProgressPhase.PERSIST, 1);
+  const isFullScan = !opts.files || opts.files.length === 0;
   db.transaction(() => {
     if (opts.force) {
       if (opts.files && opts.files.length > 0) {
@@ -454,21 +455,25 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     }
     for (const link of links) db.insertLink(link);
     for (const [filePath, zone] of enriched.zones) db.setFileZone(filePath, zone);
-    db.setMeta('unresolved_imports', String(resolution.unresolvedImports));
-    db.setMeta('unresolved_calls', String(resolution.unresolvedCalls));
-    db.setMeta('external_imports', String(resolution.externalImports));
-    db.setMeta('external_calls', String(resolution.externalCalls));
-    db.setMeta('test_files', String(testFiles.size));
-    db.setMeta('tested_symbols', String(testedSymbolIds.size));
-    db.setMeta('exported_production_symbols', String(exportedProduction.length));
+    if (isFullScan) {
+      db.setMeta('unresolved_imports', String(resolution.unresolvedImports));
+      db.setMeta('unresolved_calls', String(resolution.unresolvedCalls));
+      db.setMeta('external_imports', String(resolution.externalImports));
+      db.setMeta('external_calls', String(resolution.externalCalls));
+      db.setMeta('test_files', String(testFiles.size));
+      db.setMeta('tested_symbols', String(testedSymbolIds.size));
+      db.setMeta('exported_production_symbols', String(exportedProduction.length));
+    }
     db.rebuildSearch();
   });
   reporter?.endPhase();
 
-  // Prune stale file_hashes for deleted files (incremental analyze self-healing)
-  const fileRelativePaths = files.map(f => f.relativePath);
-  const prunedCount = db.pruneOrphanFileHashes(fileRelativePaths);
-  if (opts.verbose && prunedCount > 0) console.error(`[prune] Removed ${prunedCount} stale file_hashes entries`);
+  // Prune stale file_hashes for deleted files (full-analyze self-healing only)
+  if (isFullScan) {
+    const fileRelativePaths = files.map(f => f.relativePath);
+    const prunedCount = db.pruneOrphanFileHashes(fileRelativePaths);
+    if (opts.verbose && prunedCount > 0) console.error(`[prune] Removed ${prunedCount} stale file_hashes entries`);
+  }
 
   // Phase 8: Generate embeddings (optional)
   if (opts.embeddings) {

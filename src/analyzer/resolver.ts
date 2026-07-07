@@ -304,8 +304,31 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
       continue;
     }
 
-    // Fast path: unique name globally
-    if (candidates.length === 1) {
+    // Fast path: unique name globally.
+    // Skip this shortcut when:
+    // - the call has a receiver AND the name is a common built-in prototype method
+    //   (`pattern.exec()`, `fileSet.add()`) — those must go through receiver-aware
+    //   narrowing below instead of being linked by bare name to an unrelated project
+    //   symbol that merely happens to share the name. Receiver calls to any other
+    //   (non-built-in) method name still take the fast path, since that's what
+    //   correctly resolves single-candidate methods like `self.save()` in
+    //   Python/Go/Rust fixtures — narrowing isn't reliable for those receiver types.
+    // - the identifier was captured from an argument position, not an actual
+    //   invocation (`onMounted(handler)`, decorator args) — it may just be a plain
+    //   local variable (e.g. `resolve(root, file)`), not a function reference. Let it
+    //   fall through to same-file/imported/proximity-scored matching below instead of
+    //   blindly linking to a same-named symbol anywhere in the repo.
+    if (
+      candidates.length === 1 &&
+      !(call.receiver && BUILTIN_METHOD_NAMES.has(call.calleeName)) &&
+      !call.isArgumentRef
+    ) {
+      // Check if the caller imported this name from an external module, or it's a builtin global
+      const fileExtNames = externalNamesPerFile.get(call.filePath);
+      if (BUILTIN_GLOBALS.has(call.calleeName) || fileExtNames?.has(call.calleeName)) {
+        externalCalls++;
+        continue;
+      }
       links.push(makeLink(call.enclosingSymbolId, candidates[0].id, 'calls', 0.9, call.line));
       continue;
     }
@@ -321,6 +344,15 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
         }
         continue;
       }
+      // Receiver didn't resolve to a known type — treat as external call
+      // Don't fall through to name-only matching which would link to unrelated symbols
+      const extNames = externalNamesPerFile.get(call.filePath);
+      if (BUILTIN_GLOBALS.has(call.calleeName) || extNames?.has(call.calleeName)) {
+        externalCalls++;
+      } else {
+        unresolvedCalls++;
+      }
+      continue;
     }
 
     // ── Same file match ──
@@ -946,4 +978,18 @@ const BUILTIN_GLOBALS = new Set([
   'var_dump', 'echo', 'isset', 'unset', 'empty', 'die', 'exit',
   'array_map', 'array_filter', 'array_merge', 'array_keys', 'array_values',
   'count', 'strlen', 'substr', 'explode', 'implode', 'trim',
+]);
+
+/** Common built-in prototype/instance method names (Set/Map/Array/RegExp/String/Promise/...)
+ *  that frequently collide by bare name with unrelated project symbols. Unlike
+ *  BUILTIN_GLOBALS (free-standing functions), these only matter when called with
+ *  a receiver (`x.exec()`, `x.add()`) — a bare `add(...)` call is not a built-in. */
+const BUILTIN_METHOD_NAMES = new Set([
+  'exec', 'test', 'add', 'delete', 'has', 'get', 'set', 'clear',
+  'push', 'pop', 'shift', 'unshift', 'slice', 'splice', 'concat', 'join', 'reverse', 'sort',
+  'map', 'filter', 'reduce', 'reduceRight', 'forEach', 'find', 'findIndex', 'includes',
+  'indexOf', 'lastIndexOf', 'some', 'every', 'flat', 'flatMap', 'fill', 'keys', 'values', 'entries',
+  'then', 'catch', 'finally',
+  'toString', 'valueOf', 'hasOwnProperty', 'match', 'matchAll', 'replace', 'replaceAll',
+  'split', 'trim', 'toLowerCase', 'toUpperCase', 'startsWith', 'endsWith', 'padStart', 'padEnd',
 ]);

@@ -456,4 +456,53 @@ describe('enrichMetadata', () => {
       expect(result.zones.get('src/a.ts')).toBe(result.zones.get('src/b.ts'));
     });
   });
+
+  describe('deduplication', () => {
+    it('counts imports + calls from same caller as one signal for fan-in', () => {
+      const target = makeSym('t', 'sharedLib', 'function', 'src/lib.ts', true);
+      const topA = makeSym('a_top', '_top', 'module', 'src/a.ts', false);
+      const callerA = makeSym('a', 'callerA', 'function', 'src/a.ts', true);
+      const topB = makeSym('b_top', '_top', 'module', 'src/b.ts', false);
+      const callerB = makeSym('b', 'callerB', 'function', 'src/b.ts', true);
+
+      const input = {
+        symbols: [target, topA, callerA, topB, callerB],
+        links: [
+          makeLink('li1', topA.id, target.id, 'imports'),
+          makeLink('lc1', callerA.id, target.id, 'calls'),
+          makeLink('li2', topB.id, target.id, 'imports'),
+          makeLink('lc2', callerB.id, target.id, 'calls'),
+        ],
+      };
+      const result = enrichMetadata(input);
+      // imports + calls from the same file = 1 real dependent → fan-in of 2, not 4
+      // With 2 incoming, out=0 → leaf role, not hub (hub requires >=3 in AND >=3 out)
+      const lib = result.symbols.find(s => s.name === 'sharedLib')!;
+      expect(lib.heat).toBeLessThanOrEqual(45); // 2*15=30 + 0 + 10 + 5 = 45
+      expect(lib.role).toBe('leaf'); // 2 in, 0 out → leaf
+    });
+
+    it('does not count imports + calls from different callers as duplicate', () => {
+      const target = makeSym('t', 'hubFn', 'function', 'src/lib.ts', true);
+      const helpers: CodeSymbol[] = [];
+      const links: SymbolLink[] = [];
+      // 3 different files each with one call
+      for (let i = 0; i < 3; i++) {
+        const caller = makeSym(`c${i}`, `caller${i}`, 'function', `src/f${i}.ts`, true);
+        helpers.push(caller);
+        links.push(makeLink(`l${i}`, caller.id, target.id, 'calls'));
+      }
+      // target also calls a helper
+      const helper = makeSym('h', 'helper', 'function', 'src/lib.ts', false);
+      links.push(makeLink('out', target.id, helper.id, 'calls'));
+
+      const input = {
+        symbols: [target, ...helpers, helper],
+        links,
+      };
+      const result = enrichMetadata(input);
+      const hubFn = result.symbols.find(s => s.name === 'hubFn')!;
+      expect(hubFn.role).not.toBe('leaf'); // 3 in, 1 out → hub
+    });
+  });
 });

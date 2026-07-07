@@ -11,6 +11,7 @@ import {
   defaultOnPostCompact,
 } from '../hooks.js';
 import type { Deps } from './deps.js';
+import { BUILD_SHA, BUILT_AT } from '../../build-info.js';
 
 export function registerSessionTools(server: McpServer, deps: Deps): void {
   const { getDb, guard, getToolCallCount } = deps;
@@ -73,7 +74,7 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
         }
       } catch { /* hooks are best-effort */ }
 
-      const text = `Session started: ${sessionId}\nAgent: ${agent}\nUse this ID with annotate() and session_end().`;
+      const text = `Session started: ${sessionId}\nAgent: ${agent}\nBuild: ${BUILD_SHA} (${BUILT_AT})\nUse this ID with annotate() and session_end().`;
       return { content: [{ type: 'text' as const, text: hookOutput ? `${hookOutput}\n\n${text}` : text }] };
     },
   );

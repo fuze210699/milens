@@ -21,7 +21,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
-import { readFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, mkdirSync, rmSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from '../../src/store/db.js';
 import { RepoRegistry } from '../../src/store/registry.js';
@@ -175,6 +175,67 @@ describe('CLI', () => {
     it('package.json has a valid semver version', () => {
       expect(PKG.version).toBeTruthy();
       expect(PKG.version).toMatch(/^\d+\.\d+\.\d+/);
+    });
+  });
+
+  // ── Hook actions ─────────────────────────────────────────────────────
+
+  describe('hooks actions registered', () => {
+    it('hooks --help shows new options', async () => {
+      process.argv = ['node', 'milens', 'hooks', '--help'];
+      await import('../../src/cli.js');
+
+      const output = getOutput(stdoutSpy);
+      expect(output).toContain('--agent');
+      expect(output).toContain('--repo');
+    });
+  });
+
+  describe('hook handler functions', () => {
+    const TEST_DIR = join(import.meta.dirname, '..', 'tmp', 'hook-handler-test');
+
+    beforeAll(() => {
+      mkdirSync(join(TEST_DIR, '.milens'), { recursive: true });
+      const dbPath = join(TEST_DIR, '.milens', 'milens.db');
+      if (existsSync(dbPath)) unlinkSync(dbPath);
+      const db = new Database(dbPath);
+      db.close();
+    });
+
+    afterAll(() => {
+      try { rmSync(TEST_DIR, { recursive: true, force: true }); } catch {}
+    });
+
+    it('defaultOnSessionStart returns codebase context', async () => {
+      const { defaultOnSessionStart } = await import('../../src/server/hooks.js');
+      const ctx = { agent: 'test', sessionId: 'test-session', rootPath: TEST_DIR };
+      const dbPath = join(TEST_DIR, '.milens', 'milens.db');
+      const output = await defaultOnSessionStart(ctx, dbPath);
+      expect(output).toContain('Codebase Context');
+      expect(output.length).toBeGreaterThan(0);
+    });
+
+    it('defaultOnPreCompact returns snapshot info', async () => {
+      const { defaultOnPreCompact } = await import('../../src/server/hooks.js');
+      const dbPath = join(TEST_DIR, '.milens', 'milens.db');
+      const output = await defaultOnPreCompact(TEST_DIR, dbPath);
+      expect(output.length).toBeGreaterThan(0);
+      expect(output).toContain('Pre-compact');
+    });
+
+    it('defaultOnSessionEnd returns session summary', async () => {
+      const { defaultOnSessionEnd } = await import('../../src/server/hooks.js');
+      const ctx = { agent: 'test', sessionId: 'test-session', rootPath: TEST_DIR };
+      const dbPath = join(TEST_DIR, '.milens', 'milens.db');
+      const output = await defaultOnSessionEnd(ctx, dbPath);
+      expect(output).toContain('Session End Summary');
+      expect(output.length).toBeGreaterThan(0);
+    });
+
+    it('defaultOnPostCompact returns context restored message', async () => {
+      const { defaultOnPostCompact } = await import('../../src/server/hooks.js');
+      const output = await defaultOnPostCompact(TEST_DIR);
+      expect(output.length).toBeGreaterThan(0);
     });
   });
 });

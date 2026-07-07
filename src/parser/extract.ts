@@ -406,6 +406,12 @@ export function extractFromTree(
 
       const callLine = defNode.startPosition.row + 1;
       const receiver = captureText(match, 'receiver');
+      // Distinguish "identifier is the function being invoked" from "identifier is merely
+      // passed as an argument" (e.g. `onMounted(handler)`, decorator arguments) — the latter
+      // captures @callee whose parent is an `arguments` node, not a call/new expression.
+      const calleeNode = captureNode(match, 'callee');
+      const parentType = calleeNode?.parent?.type;
+      const isArgumentRef = parentType === 'arguments' || parentType === 'pair' || parentType === 'array';
 
       calls.push({
         filePath,
@@ -413,6 +419,7 @@ export function extractFromTree(
         calleeName: callee,
         receiver,
         line: callLine,
+        ...(isArgumentRef ? { isArgumentRef: true } : {}),
       });
     }
   }

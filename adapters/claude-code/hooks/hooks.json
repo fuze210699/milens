@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "command": "milens hooks session-start --agent ${CLAUDE_AGENT_NAME} --repo ${CLAUDE_PROJECT_DIR} || true"
+      }
+    ],
+    "PreCompact": [
+      {
+        "command": "milens hooks pre-compact --repo ${CLAUDE_PROJECT_DIR} || true"
+      }
+    ]
+  }
+}

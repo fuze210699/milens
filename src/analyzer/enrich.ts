@@ -24,9 +24,20 @@ export function enrichMetadata(input: EnrichInput): EnrichOutput {
   // ── Build adjacency counts ──
   const inCount = new Map<string, number>();  // incoming refs (excluding 'contains')
   const outCount = new Map<string, number>(); // outgoing refs (excluding 'contains')
+  const symToFile = new Map<string, string>();
+  for (const sym of symbols) symToFile.set(sym.id, sym.filePath);
+  // Dedupe by (caller_file, callee_id): imports + calls from same file = 1 signal
+  const seenPairs = new Set<string>();
 
   for (const link of links) {
     if (link.type === 'contains') continue;
+    const fromFile = symToFile.get(link.fromId);
+    if (fromFile) {
+      const pairKey = `${fromFile}::${link.toId}`;
+      if (seenPairs.has(pairKey)) continue;
+      seenPairs.add(pairKey);
+    }
+    // If fromFile is unknown (e.g. link from unresolvable symbol), count as-is
     inCount.set(link.toId, (inCount.get(link.toId) ?? 0) + 1);
     outCount.set(link.fromId, (outCount.get(link.fromId) ?? 0) + 1);
   }

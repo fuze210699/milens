@@ -363,95 +363,44 @@ export class Database {
     const toId = toSyms[0].id;
     const toIds = new Set(toSyms.map(s => s.id));
 
-    // Direct outgoing path check first
-    const directPath = this.db.prepare(`
-      WITH RECURSIVE path(id, depth, via) AS (
-        SELECT to_id, 1, type FROM links WHERE from_id = ? AND type != 'contains'
-        UNION
-        SELECT l.to_id, p.depth + 1, l.type
-        FROM links l JOIN path p ON l.from_id = p.id
-        WHERE l.type != 'contains' AND p.depth < ?
+    // Use path-accumulating CTE to track the actual predecessor chain
+    interface PathRow { node_id: string; depth: number; via: string; path_ids: string; }
+
+    const rows = this.db.prepare(`
+      WITH RECURSIVE chain(node_id, depth, via, path_ids) AS (
+        SELECT l.to_id, 1, l.type, ',' || l.from_id || ',' || l.to_id || ','
+        FROM links l WHERE l.from_id = ? AND l.type != 'contains'
+        UNION ALL
+        SELECT l.to_id, c.depth + 1, l.type, c.path_ids || l.to_id || ','
+        FROM links l JOIN chain c ON l.from_id = c.node_id
+        WHERE l.type != 'contains' AND c.depth < ?
+          AND c.path_ids NOT LIKE '%,' || l.to_id || ',%'
       )
-      SELECT DISTINCT s.*, p.depth, p.via FROM path p JOIN symbols s ON s.id = p.id ORDER BY p.depth
-    `).all(fromId, maxDepth) as any[];
+      SELECT node_id, depth, via, path_ids FROM chain ORDER BY depth
+    `).all(fromId, maxDepth) as PathRow[];
 
-    const directFound = directPath.find((r: any) => toIds.has(r.id));
-    if (directFound) {
-      const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
-      for (const r of directPath) {
-        result.push({ symbol: rowToSymbol(r), depth: r.depth, via: r.via });
-        if (toIds.has(r.id)) break;
+    // Find the first (shortest-depth) row matching the target
+    const targetRow = rows.find(r => toIds.has(r.node_id));
+    if (!targetRow) return null;
+
+    // Reconstruct path from path_ids chain
+    const idChain = targetRow.path_ids.split(',').filter((s: string) => s.length > 0);
+    // idChain[0] = fromId, idChain[last] = target node_id
+    const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
+    for (let i = 0; i < idChain.length; i++) {
+      const sym = this.findSymbolById(idChain[i]);
+      if (!sym) continue;
+      // Determine via for this hop: lookup link from idChain[i] → idChain[i+1]
+      let via = 'calls';
+      if (i < idChain.length - 1) {
+        const linkRow = this.db.prepare(
+          'SELECT type FROM links WHERE from_id = ? AND to_id = ? AND type != ? LIMIT 1'
+        ).get(idChain[i], idChain[i + 1], 'contains') as any;
+        if (linkRow) via = linkRow.type;
       }
-      return result;
+      result.push({ symbol: sym, depth: i, via });
     }
-
-    // Bidirectional: find common ancestor via incoming from source + outgoing to target
-    // Collect all nodes reachable via INCOMING from source (upstream)
-    const upstreamRows = this.db.prepare(`
-      WITH RECURSIVE upstream(id, depth) AS (
-        SELECT from_id, 1 FROM links WHERE to_id = ? AND type != 'contains'
-        UNION
-        SELECT l.from_id, u.depth + 1
-        FROM links l JOIN upstream u ON l.to_id = u.id
-        WHERE l.type != 'contains' AND u.depth < ?
-      )
-      SELECT DISTINCT u.id, u.depth FROM upstream u
-    `).all(fromId, maxDepth) as any[];
-
-    // Collect all nodes reachable via OUTGOING from target (downstream from target = what target depends on)
-    const targetDownstream = this.db.prepare(`
-      WITH RECURSIVE downstream(id, depth) AS (
-        SELECT to_id, 1 FROM links WHERE from_id = ? AND type != 'contains'
-        UNION
-        SELECT l.to_id, d.depth + 1
-        FROM links l JOIN downstream d ON l.from_id = d.id
-        WHERE l.type != 'contains' AND d.depth < ?
-      )
-      SELECT DISTINCT d.id, d.depth FROM downstream d
-    `).all(toId, maxDepth) as any[];
-
-    // Also check: is target itself reachable via incoming from source?
-    if (upstreamRows.some((r: any) => toIds.has(r.id))) {
-      // Build the path: from source, follow incoming to common node, then describe reaching target
-      const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
-      for (const r of upstreamRows) {
-        const sym = rowToSymbol(r);
-        result.push({ symbol: sym, depth: r.depth, via: 'in:calls/imports' });
-        if (toIds.has(r.id)) break;
-      }
-      return result;
-    }
-
-    // Find intersection: any node reachable upstream from source AND downstream from target
-    const upstreamSet = new Set(upstreamRows.map((r: any) => r.id));
-    const commonNodes = targetDownstream.filter((r: any) => upstreamSet.has(r.id));
-    if (commonNodes.length > 0) {
-      const common = commonNodes[0];
-      const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
-      // Upstream path from source → through common node
-      for (const r of upstreamRows) {
-        result.push({ symbol: rowToSymbol(r), depth: r.depth, via: 'in:calls/imports' });
-        if (r.id === common.id) break;
-      }
-      // Downstream path from common node → target
-      const targetDownstreamRows = this.db.prepare(`
-        WITH RECURSIVE downstream(id, depth, via) AS (
-          SELECT to_id, 1, type FROM links WHERE from_id = ? AND type != 'contains'
-          UNION
-          SELECT l.to_id, d.depth + 1, l.type
-          FROM links l JOIN downstream d ON l.from_id = d.id
-          WHERE l.type != 'contains' AND d.depth < ?
-        )
-        SELECT DISTINCT s.*, d.depth, d.via FROM downstream d JOIN symbols s ON s.id = d.id ORDER BY d.depth
-      `).all(common.id, maxDepth) as any[];
-      for (const r of targetDownstreamRows) {
-        result.push({ symbol: rowToSymbol(r), depth: (common as any).depth + r.depth, via: r.via });
-        if (toIds.has(r.id)) break;
-      }
-      return result;
-    }
-
-    return null;
+    return result;
   }
 
   getChangedFiles(): string[] {
@@ -536,9 +485,12 @@ export class Database {
       const incoming = this.getIncomingLinks(currentId).filter(l => l.type === 'calls' || l.type === 'imports');
       const sym = this.findSymbolById(currentId);
 
-      if (incoming.length === 0 && sym?.exported) {
+      if (incoming.length === 0) {
         // Reached an entrypoint — save this path
-        paths.push({ path: [...currentPath] });
+        // _top modules represent file-level entrypoints (e.g., top-level code execution)
+        if (sym?.exported || (sym?.kind === 'module' && sym?.name === '_top')) {
+          paths.push({ path: [...currentPath] });
+        }
         visited.delete(currentId);
         return;
       }
@@ -628,7 +580,6 @@ export class Database {
   clear(): void {
     this.db.exec('DELETE FROM symbols');
     this.db.exec('DELETE FROM links');
-    this.db.exec('DELETE FROM file_hashes');
   }
 
   /** Clear only symbols, links, and file hashes for specific files (incremental re-index) */

@@ -24,6 +24,7 @@ import { registerSecurityTools } from './tools/security.js';
 import { FileWatcher } from './watcher.js';
 import { reviewPr } from '../analyzer/review.js';
 import { globToRegex } from '../utils.js';
+import { BUILD_SHA, BUILT_AT } from '../build-info.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_VERSION: string = process.env.MILENS_VERSION ?? JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8')).version;
@@ -724,7 +725,14 @@ export function createMcpServer(rootPath?: string): McpServer {
         if (refs.length === 0) {
           lines.push(`No ${direction} deps found.`);
         } else {
-          const depth1Count = refs.filter(r => r.depth === 1).length;
+          // Dedupe depth-1 by calling file — same real dependent, same blast radius
+          const seenFilesD1 = new Set<string>();
+          const depth1Refs = refs.filter(r => r.depth === 1);
+          const depth1Count = depth1Refs.filter(r => {
+            if (seenFilesD1.has(r.symbol.filePath)) return false;
+            seenFilesD1.add(r.symbol.filePath);
+            return true;
+          }).length;
           lines.push(`${direction} (${refs.length} symbols, depth-1: ${depth1Count}):`);
           lines.push(fmtImpact(refs, detail));
 
@@ -757,7 +765,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const stats = lazy.getCachedStats();
       const unresolved = db.getUnresolvedStats();
       const coverage = db.getTestCoverage();
-      let text = `repo: ${root}\nsymbols: ${stats.symbols}\nlinks: ${stats.links}\nfiles: ${stats.files}`;
+      let text = `repo: ${root}\nbuild: ${BUILD_SHA} (built: ${BUILT_AT})\nversion: ${PKG_VERSION}\nsymbols: ${stats.symbols}\nlinks: ${stats.links}\nfiles: ${stats.files}`;
       if (unresolved.imports > 0 || unresolved.calls > 0) {
         text += `\n⚠ unresolved (internal): ${unresolved.imports} imports, ${unresolved.calls} calls — callers may be incomplete`;
       }
@@ -778,13 +786,13 @@ export function createMcpServer(rootPath?: string): McpServer {
       if (staleFiles.length > 0) {
         text += `\n⏳ ${staleFiles.length} files not analyzed in 24h`;
       }
-      // Accuracy report — confidence distribution of resolved links
+      // Resolution confidence distribution (heuristic self-ratings, not validated accuracy)
       const conf = db.getConfidenceDistribution();
       if (conf.total > 0) {
         const highPct = Math.round(conf.high / conf.total * 100);
         const medPct = Math.round(conf.medium / conf.total * 100);
         const lowPct = Math.round(conf.low / conf.total * 100);
-        text += `\naccuracy: ${conf.total} links — ≥0.9: ${conf.high} (${highPct}%) | 0.7-0.9: ${conf.medium} (${medPct}%) | <0.7: ${conf.low} (${lowPct}%)`;
+        text += `\nresolution confidence: ${conf.total} links — ≥0.9: ${conf.high} (${highPct}%) | 0.7-0.9: ${conf.medium} (${medPct}%) | <0.7: ${conf.low} (${lowPct}%)`;
         if (lowPct > 15) {
           text += `\n⚠ ${lowPct}% low-confidence links — consider re-analyzing with \`--force\` or reviewing unresolved calls`;
         }
@@ -1308,9 +1316,14 @@ export function createMcpServer(rootPath?: string): McpServer {
         sections.push(`${fmtSymbol(sym)}${sym.exported ? ' (exported)' : ''}`);
 
         const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+        // Dedupe by calling file — imports + calls from the same file = 1 real dependent
+        const seenFiles = new Set<string>();
         const depsCount = incoming.filter(l => {
           const from = db.findSymbolById(l.fromId);
-          return from && !isTestFilePath(from.filePath);
+          if (!from || isTestFilePath(from.filePath)) return false;
+          if (seenFiles.has(from.filePath)) return false;
+          seenFiles.add(from.filePath);
+          return true;
         }).length;
 
         if (session_id) guard.recordCheck(session_id, name);
@@ -1415,7 +1428,7 @@ export function createMcpServer(rootPath?: string): McpServer {
           const traces = db.traceToEntrypoints(sym.id, depth);
           sections.push(`## Execution paths TO ${fmtSymbol(sym)}\n`);
           if (traces.length === 0) {
-            sections.push('No call chains found (symbol may be an entrypoint itself or unreachable).');
+            sections.push('No call chain found — verify with `context()` before treating this symbol as dead code.');
           } else {
             for (let i = 0; i < traces.length; i++) {
               const chain = traces[i].path;

@@ -17,8 +17,10 @@
   "scripts": {
     "build": "node scripts/gen-build-info.mjs && tsc && node -e \"require('fs').copyFileSync('src/store/schema.sql','dist/store/schema.sql')\"",
     "dev": "tsx src/cli.ts",
+    "pretest": "node scripts/gen-build-info.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "prelint": "node scripts/gen-build-info.mjs",
     "lint": "tsc --noEmit && node scripts/check-console.mjs",
     "prepublishOnly": "npm run build && npm test && node scripts/check-console.mjs",
     "build:standalone": "node scripts/build-standalone.mjs",

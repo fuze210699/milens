@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { resolve, relative, join } from 'node:path';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { loadRules } from '../../security/rules.js';
+import { globToRegex } from '../../utils.js';
 import type { Deps } from './deps.js';
 
 export function registerSecurityTools(server: McpServer, deps: Deps): void {
@@ -58,9 +59,7 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
           if (rule.excludeGlob) {
             const excludePatterns = rule.excludeGlob.split(',');
             for (const pattern of excludePatterns) {
-              const regex = new RegExp(
-                '^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\*\*/g, '.*') + '$'
-              );
+              const regex = globToRegex(pattern.trim());
               if (regex.test(file) || regex.test('/' + file)) {
                 shouldExclude = true;
                 break;

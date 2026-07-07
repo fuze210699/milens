@@ -23,6 +23,7 @@ import { registerTestingTools } from './tools/testing.js';
 import { registerSecurityTools } from './tools/security.js';
 import { FileWatcher } from './watcher.js';
 import { reviewPr } from '../analyzer/review.js';
+import { globToRegex } from '../utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_VERSION: string = process.env.MILENS_VERSION ?? JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8')).version;
@@ -365,15 +366,6 @@ function safeRegex(pattern: string, flags: string): RegExp {
   }
   if (maxDepth > 3) throw new Error('Unsafe regex pattern');
   return new RegExp(pattern, flags);
-}
-
-function globToRegex(glob: string): RegExp {
-  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '§STARSTAR§')
-    .replace(/\*/g, '[^/]*')
-    .replace(/§STARSTAR§/g, '.*')
-    .replace(/\?/g, '.');
-  return new RegExp(`^${escaped}$`, 'i');
 }
 
 function loadGrepIgnoreRules(rootPath: string): ReturnType<typeof ignore> {

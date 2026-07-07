@@ -1922,7 +1922,16 @@ export function createMcpServer(rootPath?: string): McpServer {
       if (syms.length === 0) return { content: [{ type: 'text' as const, text: `"${name}" not found.` }] };
       const lines: string[] = [];
       for (const sym of syms) {
-        const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+        const incomingRaw = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+        // Dedupe by calling file — imports + calls from the same file is 1 real dependent
+        const seenCallerFiles = new Set<string>();
+        const incoming = incomingRaw.filter(l => {
+          const from = db.findSymbolById(l.fromId);
+          const key = from?.filePath ?? l.fromId;
+          if (seenCallerFiles.has(key)) return false;
+          seenCallerFiles.add(key);
+          return true;
+        });
         const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
         const depsCount = incoming.length;
         const depsTop = incoming.slice(0, 5).map(l => { const s = db.findSymbolById(l.fromId); return s?.name ?? l.fromId; });

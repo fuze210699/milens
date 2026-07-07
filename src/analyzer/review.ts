@@ -261,6 +261,21 @@ function getChangedSymbolNames(root: string, file: string, base: string, ref: st
   }
 }
 
+// ── Dependents ──
+
+/** Count distinct calling *files* at depth 1, not raw link rows — a file that both
+ *  imports and calls a symbol produces two link rows (imports + calls) for one real
+ *  dependent, which would otherwise double-count risk score and hub/critical
+ *  classification (same bug class fixed in guard_edit_check/impact/enrich.ts). */
+function countDistinctCallerFiles(db: Database, symbolId: string): number {
+  const upstream = db.findUpstream(symbolId, 1);
+  const seenFiles = new Set<string>();
+  for (const u of upstream) {
+    if (u.depth === 1) seenFiles.add(u.symbol.filePath);
+  }
+  return seenFiles.size;
+}
+
 // ── Test coverage ──
 
 function isSymbolTested(db: Database, sym: CodeSymbol): boolean {
@@ -339,8 +354,7 @@ export function reviewPr(db: Database, root: string, ref = 'HEAD', base?: string
       // Fix 1+2: Only include symbols whose name is in the changed set
       if (changedNames !== null && !changedNames.has(sym.name)) continue;
 
-      const upstream = db.findUpstream(sym.id, 1);
-      const dependents = upstream.length;
+      const dependents = countDistinctCallerFiles(db, sym.id);
       const tested = isSymbolTested(db, sym);
       if (!tested && sym.exported) untestedChanges++;
 
@@ -362,7 +376,7 @@ export function reviewPr(db: Database, root: string, ref = 'HEAD', base?: string
         const dsSym = ds.symbol;
         if (dsSym && !changedIds.has(dsSym.id) && !isFixtureOrTest(dsSym.filePath)) {
             const dsTested = isSymbolTested(db, dsSym);
-            const dsDependents = db.findUpstream(dsSym.id, 1).length;
+            const dsDependents = countDistinctCallerFiles(db, dsSym.id);
             const { score, reasons } = scoreSymbol(dsSym, dsDependents, dsTested);
             reasons.unshift(`impacted by change to ${sr.symbol.name}`);
             const riskLevel = classifyRisk(score, !dsTested && dsSym.exported, false);
@@ -398,8 +412,7 @@ export function reviewSymbol(db: Database, name: string): SymbolRisk | null {
   if (syms.length === 0) return null;
 
   const sym = syms[0];
-  const upstream = db.findUpstream(sym.id, 1);
-  const dependents = upstream.length;
+  const dependents = countDistinctCallerFiles(db, sym.id);
   const tested = isSymbolTested(db, sym);
   const { score, reasons } = scoreSymbol(sym, dependents, tested);
   const riskLevel = classifyRisk(score, !tested && sym.exported, sym.role === 'hub' && !tested && dependents > 10);

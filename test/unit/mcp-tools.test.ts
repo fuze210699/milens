@@ -862,4 +862,26 @@ describe('createMcpServer', () => {
       expect(result.content[0].text.length).toBeGreaterThan(0);
     });
   });
+
+  describe('review_symbol dependents dedup', () => {
+    it('counts distinct caller files, not raw import+call link rows', async () => {
+      // Target used by exactly 2 real caller files, each of which both imports
+      // AND calls it — must count as 2 dependents, not 4.
+      db.insertSymbol({ id: 'rs-target.ts#function:rsShared:1', name: 'rsShared', kind: 'function', filePath: 'rs-target.ts', startLine: 1, endLine: 3, exported: true });
+      db.insertSymbol({ id: 'rs-a.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'rs-a.ts', startLine: 0, endLine: 0, exported: false });
+      db.insertSymbol({ id: 'rs-a.ts#function:rsCallerA:5', name: 'rsCallerA', kind: 'function', filePath: 'rs-a.ts', startLine: 5, endLine: 8, exported: true });
+      db.insertSymbol({ id: 'rs-b.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'rs-b.ts', startLine: 0, endLine: 0, exported: false });
+      db.insertSymbol({ id: 'rs-b.ts#function:rsCallerB:5', name: 'rsCallerB', kind: 'function', filePath: 'rs-b.ts', startLine: 5, endLine: 8, exported: true });
+      db.insertLink({ id: 'rsd1', fromId: 'rs-a.ts#module:_top:0', toId: 'rs-target.ts#function:rsShared:1', type: 'imports', confidence: 0.95 });
+      db.insertLink({ id: 'rsd2', fromId: 'rs-a.ts#function:rsCallerA:5', toId: 'rs-target.ts#function:rsShared:1', type: 'calls', confidence: 0.9 });
+      db.insertLink({ id: 'rsd3', fromId: 'rs-b.ts#module:_top:0', toId: 'rs-target.ts#function:rsShared:1', type: 'imports', confidence: 0.95 });
+      db.insertLink({ id: 'rsd4', fromId: 'rs-b.ts#function:rsCallerB:5', toId: 'rs-target.ts#function:rsShared:1', type: 'calls', confidence: 0.9 });
+
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'review_symbol');
+      const result = await handler({ name: 'rsShared', repo: TEST_ROOT });
+      const text = result.content[0].text as string;
+      expect(text).toContain('dependents: 2 ');
+    });
+  });
 });

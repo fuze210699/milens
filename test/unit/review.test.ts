@@ -337,4 +337,45 @@ describe('review', () => {
       try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
   });
+
+  describe('dependents counting', () => {
+    const DEDUPE_DB = join(import.meta.dirname, '..', 'tmp', 'review-dedupe-test.db');
+    let dedupeDb: Database;
+
+    beforeAll(() => {
+      if (existsSync(DEDUPE_DB)) unlinkSync(DEDUPE_DB);
+      dedupeDb = new Database(DEDUPE_DB);
+
+      // Target used by exactly 2 real caller files, each of which both imports
+      // AND calls it (module-level import edge + real call edge) — this must
+      // count as 2 dependents, not 4.
+      const symbols: CodeSymbol[] = [
+        { id: 'target.ts#function:shared:1', name: 'shared', kind: 'function', filePath: 'target.ts', startLine: 1, endLine: 3, exported: true },
+        { id: 'a.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'a.ts', startLine: 0, endLine: 0, exported: false },
+        { id: 'a.ts#function:callerA:5', name: 'callerA', kind: 'function', filePath: 'a.ts', startLine: 5, endLine: 8, exported: true },
+        { id: 'b.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'b.ts', startLine: 0, endLine: 0, exported: false },
+        { id: 'b.ts#function:callerB:5', name: 'callerB', kind: 'function', filePath: 'b.ts', startLine: 5, endLine: 8, exported: true },
+      ];
+      for (const s of symbols) dedupeDb.insertSymbol(s);
+
+      const links: SymbolLink[] = [
+        { id: 'd1', fromId: 'a.ts#module:_top:0', toId: 'target.ts#function:shared:1', type: 'imports', confidence: 0.95 },
+        { id: 'd2', fromId: 'a.ts#function:callerA:5', toId: 'target.ts#function:shared:1', type: 'calls', confidence: 0.9 },
+        { id: 'd3', fromId: 'b.ts#module:_top:0', toId: 'target.ts#function:shared:1', type: 'imports', confidence: 0.95 },
+        { id: 'd4', fromId: 'b.ts#function:callerB:5', toId: 'target.ts#function:shared:1', type: 'calls', confidence: 0.9 },
+      ];
+      for (const l of links) dedupeDb.insertLink(l);
+    });
+
+    afterAll(() => {
+      dedupeDb.close();
+      if (existsSync(DEDUPE_DB)) unlinkSync(DEDUPE_DB);
+    });
+
+    it('reviewSymbol counts distinct caller files, not raw import+call link rows', () => {
+      const result = reviewSymbol(dedupeDb, 'shared');
+      expect(result).not.toBeNull();
+      expect(result!.dependents).toBe(2);
+    });
+  });
 });

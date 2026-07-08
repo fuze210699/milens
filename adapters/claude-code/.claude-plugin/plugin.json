@@ -1,0 +1,11 @@
+{
+  "name": "milens",
+  "description": "AI-DOS Code Intelligence Platform — knowledge graph, security scanning, impact analysis, and closed-loop AI development with 43 MCP tools",
+  "version": "0.7.0",
+  "author": {
+    "name": "milens"
+  },
+  "homepage": "https://github.com/fuze210699/milens",
+  "repository": "https://github.com/fuze210699/milens",
+  "license": "MIT"
+}

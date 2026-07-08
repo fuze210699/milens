@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "prelint": "node scripts/gen-build-info.mjs",
     "lint": "tsc --noEmit && node scripts/check-console.mjs",
+    "version": "node scripts/sync-version.mjs",
     "prepublishOnly": "npm run build && npm test && node scripts/check-console.mjs",
     "build:standalone": "node scripts/build-standalone.mjs",
     "build:standalone:all": "node scripts/build-standalone.mjs --target all",

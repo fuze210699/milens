@@ -30,9 +30,11 @@ claude mcp add milens -- milens serve -p .
 
 `-p .` resolves against the process's working directory, which Claude Code always sets to your project root — the most portable form, no environment-variable substitution needed.
 
-> **Note:** we previously shipped a `.claude-plugin/plugin.json` + `.mcp.json` pair for `/plugin install` (marketplace-style install), using `${CLAUDE_PLUGIN_ROOT}` for `-p`. That variable actually resolves to the plugin's own install directory, not your project, so it silently indexed the wrong codebase. We removed it until Claude Code exposes a real workspace-root variable for plugin manifests ([anthropics/claude-code#9354](https://github.com/anthropics/claude-code/issues/9354)).
->
 > **Prerequisite:** `npm i -g milens`
+
+Alternatively, install via the marketplace: `/plugin marketplace add fuze210699/milens` then `/plugin install milens`. This uses `.claude-plugin/marketplace.json` at the repo root, pointing at `adapters/claude-code`. That plugin's `.mcp.json` omits `-p` entirely and relies on the `CLAUDE_PROJECT_DIR` environment variable Claude Code injects into every MCP server subprocess it spawns.
+>
+> **History:** an earlier version of this plugin passed `${CLAUDE_PLUGIN_ROOT}` as `-p`, which resolves to the plugin's own install directory, not your project — silently indexing the wrong codebase. `CLAUDE_PROJECT_DIR` fixes this since it's read from `process.env` by the CLI (`src/cli.ts`), not substituted as a `${...}` template value with undocumented unset-behavior. Verify with `mcp_milens_status` after install; if the indexed path looks wrong, fall back to the manual `.mcp.json` method above.
 
 ### OpenCode
 

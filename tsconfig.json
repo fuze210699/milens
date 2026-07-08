@@ -12,7 +12,11 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true,
-    "declarationMap": true,
+    // declarationMap is off: it only helps "Go to Definition" jump from .d.ts to
+    // source .ts when this package is imported as a library, but milens has no
+    // "main"/"exports"/"types" field (CLI-only via "bin"), so it's never consumed
+    // that way. Disabling it cuts published .d.ts.map files from the npm tarball.
+    "declarationMap": false,
     "sourceMap": true
   },
   "include": ["src/**/*.ts"],

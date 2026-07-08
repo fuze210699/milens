@@ -216,16 +216,22 @@ program
 program
   .command('serve')
   .description('Start MCP server')
-  .option('-p, --path <path>', 'Repository root path', '.')
+  .option('-p, --path <path>', 'Repository root path (defaults to $CLAUDE_PROJECT_DIR, then cwd)')
   .option('--http', 'Use HTTP transport instead of stdio')
   .option('--port <port>', 'HTTP port', '3100')
   .action(async (opts) => {
+    // Project-scoped .mcp.json always passes -p explicitly (highest priority, unchanged
+    // behavior). Claude Code plugin-scoped MCP servers omit -p and rely on
+    // CLAUDE_PROJECT_DIR, which Claude Code injects into the subprocess env — unlike
+    // ${CLAUDE_PLUGIN_ROOT}, which resolves to the plugin's own install dir, not the
+    // user's project (see adapters/claude-code/README notes).
+    const repoPath = opts.path ?? process.env.CLAUDE_PROJECT_DIR ?? '.';
     if (opts.http) {
       const { startHttp } = await import('./server/mcp.js');
-      await startHttp(parseInt(opts.port), resolve(opts.path));
+      await startHttp(parseInt(opts.port), resolve(repoPath));
     } else {
       const { startStdio } = await import('./server/mcp.js');
-      await startStdio(resolve(opts.path));
+      await startStdio(resolve(repoPath));
     }
   });
 

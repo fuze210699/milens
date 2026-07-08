@@ -45,9 +45,20 @@ That command writes a `.mcp.json` at your project root equivalent to:
 
 `-p .` is resolved against the process's working directory, which Claude Code always sets to your project root when it spawns the server — so this is the most portable form and needs no environment-variable substitution.
 
-> **Note:** we previously shipped a `.claude-plugin/plugin.json` + `.mcp.json` pair for `/plugin install` (marketplace-style install). It used `${CLAUDE_PLUGIN_ROOT}` for `-p`, which actually resolves to the plugin's own install directory, not your project — so it silently indexed the wrong codebase. We removed it until Claude Code exposes a real workspace-root variable for plugin manifests ([anthropics/claude-code#9354](https://github.com/anthropics/claude-code/issues/9354)). The manual `.mcp.json` method above has no such issue.
->
 > **Prerequisite:** `npm i -g milens`
+
+### Claude Code — via `/plugin install` (marketplace)
+
+```bash
+/plugin marketplace add fuze210699/milens
+/plugin install milens
+```
+
+This reads `.claude-plugin/marketplace.json` at the repo root, which points at `adapters/claude-code` as the plugin. That plugin ships its own `.mcp.json` with **no `-p` flag** — `milens serve` falls back to the `CLAUDE_PROJECT_DIR` environment variable, which Claude Code injects into every MCP server subprocess it spawns (project-scoped or plugin-scoped).
+
+> **History:** we previously shipped a plugin manifest that passed `${CLAUDE_PLUGIN_ROOT}` as `-p`. That variable resolves to the *plugin's own install directory* (e.g. `~/.claude/plugins/cache/...`), not your project — so it silently indexed the wrong codebase. We removed it in favor of the manual `.mcp.json` method above.
+>
+> The current plugin fixes this by relying on `CLAUDE_PROJECT_DIR` (env var, not a `${...}` template substitution) read directly by the CLI — `resolve(opts.path ?? process.env.CLAUDE_PROJECT_DIR ?? '.')` in `src/cli.ts`. Claude Code's docs don't specify a minimum version for `CLAUDE_PROJECT_DIR` injection into plugin-scoped servers, so **verify with `mcp_milens_status` after install** — if the repo path looks wrong, fall back to the manual `.mcp.json` method above, which is unaffected by any of this and always works.
 
 **Optional: session-start / pre-compact hooks.** Merge the `hooks` key from `adapters/claude-code/.claude/settings.json.hooks-snippet.json` into your project's `.claude/settings.json` (create the file if it doesn't exist yet). Not copied automatically since `.claude/settings.json` commonly holds other project settings you don't want overwritten.
 

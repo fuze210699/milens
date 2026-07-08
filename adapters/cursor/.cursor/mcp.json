@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "milens": {
+      "command": "milens",
+      "args": ["serve", "-p", "${workspaceFolder}"],
+      "env": { "MILENS_PROFILE": "standard" }
+    }
+  }
+}

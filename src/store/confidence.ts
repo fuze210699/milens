@@ -14,6 +14,7 @@ export function boostConfidence(
   const oldConf = ann.confidence;
   const newConf = Math.min(oldConf + increment, 1.0);
   if (newConf !== oldConf) {
+    store.setConfidence(annotationId, newConf);
     store.logEvolutionEvent(annotationId, 'confidence_up', String(oldConf), String(newConf));
   }
 }
@@ -30,6 +31,7 @@ export function decayConfidence(
   const oldConf = ann.confidence;
   const newConf = Math.max(oldConf - decrement, 0.0);
   if (newConf !== oldConf) {
+    store.setConfidence(annotationId, newConf);
     store.logEvolutionEvent(annotationId, 'confidence_down', String(oldConf), String(newConf));
   }
 }

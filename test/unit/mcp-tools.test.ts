@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdirSync, rmSync, existsSync } from 'node:fs';
+import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from '../../src/store/db.js';
 import { RepoRegistry } from '../../src/store/registry.js';
 import { createMcpServer } from '../../src/server/mcp.js';
+import { registerSecurityTools } from '../../src/server/tools/security.js';
+import { registerSessionTools } from '../../src/server/tools/session.js';
+import { registerTestingTools } from '../../src/server/tools/testing.js';
+import { registerResources } from '../../src/server/tools/resources.js';
 import type { CodeSymbol, SymbolLink } from '../../src/types.js';
 
 const TEST_ROOT = resolve(join(import.meta.dirname, '..', 'tmp', 'mcp-tools-test'));
@@ -627,12 +631,12 @@ describe('createMcpServer', () => {
       expect(text).toContain('main');
     });
 
-    it('returns no path for directionally disconnected symbols', async () => {
+    it('returns not found for symbols missing from index', async () => {
       const server = createMcpServer(TEST_ROOT);
       const handler = getToolHandler(server, 'explain_relationship');
-      const result = await handler({ from: 'helper', to: 'main', repo: TEST_ROOT });
+      const result = await handler({ from: 'NonExistentSymbol', to: 'AuthService', repo: TEST_ROOT });
 
-      expect(result.content[0].text).toContain('No path');
+      expect(result.content[0].text).toContain('not found in index');
     });
   });
 
@@ -771,6 +775,134 @@ describe('createMcpServer', () => {
       const result = await handler({ target: 'helper', direction: 'upstream', depth: 1, repo: TEST_ROOT });
       expect(result.content[0].text).toContain('upstream');
       expect(result.content[0].text).toContain('depth 1:');
+    });
+  });
+
+  // ── Register function smoke tests ──
+
+  describe('registerSecurityTools', () => {
+    it('registers security_scan tool on the server', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['security_scan']).toBeDefined();
+      expect(typeof (tools['security_scan'] as any).handler).toBe('function');
+    });
+
+    it('registers fix_apply tool on the server', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['fix_apply']).toBeDefined();
+    });
+
+    it('security_scan handler runs without throwing on valid input', async () => {
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'security_scan');
+      const result = await handler({ scope: 'all', repo: TEST_ROOT, limit: 5 });
+      const text = result.content[0].text;
+      const parsed = JSON.parse(text);
+      expect(parsed.summary).toBeDefined();
+      expect(typeof parsed.summary.totalScanned).toBe('number');
+      expect(typeof parsed.summary.score).toBe('number');
+      expect(Array.isArray(parsed.findings)).toBe(true);
+    });
+
+    it('fix_apply rejects a file path that escapes the repo root (path traversal)', async () => {
+      const outsidePath = resolve(TEST_ROOT, '..', 'fix-apply-canary.txt');
+      const original = 'password = "admin123"\n';
+      writeFileSync(outsidePath, original, 'utf-8');
+      try {
+        const server = createMcpServer(TEST_ROOT);
+        const handler = getToolHandler(server, 'fix_apply');
+        const result = await handler({
+          ruleId: 'SEC-001',
+          file: '../fix-apply-canary.txt',
+          line: 1,
+          confirm: true,
+          repo: TEST_ROOT,
+        });
+        expect(result.content[0].text).toMatch(/resolves outside the repo root/);
+        expect(readFileSync(outsidePath, 'utf-8')).toBe(original);
+      } finally {
+        rmSync(outsidePath, { force: true });
+      }
+    });
+  });
+
+  describe('registerSessionTools', () => {
+    it('registers session_start tool on the server', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['session_start']).toBeDefined();
+      expect(typeof (tools['session_start'] as any).handler).toBe('function');
+    });
+
+    it('registers annotate and recall tools', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['annotate']).toBeDefined();
+      expect(tools['recall']).toBeDefined();
+    });
+  });
+
+  describe('registerTestingTools', () => {
+    it('registers test_plan tool on the server', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['test_plan']).toBeDefined();
+      expect(typeof (tools['test_plan'] as any).handler).toBe('function');
+    });
+
+    it('registers test_coverage_gaps tool on the server', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools as Record<string, unknown>;
+      expect(tools['test_coverage_gaps']).toBeDefined();
+    });
+
+    it('test_plan handler returns a valid plan', async () => {
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'test_plan');
+      const result = await handler({ name: 'AuthService', repo: TEST_ROOT });
+      expect(result.content[0].text).toBeDefined();
+      expect(result.content[0].text.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('registerResources', () => {
+    it('registers milens://overview resource', async () => {
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'codebase_summary');
+      expect(handler).toBeDefined();
+      expect(typeof handler).toBe('function');
+    });
+
+    it('codebase_summary returns non-empty result', async () => {
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'codebase_summary');
+      const result = await handler({ repo: TEST_ROOT });
+      expect(result.content[0].text).toBeDefined();
+      expect(result.content[0].text.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('review_symbol dependents dedup', () => {
+    it('counts distinct caller files, not raw import+call link rows', async () => {
+      // Target used by exactly 2 real caller files, each of which both imports
+      // AND calls it — must count as 2 dependents, not 4.
+      db.insertSymbol({ id: 'rs-target.ts#function:rsShared:1', name: 'rsShared', kind: 'function', filePath: 'rs-target.ts', startLine: 1, endLine: 3, exported: true });
+      db.insertSymbol({ id: 'rs-a.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'rs-a.ts', startLine: 0, endLine: 0, exported: false });
+      db.insertSymbol({ id: 'rs-a.ts#function:rsCallerA:5', name: 'rsCallerA', kind: 'function', filePath: 'rs-a.ts', startLine: 5, endLine: 8, exported: true });
+      db.insertSymbol({ id: 'rs-b.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'rs-b.ts', startLine: 0, endLine: 0, exported: false });
+      db.insertSymbol({ id: 'rs-b.ts#function:rsCallerB:5', name: 'rsCallerB', kind: 'function', filePath: 'rs-b.ts', startLine: 5, endLine: 8, exported: true });
+      db.insertLink({ id: 'rsd1', fromId: 'rs-a.ts#module:_top:0', toId: 'rs-target.ts#function:rsShared:1', type: 'imports', confidence: 0.95 });
+      db.insertLink({ id: 'rsd2', fromId: 'rs-a.ts#function:rsCallerA:5', toId: 'rs-target.ts#function:rsShared:1', type: 'calls', confidence: 0.9 });
+      db.insertLink({ id: 'rsd3', fromId: 'rs-b.ts#module:_top:0', toId: 'rs-target.ts#function:rsShared:1', type: 'imports', confidence: 0.95 });
+      db.insertLink({ id: 'rsd4', fromId: 'rs-b.ts#function:rsCallerB:5', toId: 'rs-target.ts#function:rsShared:1', type: 'calls', confidence: 0.9 });
+
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'review_symbol');
+      const result = await handler({ name: 'rsShared', repo: TEST_ROOT });
+      const text = result.content[0].text as string;
+      expect(text).toContain('dependents: 2 ');
     });
   });
 });

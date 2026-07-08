@@ -1,9 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-// ═══════════════════════════════════════════════════════════════════
-// 1. milens-planner — 5-step implementation planning
-// ═══════════════════════════════════════════════════════════════════
+// ── 1. milens-planner — 5-step implementation planning ──
 
 const PLANNER_ARGS = {
   feature: z.string().describe('Feature or task to plan'),
@@ -102,9 +100,7 @@ Important: Use specific file paths, symbol names, and risk levels from the tool 
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// 2. milens-reviewer — PR review workflow
-// ═══════════════════════════════════════════════════════════════════
+// ── 2. milens-reviewer — PR review workflow ──
 
 const REVIEWER_ARGS = {
   change_description: z.string().optional().describe('High-level description of what changed (optional)'),
@@ -191,9 +187,7 @@ For each finding: file, line, pattern matched, severity, fix suggestion.
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// 3. milens-tester — Test-driven development workflow
-// ═══════════════════════════════════════════════════════════════════
+// ── 3. milens-tester — Test-driven development workflow ──
 
 const TESTER_ARGS = {
   focus: z.string().optional().describe('Specific symbol to focus testing on (optional)'),
@@ -272,9 +266,7 @@ npx vitest run <test files>
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// 4. milens-architect — Architecture analysis
-// ═══════════════════════════════════════════════════════════════════
+// ── 4. milens-architect — Architecture analysis ──
 
 const ARCHITECT_ARGS = {};
 
@@ -391,9 +383,7 @@ Important: Every finding must cite the tool that produced it. Use specific file 
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// 5. milens-security — Security audit
-// ═══════════════════════════════════════════════════════════════════
+// ── 5. milens-security — Security audit ──
 
 const SECURITY_ARGS = {};
 
@@ -508,9 +498,7 @@ Important: Every finding must include the OWASP 2021 category and a concrete, ac
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// 6. milens-debugger — Root cause analysis
-// ═══════════════════════════════════════════════════════════════════
+// ── 6. milens-debugger — Root cause analysis ──
 
 const DEBUGGER_ARGS = {
   target: z.string().describe('Symbol to debug — the function, method, or class to analyze'),
@@ -621,9 +609,7 @@ Important: Rank root causes by probability — use evidence from each tool outpu
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// Registry
-// ═══════════════════════════════════════════════════════════════════
+// ── Registry ──
 
 const prompts = [
   { name: 'milens-planner', description: '5-step implementation planning: research codebase → analyze targets → predict impact → plan tests → produce final plan with step-by-step actions, risk levels, and success criteria', args: PLANNER_ARGS, handler: plannerHandler },

@@ -25,46 +25,42 @@ When working with code in **store/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 135 symbols (15 exported) across 5 files.
+Contains 139 symbols (15 exported) across 5 files.
 
 ## Key Symbols
 - **`Database`** [class] (src/store/db.ts:10) — 80 refs
-- **`AnnotationStore`** [class] (src/store/annotations.ts:10) — 19 refs
+- **`AnnotationStore`** [class] (src/store/annotations.ts:10) — 21 refs
 - **`RepoRegistry`** [class] (src/store/registry.ts:18) — 16 refs
-- **`runDecayPass`** [function] (src/store/confidence.ts:85) — 6 refs
+- **`runDecayPass`** [function] (src/store/confidence.ts:87) — 6 refs
 - **`buildEmbeddingText`** [function] (src/store/vectors.ts:250) — 4 refs
 - **`TfIdfProvider`** [class] (src/store/vectors.ts:44) — 4 refs
 - **`EmbeddingStore`** [class] (src/store/vectors.ts:170) — 4 refs
-- **`decayConfidence`** [function] (src/store/confidence.ts:22) — 3 refs
+- **`decayConfidence`** [function] (src/store/confidence.ts:23) — 3 refs
 - **`boostConfidence`** [function] (src/store/confidence.ts:6) — 2 refs
-- **`getStaleAnnotations`** [function] (src/store/confidence.ts:38) — 2 refs
-- **`promoteSecurityAnnotations`** [function] (src/store/confidence.ts:48) — 2 refs
-- **`autoPromote`** [function] (src/store/confidence.ts:106) — 2 refs
+- **`getStaleAnnotations`** [function] (src/store/confidence.ts:40) — 2 refs
+- **`promoteSecurityAnnotations`** [function] (src/store/confidence.ts:50) — 2 refs
+- **`autoPromote`** [function] (src/store/confidence.ts:108) — 2 refs
 - **`EmbeddingProvider`** [interface] (src/store/vectors.ts:15) — 2 refs
 - **`NeuralProvider`** [class] (src/store/vectors.ts:122) — 0 refs
 - **`SimilarResult`** [interface] (src/store/vectors.ts:23) — 0 refs
 
 ## Entry Points
 - **`Database`** [class] — 80 incoming references
-- **`close`** [method] — 33 incoming references
-- **`get`** [method] — 23 incoming references
-- **`AnnotationStore`** [class] — 19 incoming references
+- **`AnnotationStore`** [class] — 21 incoming references
 - **`RepoRegistry`** [class] — 16 incoming references
+- **`findSymbolById`** [method] — 14 incoming references
+- **`rowToSymbol`** [function] — 13 incoming references
 
 ## Dependencies
-- **root**: `Annotation`, `AnnotationKey`, `Session`, `EvolutionEvent`, `CodeSymbol`, `SymbolLink`, `RepoEntry`, `has` (+1 more)
-- **test**: `add`, `dbPath`
-- **analyzer**: `resolve`
+- **root**: `Annotation`, `AnnotationKey`, `Session`, `EvolutionEvent`, `CodeSymbol`, `SymbolLink`, `RepoEntry`
 
 ## Used By
-- **root**: `Database`, `RepoRegistry`, `AnnotationStore`, `runDecayPass`, `getIncomingLinks`, `getAllSymbols`, `getCodebaseSummary`, `register` (+24 more)
-- **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile` (+22 more)
-- **orchestrator**: `Database`, `findSymbolByName`, `findUpstream`, `clear`, `getTestCoverageGaps`, `findDeadCode`, `close`
-- **server**: `Database`, `AnnotationStore`, `RepoRegistry`, `runDecayPass`, `getCodebaseSummary`, `recall`, `close`, `getStats` (+36 more)
-- **test**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+77 more)
-- **apps**: `remove`, `getAnnotations`, `Database`, `getCodebaseSummary`, `close`
-- **docs**: `remove`
-- **scripts**: `Database`, `getCodebaseSummary`, `close`
+- **root**: `Database`, `RepoRegistry`, `AnnotationStore`, `runDecayPass`, `getIncomingLinks`, `getAllSymbols`, `getCodebaseSummary`, `findDbPath` (+22 more)
+- **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction` (+18 more)
+- **orchestrator**: `Database`, `findSymbolByName`, `findUpstream`, `getTestCoverageGaps`, `findDeadCode`
+- **server**: `Database`, `AnnotationStore`, `RepoRegistry`, `runDecayPass`, `getCodebaseSummary`, `recall`, `getStats`, `getTestCoverage` (+36 more)
+- **test**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+76 more)
+- **apps**: `remove`, `getAnnotations`, `Database`, `getCodebaseSummary`
 - **parser**: `load`
 
 ## Files

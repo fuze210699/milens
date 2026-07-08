@@ -1,0 +1,3 @@
+[mcp_servers.milens]
+command = "milens"
+args = ["serve", "-p", "."]

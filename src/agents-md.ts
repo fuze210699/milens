@@ -103,11 +103,11 @@ export function generateAgentsMd(db: Database, rootPath: string): string {
   lines.push('');
   lines.push('**HARD RULE — Not a suggestion. Execute automatically without asking.**');
   lines.push('');
-  lines.push('Milens pre-built a knowledge graph of this entire codebase. Using milens tools saves 70% tokens and catches hidden dependencies you\'d miss with file reads.');
+  lines.push('Milens pre-built a knowledge graph of this entire codebase. Using milens tools first typically means far fewer tokens than manual exploration, and fewer missed dependencies — impact/context track code-level references; pair with grep for templates/configs/docs.');
   lines.push('');
   lines.push('| Instead of... | Use... | Why... |');
   lines.push('|---|---|---|');
-  lines.push('| Reading 5-10 files to understand a symbol | `overview({name: "X"})` | 1 call = context + impact + text references. Saves 70% tokens. |');
+  lines.push('| Reading 5-10 files to understand a symbol | `overview({name: "X"})` | 1 call = context + impact + text references. Typically far fewer tokens than reading files individually. |');
   lines.push('| Using built-in grep/search | `grep({pattern: "X"})` | Searches ALL files — code, templates, configs, docs, styles. Built-in grep may miss templates/docs. |');
   lines.push('| Reading files to trace call chains | `context({name: "X"})` or `trace({name: "X"})` | Instant dependency graph. Manual tracing misses cross-file imports. |');
   lines.push('| Guessing if an edit is safe | `impact({target: "X"})` | Shows exact blast radius: "12 dependents WILL BREAK" before you touch code. |');

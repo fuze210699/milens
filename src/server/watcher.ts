@@ -64,7 +64,7 @@ export class FileWatcher {
     this.dbPath = opts.dbPath;
     this.debounceMs = opts.debounceMs ?? 2000;
     this.ignores = [...DEFAULT_IGNORES, ...(opts.extraIgnores ?? [])];
-    this.log = opts.logger ?? ((_level, msg) => console.error(msg));
+    this.log = opts.logger ?? ((_level, msg) => process.stderr.write(msg + '\n'));
   }
 
   /** Start watching the repo root */

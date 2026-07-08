@@ -25,9 +25,8 @@ export function scanFiles(rootPath: string, verbose = false): ScannedFile[] {
       const abs = join(dir, entry);
       const rel = relative(rootPath, abs).replace(/\\/g, '/');
 
-      // Skip hidden dirs and common non-source dirs
-      if (entry.startsWith('.')) continue;
-      if (SKIP_DIRS.has(entry) && dir === rootPath) continue;
+      // Skip common non-source directories (explicit list only)
+      if (SKIP_DIRS.has(entry)) continue;
 
       if (ig.ignores(rel)) continue;
 

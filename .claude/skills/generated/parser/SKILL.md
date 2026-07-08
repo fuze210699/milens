@@ -21,13 +21,13 @@ When working with code in **parser/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 83 symbols (31 exported) across 16 files.
+Contains 82 symbols (31 exported) across 16 files.
 
 ## Key Symbols
 - **`LangSpec`** [interface] (src/parser/extract.ts:6) — 32 refs
-- **`loadLanguage`** [function] (src/parser/loader.ts:21) — 14 refs
-- **`getParser`** [function] (src/parser/loader.ts:32) — 13 refs
-- **`extractFromTree`** [function] (src/parser/extract.ts:256) — 8 refs
+- **`loadLanguage`** [function] (src/parser/loader.ts:21) — 15 refs
+- **`getParser`** [function] (src/parser/loader.ts:32) — 14 refs
+- **`extractFromTree`** [function] (src/parser/extract.ts:267) — 9 refs
 - **`supportedExtensions`** [function] (src/parser/languages.ts:29) — 6 refs
 - **`extractHtmlScripts`** [function] (src/parser/lang-html.ts:38) — 5 refs
 - **`extractMarkdown`** [function] (src/parser/lang-md.ts:34) — 5 refs
@@ -37,20 +37,18 @@ Contains 83 symbols (31 exported) across 16 files.
 - **`clearQueryCache`** [function] (src/parser/extract.ts:72) — 4 refs
 - **`extractHtmlRefs`** [function] (src/parser/lang-html.ts:57) — 4 refs
 - **`extractHtmlLinks`** [function] (src/parser/lang-html.ts:99) — 4 refs
+- **`spec`** [variable] (src/parser/lang-js.ts:5) — 4 refs
 - **`extractVueTemplateRefs`** [function] (src/parser/lang-vue.ts:38) — 4 refs
-- **`extractVueTemplateAst`** [function] (src/parser/lang-vue.ts:90) — 4 refs
 
 ## Entry Points
 - **`LangSpec`** [interface] — 32 incoming references
-- **`loadLanguage`** [function] — 14 incoming references
-- **`getParser`** [function] — 13 incoming references
-- **`extractFromTree`** [function] — 8 incoming references
+- **`loadLanguage`** [function] — 15 incoming references
+- **`getParser`** [function] — 14 incoming references
+- **`extractFromTree`** [function] — 9 incoming references
 - **`supportedExtensions`** [function] — 6 incoming references
 
 ## Dependencies
-- **root**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+4 more)
-- **test**: `lang`, `add`, `parser`
-- **scripts**: `root`
+- **root**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+3 more)
 - **analyzer**: `resolve`
 - **store**: `load`
 

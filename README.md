@@ -98,19 +98,28 @@ Then connect your editor:
 claude mcp add milens -- milens serve -p .
 ```
 
-Or in .mcp.json at plugin root:
+Or drop this in `.mcp.json` at your project root (equivalent, works the same in the CLI, VS Code extension, and desktop app):
 
-```bash
+```json
 {
   "mcpServers": {
     "milens": {
       "type": "stdio",
       "command": "milens",
-      "args": ["serve", "-p", "${workspaceFolder}"]
+      "args": ["serve", "-p", "."]
     }
   }
 }
 ```
+
+Or install as a plugin from the marketplace:
+
+```bash
+/plugin marketplace add fuze210699/milens
+/plugin install milens
+```
+
+See [adapters/README.md](adapters/README.md#claude-code--via-plugin-install-marketplace) for how this avoids the workspace-root pitfall that broke earlier plugin builds.
 
 <details>
 <summary><b>More editors</b> — Cursor, OpenCode, Codex, Gemini, Zed</summary>

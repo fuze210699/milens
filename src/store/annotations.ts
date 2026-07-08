@@ -26,7 +26,7 @@ export class AnnotationStore {
         'SELECT * FROM annotations WHERE symbol = ? AND key = ?'
       ),
       updateAnnotation: this.db.prepare(
-        'UPDATE annotations SET value = ?, confidence = ?, updated_at = datetime(\'now\') WHERE id = ?'
+        'UPDATE annotations SET value = ?, confidence = ?, agent = ?, session_id = ?, updated_at = datetime(\'now\') WHERE id = ?'
       ),
       queryBySymbol: this.db.prepare(
         'SELECT * FROM annotations WHERE symbol = ? ORDER BY confidence DESC, updated_at DESC LIMIT ?'
@@ -65,6 +65,9 @@ export class AnnotationStore {
         "UPDATE annotations SET confidence = 0, updated_at = datetime('now') WHERE id = ?"
       ),
       deleteAnnotation: this.db.prepare('DELETE FROM annotations WHERE id = ?'),
+      setConfidence: this.db.prepare(
+        "UPDATE annotations SET confidence = ?, updated_at = datetime('now') WHERE id = ?"
+      ),
 
       boostRecallConfidence: this.db.prepare(
         "UPDATE annotations SET confidence = MIN(confidence + 0.05, 0.95), updated_at = datetime('now') WHERE id = ? AND confidence < 0.9"
@@ -83,23 +86,29 @@ export class AnnotationStore {
     const existing = this.stmts.findBySymbolKey.get(symbol, annotationKey) as any;
 
     if (existing) {
+      const updatedAgent = options?.agent ?? existing.agent;
+      const updatedSessionId = options?.sessionId ?? existing.session_id;
       if (existing.value === value) {
         const newConfidence = Math.min(existing.confidence + 0.1, 1.0);
-        this.stmts.updateAnnotation.run(value, newConfidence, existing.id);
+        this.stmts.updateAnnotation.run(value, newConfidence, updatedAgent, updatedSessionId, existing.id);
         const eventType = newConfidence >= 0.8 && existing.confidence < 0.8 ? 'promoted' : 'confidence_up';
         this.logEvolutionEvent(existing.id, eventType, existing.value, value);
         return rowToAnnotation({
           ...existing,
+          agent: updatedAgent,
+          session_id: updatedSessionId,
           confidence: newConfidence,
           updated_at: new Date().toISOString(),
         });
       }
 
-      this.stmts.updateAnnotation.run(value, 0.5, existing.id);
+      this.stmts.updateAnnotation.run(value, 0.5, updatedAgent, updatedSessionId, existing.id);
       this.logEvolutionEvent(existing.id, 'created', existing.value, value);
       return rowToAnnotation({
         ...existing,
         value,
+        agent: updatedAgent,
+        session_id: updatedSessionId,
         confidence: 0.5,
         updated_at: new Date().toISOString(),
       });
@@ -197,6 +206,12 @@ export class AnnotationStore {
     ).run(newId, toAgent, 'active', context);
 
     return { newSessionId: newId, annotationsCopied: fromAnnCount };
+  }
+
+  // ── Confidence ──
+
+  setConfidence(id: string, confidence: number): void {
+    this.stmts.setConfidence.run(confidence, id);
   }
 
   // ── Maintenance ──

@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "milens": {
+      "type": "stdio",
+      "command": "milens",
+      "args": ["serve", "-p", "${workspaceFolder}"],
+      "env": { "MILENS_PROFILE": "standard" }
+    }
+  }
+}

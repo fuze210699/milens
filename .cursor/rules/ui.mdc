@@ -45,7 +45,7 @@ Contains 10 symbols (3 exported) across 1 files.
 - **root**: `AnalysisStats`
 
 ## Used By
-- **analyzer**: `ProgressPhase`, `ProgressReporter`, `startPhase`, `tick`, `endPhase`, `done`, `finalize`
+- **analyzer**: `ProgressPhase`, `ProgressReporter`, `startPhase`, `tick`, `endPhase`, `finalize`
 - **root**: `createProgressReporter`, `finalize`
 
 ## Files

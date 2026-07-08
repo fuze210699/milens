@@ -100,6 +100,16 @@ describe('Confidence', () => {
       expect(countEvolutionEvents(ann.id, 'confidence_up')).toBe(1);
     });
 
+    it('should persist boosted confidence', () => {
+      const ann = store.annotate('boostPersist', 'note', 'test');
+      setConfidence(ann.id, 0.5);
+      boostConfidence(store, ann.id);
+      const recalled = store.recall({ limit: 1000 });
+      const updated = recalled.find(a => a.id === ann.id);
+      expect(updated).toBeDefined();
+      expect(updated!.confidence).toBe(0.6);
+    });
+
     it('should clamp confidence at 1.0', () => {
       const ann = store.annotate('clampSym', 'note', 'test');
       setConfidence(ann.id, 0.95);
@@ -134,6 +144,16 @@ describe('Confidence', () => {
       setConfidence(ann.id, 0.5);
       decayConfidence(store, ann.id);
       expect(countEvolutionEvents(ann.id, 'confidence_down')).toBe(1);
+    });
+
+    it('should persist decayed confidence', () => {
+      const ann = store.annotate('decayPersist', 'note', 'test');
+      setConfidence(ann.id, 0.5);
+      decayConfidence(store, ann.id);
+      const recalled = store.recall({ limit: 1000 });
+      const updated = recalled.find(a => a.id === ann.id);
+      expect(updated).toBeDefined();
+      expect(updated!.confidence).toBe(0.4);
     });
 
     it('should clamp confidence at 0.0', () => {
@@ -255,6 +275,21 @@ describe('Confidence', () => {
 
       const result = runDecayPass(store);
       expect(result.decayed).toBe(1);
+    });
+
+    it('should reduce stored confidence after two decay passes', () => {
+      const ann = store.annotate('decayTwice', 'note', 'test');
+      setConfidence(ann.id, 0.5);
+      setUpdatedAt(ann.id, '2020-01-01 00:00:00');
+
+      runDecayPass(store);
+      setUpdatedAt(ann.id, '2020-01-01 00:00:00');
+      runDecayPass(store);
+
+      const recalled = store.recall({ limit: 1000 });
+      const updated = recalled.find(a => a.id === ann.id);
+      expect(updated).toBeDefined();
+      expect(updated!.confidence).toBeCloseTo(0.3);
     });
 
     it('should keep high-confidence recently-updated annotations', () => {

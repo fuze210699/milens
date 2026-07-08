@@ -2,8 +2,10 @@ import { execFileSync } from 'node:child_process';
 import type { Database } from '../store/db.js';
 import type { CodeSymbol } from '../types.js';
 import { isTestFile } from '../utils.js';
+import { countDependentFiles, scoreSymbolRisk, classifyRisk } from './risk.js';
+import type { RiskLevel } from './risk.js';
 
-export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type { RiskLevel };
 
 export interface SymbolRisk {
   symbol: CodeSymbol;
@@ -37,48 +39,6 @@ function isNonSourceFile(file: string): boolean {
   return /\.(md|json|lock|yml|yaml|toml)$/.test(file) ||
     /\/\.milens\//.test(file) ||
     /\/node_modules\//.test(file);
-}
-
-function classifyRisk(score: number, hasUntested: boolean, hasCriticalHub: boolean): RiskLevel {
-  if (hasCriticalHub || score >= 50) return 'CRITICAL';
-  if (score >= 30) return 'HIGH';
-  if (score >= 10) return 'MEDIUM';
-  if (hasUntested) return 'MEDIUM';
-  return 'LOW';
-}
-
-function scoreSymbol(sym: CodeSymbol, dependents: number, tested: boolean): { score: number; reasons: string[] } {
-  const reasons: string[] = [];
-  let score = 0;
-
-  const heat = sym.heat ?? 0;
-  score += Math.min(heat * 0.3, 15);
-
-  score += dependents * 3;
-  if (dependents > 10) reasons.push(`${dependents} direct dependents`);
-  else if (dependents > 5) reasons.push(`${dependents} dependents`);
-
-  if (sym.role === 'hub') { score += 10; reasons.push('hub function'); }
-  if (sym.role === 'entrypoint') { score += 5; reasons.push('entrypoint'); }
-
-  if (!tested && sym.exported) { score *= 1.5; reasons.push('no test coverage'); }
-  if (sym.exported && dependents > 0) score += 3;
-
-  // Fix 3: Non-exported internals with zero deps are implementation details → LOW
-  if (!sym.exported && dependents === 0) {
-    return { score: 0, reasons: ['internal implementation detail'] };
-  }
-
-  if (!sym.exported) {
-    if (dependents <= 1) {
-      score = Math.round(score * 0.4);
-      if (!reasons.length) reasons.push('internal (non-exported)');
-    } else if (dependents <= 3) {
-      score = Math.round(score * 0.65);
-    }
-  }
-
-  return { score: Math.round(score), reasons };
 }
 
 // ── Git helpers ──
@@ -339,12 +299,11 @@ export function reviewPr(db: Database, root: string, ref = 'HEAD', base?: string
       // Fix 1+2: Only include symbols whose name is in the changed set
       if (changedNames !== null && !changedNames.has(sym.name)) continue;
 
-      const upstream = db.findUpstream(sym.id, 1);
-      const dependents = upstream.length;
+      const dependents = countDependentFiles(db, sym.id).count;
       const tested = isSymbolTested(db, sym);
       if (!tested && sym.exported) untestedChanges++;
 
-      const { score, reasons } = scoreSymbol(sym, dependents, tested);
+      const { score, reasons } = scoreSymbolRisk(sym, dependents, tested);
       const riskLevel = classifyRisk(score, !tested && sym.exported, sym.role === 'hub' && !tested && dependents > 10);
 
       symbolRisks.push({ symbol: sym, dependents, tested, riskScore: score, riskLevel, reasons });
@@ -362,8 +321,8 @@ export function reviewPr(db: Database, root: string, ref = 'HEAD', base?: string
         const dsSym = ds.symbol;
         if (dsSym && !changedIds.has(dsSym.id) && !isFixtureOrTest(dsSym.filePath)) {
             const dsTested = isSymbolTested(db, dsSym);
-            const dsDependents = db.findUpstream(dsSym.id, 1).length;
-            const { score, reasons } = scoreSymbol(dsSym, dsDependents, dsTested);
+            const dsDependents = countDependentFiles(db, dsSym.id).count;
+            const { score, reasons } = scoreSymbolRisk(dsSym, dsDependents, dsTested);
             reasons.unshift(`impacted by change to ${sr.symbol.name}`);
             const riskLevel = classifyRisk(score, !dsTested && dsSym.exported, false);
             impactRisks.push({ symbol: dsSym, dependents: dsDependents, tested: dsTested,
@@ -398,10 +357,9 @@ export function reviewSymbol(db: Database, name: string): SymbolRisk | null {
   if (syms.length === 0) return null;
 
   const sym = syms[0];
-  const upstream = db.findUpstream(sym.id, 1);
-  const dependents = upstream.length;
+  const dependents = countDependentFiles(db, sym.id).count;
   const tested = isSymbolTested(db, sym);
-  const { score, reasons } = scoreSymbol(sym, dependents, tested);
+  const { score, reasons } = scoreSymbolRisk(sym, dependents, tested);
   const riskLevel = classifyRisk(score, !tested && sym.exported, sym.role === 'hub' && !tested && dependents > 10);
 
   return { symbol: sym, dependents, tested, riskScore: score, riskLevel, reasons };

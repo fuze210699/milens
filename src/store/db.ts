@@ -311,18 +311,59 @@ export class Database {
     const sql = kind
       ? `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
-         WHERE s.exported = 1 AND s.kind = ? AND l.id IS NULL
+         WHERE s.exported = 1 AND s.kind = ? AND s.kind != 'section' AND l.id IS NULL
          ${frameworkExclude}
          LIMIT ?`
       : `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
-         WHERE s.exported = 1 AND l.id IS NULL
+         WHERE s.exported = 1 AND s.kind != 'section' AND l.id IS NULL
          ${frameworkExclude}
          LIMIT ?`;
     const rows = kind
       ? this.db.prepare(sql).all(kind, limit) as any[]
       : this.db.prepare(sql).all(limit) as any[];
     return rows.map(rowToSymbol);
+  }
+
+  /**
+   * Find exported symbols that have incoming references, but ALL of those references
+   * originate from test files — meaning the symbol is "test-only referenced" and
+   * likely orphaned from production code. Returns symbols missed by the standard
+   * findDeadCode (which requires zero incoming links of any kind).
+   */
+  findTestOnlyReferenced(limit = 50): CodeSymbol[] {
+    const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE 'app/%/layout.%'
+      AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE 'app/layout.%'
+      AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE 'jest.config.%'
+      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE 'src/routes/+layout.%'`;
+    // Get ALL exported symbols that HAVE at least one incoming link (not caught by findDeadCode).
+    // No SQL LIMIT here: the JS post-filter below narrows this down to test-only-referenced
+    // symbols, which can be a small minority of low-heat candidates — applying `limit` before
+    // that filter would silently drop real orphans that don't happen to rank in the top N by heat.
+    const sql = `SELECT s.*, COUNT(l.id) as incoming_count FROM symbols s
+         JOIN links l ON l.to_id = s.id AND l.type != 'contains'
+         WHERE s.exported = 1 AND s.kind != 'section'
+         ${frameworkExclude}
+         GROUP BY s.id
+         HAVING incoming_count > 0
+         ORDER BY s.heat DESC`;
+    const rows = this.db.prepare(sql).all() as any[];
+    const candidates = rows.map(rowToSymbol);
+
+    // Post-filter: check if ALL incoming links come from test files
+    const results: CodeSymbol[] = [];
+    for (const sym of candidates) {
+      const incoming = this.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+      if (incoming.length === 0) continue;
+      const allFromTests = incoming.every(l => {
+        const from = this.findSymbolById(l.fromId);
+        return from && this.isTestFile(from.filePath);
+      });
+      if (allFromTests) {
+        results.push(sym);
+      }
+    }
+    return results.slice(0, limit);
   }
 
   getTypeHierarchy(symbolId: string): { ancestors: Array<{ symbol: CodeSymbol; depth: number }>; descendants: Array<{ symbol: CodeSymbol; depth: number }> } {
@@ -360,29 +401,47 @@ export class Database {
     if (fromSyms.length === 0 || toSyms.length === 0) return null;
 
     const fromId = fromSyms[0].id;
+    const toId = toSyms[0].id;
     const toIds = new Set(toSyms.map(s => s.id));
 
-    // BFS outgoing from source
+    // Use path-accumulating CTE to track the actual predecessor chain
+    interface PathRow { node_id: string; depth: number; via: string; path_ids: string; }
+
     const rows = this.db.prepare(`
-      WITH RECURSIVE path(id, depth, via) AS (
-        SELECT to_id, 1, type FROM links WHERE from_id = ? AND type != 'contains'
-        UNION
-        SELECT l.to_id, p.depth + 1, l.type
-        FROM links l JOIN path p ON l.from_id = p.id
-        WHERE l.type != 'contains' AND p.depth < ?
+      WITH RECURSIVE chain(node_id, depth, via, path_ids) AS (
+        SELECT l.to_id, 1, l.type, ',' || l.from_id || ',' || l.to_id || ','
+        FROM links l WHERE l.from_id = ? AND l.type != 'contains'
+        UNION ALL
+        SELECT l.to_id, c.depth + 1, l.type, c.path_ids || l.to_id || ','
+        FROM links l JOIN chain c ON l.from_id = c.node_id
+        WHERE l.type != 'contains' AND c.depth < ?
+          AND c.path_ids NOT LIKE '%,' || l.to_id || ',%'
       )
-      SELECT DISTINCT s.*, p.depth, p.via FROM path p JOIN symbols s ON s.id = p.id ORDER BY p.depth
-    `).all(fromId, maxDepth) as any[];
+      SELECT node_id, depth, via, path_ids FROM chain ORDER BY depth
+    `).all(fromId, maxDepth) as PathRow[];
 
+    // Find the first (shortest-depth) row matching the target
+    const targetRow = rows.find(r => toIds.has(r.node_id));
+    if (!targetRow) return null;
+
+    // Reconstruct path from path_ids chain
+    const idChain = targetRow.path_ids.split(',').filter((s: string) => s.length > 0);
+    // idChain[0] = fromId, idChain[last] = target node_id
     const result: Array<{ symbol: CodeSymbol; depth: number; via: string }> = [];
-    for (const r of rows) {
-      result.push({ symbol: rowToSymbol(r), depth: r.depth, via: r.via });
-      if (toIds.has(r.id)) break;
+    for (let i = 0; i < idChain.length; i++) {
+      const sym = this.findSymbolById(idChain[i]);
+      if (!sym) continue;
+      // Determine via for this hop: lookup link from idChain[i] → idChain[i+1]
+      let via = 'calls';
+      if (i < idChain.length - 1) {
+        const linkRow = this.db.prepare(
+          'SELECT type FROM links WHERE from_id = ? AND to_id = ? AND type != ? LIMIT 1'
+        ).get(idChain[i], idChain[i + 1], 'contains') as any;
+        if (linkRow) via = linkRow.type;
+      }
+      result.push({ symbol: sym, depth: i, via });
     }
-
-    const found = result.find(r => toIds.has(r.symbol.id));
-    if (!found) return null;
-    return result.filter(r => r.depth <= found.depth);
+    return result;
   }
 
   getChangedFiles(): string[] {
@@ -467,9 +526,12 @@ export class Database {
       const incoming = this.getIncomingLinks(currentId).filter(l => l.type === 'calls' || l.type === 'imports');
       const sym = this.findSymbolById(currentId);
 
-      if (incoming.length === 0 && sym?.exported) {
+      if (incoming.length === 0) {
         // Reached an entrypoint — save this path
-        paths.push({ path: [...currentPath] });
+        // _top modules represent file-level entrypoints (e.g., top-level code execution)
+        if (sym?.exported || (sym?.kind === 'module' && sym?.name === '_top')) {
+          paths.push({ path: [...currentPath] });
+        }
         visited.delete(currentId);
         return;
       }
@@ -575,6 +637,16 @@ export class Database {
     this.db.prepare(`
       DELETE FROM symbols WHERE file_path IN (${placeholders})
     `).run(...filePaths);
+  }
+
+  /** Delete file_hashes rows for paths not in the given set (orphan cleanup after incremental analyze) */
+  pruneOrphanFileHashes(knownPaths: string[]): number {
+    if (knownPaths.length === 0) return 0;
+    const placeholders = knownPaths.map(() => '?').join(',');
+    const result = this.db.prepare(`
+      DELETE FROM file_hashes WHERE path NOT IN (${placeholders})
+    `).run(...knownPaths);
+    return result.changes;
   }
 
   // ── Tool usage tracking ──

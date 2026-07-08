@@ -38,6 +38,7 @@ export interface RawImport {
   names: Array<{ name: string; alias?: string }>;
   isDefault: boolean;
   isWildcard: boolean;
+  isDynamic?: boolean;
   line: number;
 }
 
@@ -47,6 +48,12 @@ export interface RawCall {
   calleeName: string;
   receiver?: string;
   line: number;
+  /** True when `calleeName` was captured from an argument position (e.g. `onMounted(handler)`,
+   *  a decorator argument) rather than the actual invoked function/method of a call expression.
+   *  These are a weaker signal — the identifier may just be a plain local variable, not a
+   *  function reference — so the resolver requires same-file/imported corroboration for them
+   *  instead of the unconditional "unique name globally" fast path. */
+  isArgumentRef?: boolean;
 }
 
 export interface RawHeritage {

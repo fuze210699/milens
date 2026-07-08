@@ -21,29 +21,26 @@ When working with code in **scripts/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 47 symbols (0 exported) across 3 files.
+Contains 77 symbols (0 exported) across 6 files.
 
 ## Entry Points
-- **`root`** [variable] — 37 incoming references
-- **`version`** [variable] — 4 incoming references
-- **`ROOT`** [variable] — 2 incoming references
-- **`outDir`** [variable] — 2 incoming references
-- **`main`** [function] — 2 incoming references
+- **`ghApi`** [function] — 4 incoming references
+- **`detectBreakingFromLabels`** [function] — 4 incoming references
+- **`exec`** [function] — 3 incoming references
+- **`branch`** [variable] — 3 incoming references
+- **`detectTypeFromBranch`** [function] — 3 incoming references
 
 ## Dependencies
 - **analyzer**: `resolve`
-- **store**: `Database`, `getCodebaseSummary`, `close`
 
 ## Used By
-- **docs**: `main`
-- **analyzer**: `root`
-- **root**: `version`, `outDir`, `root`
-- **parser**: `root`
-- **security**: `version`
-- **server**: `root`
-- **test**: `root`
+- **apps**: `parseArgs`, `generatePrPayload`
+- **test**: `detectTypeFromBranch`, `detectScopeFromBranch`, `detectBreakingFromBranch`, `detectBreakingFromLabels`, `slugify`, `parseArgs`, `generateTitle`, `generateBody` (+1 more)
 
 ## Files
 - scripts/build-standalone.mjs
-- scripts/generate-release-stats.js
-- scripts/update-docs.js
+- scripts/check-console.mjs
+- scripts/create-pr.cjs
+- scripts/gen-build-info.mjs
+- scripts/pr-generator.cjs
+- scripts/smoke-test.mjs

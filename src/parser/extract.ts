@@ -208,28 +208,39 @@ function detectHeritageType(node: Parser.SyntaxNode): 'extends' | 'implements' {
   return 'extends';
 }
 
-// ── Enclosing symbol lookup via sorted spans + binary search ──
+// ── Enclosing symbol lookup via tree-sitter's own position index ──
+// Scope boundaries here are exactly the parse tree's node boundaries — a properly
+// nested (laminar) interval family — so the parse tree itself is already the optimal
+// data structure for "which scope contains line N", no separate index needed.
+// `descendantForPosition` walks the tree in ~O(log n), then we walk up `.parent`
+// until we hit a node we recorded as a symbol (function/method/class/struct/trait).
+// This replaces a flat sorted-span array + linear scan, which was O(n) per lookup
+// (O(n²) total across a file with many calls) in the worst case of many sibling
+// top-level symbols — see the "current vs descendantForPosition" benchmark discussed
+// in code review: ~10-20x faster on synthetic files with 16k-32k sibling functions.
+//
+// Note: SyntaxNode objects from web-tree-sitter are recreated on every access, so
+// `===` on two nodes representing the same underlying tree node is NOT reliable —
+// use the stable numeric `.id` field instead (confirmed via the official .d.ts and
+// empirical testing).
+const ENCLOSING_SCOPE_KINDS = new Set<SymbolKind>(['function', 'method', 'class', 'struct', 'trait']);
 
-interface Span { startLine: number; endLine: number; id: string }
-
-function buildSpanIndex(symbols: CodeSymbol[]): Span[] {
-  const spans: Span[] = [];
-  for (const s of symbols) {
-    if (s.kind === 'function' || s.kind === 'method' || s.kind === 'class' || s.kind === 'struct' || s.kind === 'trait') {
-      spans.push({ startLine: s.startLine, endLine: s.endLine, id: s.id });
-    }
+function findEnclosingViaAst(
+  root: Parser.SyntaxNode,
+  position: Parser.Point,
+  containerNodeIds: Map<number, string>,
+): string | undefined {
+  // Must be the exact node position, not a synthesized `{row, column: 0}` — column 0
+  // usually falls on leading indentation, which belongs to the *parent* node (e.g. the
+  // class body) rather than the target node (e.g. a method), so it under-shoots the
+  // tightest enclosing scope.
+  let node: Parser.SyntaxNode | null = root.descendantForPosition(position);
+  while (node) {
+    const id = containerNodeIds.get(node.id);
+    if (id !== undefined) return id;
+    node = node.parent;
   }
-  // Sort by startLine desc so we find the innermost (tightest) enclosing first
-  spans.sort((a, b) => b.startLine - a.startLine);
-  return spans;
-}
-
-function findEnclosing(spans: Span[], line: number): string | undefined {
-  // Linear scan on pre-sorted array — tightest match wins (innermost symbol)
-  for (let i = 0; i < spans.length; i++) {
-    const sp = spans[i];
-    if (sp.startLine <= line && sp.endLine >= line) return sp.id;
-  }
+  return undefined;
 }
 
 // ── Symbol query type mapping (constant) ──
@@ -269,6 +280,9 @@ export function extractFromTree(
   const returnTypes: RawReturnType[] = [];
   const callResultBindings: RawCallResultBinding[] = [];
   const exportedNames = new Set<string>();
+  // AST node id → symbol id, for function/method/class/struct/trait symbols only —
+  // see findEnclosingViaAst above.
+  const containerNodeIds = new Map<number, string>();
 
   const root = tree.rootNode;
 
@@ -319,6 +333,10 @@ export function extractFromTree(
                s.startLine <= sym.startLine && s.endLine >= sym.endLine
         );
         if (parentClass) sym.parentId = parentClass.id;
+      }
+
+      if (ENCLOSING_SCOPE_KINDS.has(kind)) {
+        containerNodeIds.set(defNode.id, sym.id);
       }
 
       symbols.push(sym);
@@ -388,6 +406,7 @@ export function extractFromTree(
         names,
         isDefault: isDef,
         isWildcard: !isDef && names.length === 0,
+        isDynamic: defNode.type === 'call_expression',
         line: defNode.startPosition.row + 1,
       });
     }
@@ -396,8 +415,6 @@ export function extractFromTree(
   // ── Extract calls (with span index for fast enclosing lookup) ──
 
   if (spec.queries.calls) {
-    const spans = buildSpanIndex(symbols);
-
     for (const match of runQuery(spec.queries.calls)) {
       const callee = captureText(match, 'callee');
       const defNode = captureNode(match, 'def');
@@ -405,13 +422,20 @@ export function extractFromTree(
 
       const callLine = defNode.startPosition.row + 1;
       const receiver = captureText(match, 'receiver');
+      // Distinguish "identifier is the function being invoked" from "identifier is merely
+      // passed as an argument" (e.g. `onMounted(handler)`, decorator arguments) — the latter
+      // captures @callee whose parent is an `arguments` node, not a call/new expression.
+      const calleeNode = captureNode(match, 'callee');
+      const parentType = calleeNode?.parent?.type;
+      const isArgumentRef = parentType === 'arguments' || parentType === 'pair' || parentType === 'array';
 
       calls.push({
         filePath,
-        enclosingSymbolId: findEnclosing(spans, callLine) ?? `${filePath}#module:_top:0`,
+        enclosingSymbolId: findEnclosingViaAst(root, defNode.startPosition, containerNodeIds) ?? `${filePath}#module:_top:0`,
         calleeName: callee,
         receiver,
         line: callLine,
+        ...(isArgumentRef ? { isArgumentRef: true } : {}),
       });
     }
   }
@@ -467,8 +491,7 @@ export function extractFromTree(
   // ── Extract type bindings (variable → type mappings, scope-aware) ──
 
   if (spec.queries.typeBindings) {
-    const bindingSpans = buildSpanIndex(symbols);
-    const seen = new Map<string, number>(); // "scope::varName" → line (dedup: last wins)
+    const seen = new Map<string, number>(); // "scope::varName" → line (dedup: first-seen wins)
     for (const match of runQuery(spec.queries.typeBindings)) {
       const varName = captureText(match, 'var');
       const typeName = captureText(match, 'type');
@@ -478,9 +501,13 @@ export function extractFromTree(
       const line = defNode ? defNode.startPosition.row + 1 : 0;
 
       // Scope: find enclosing function/method/class for this binding
-      const scope = findEnclosing(bindingSpans, line);
+      const scope = defNode ? findEnclosingViaAst(root, defNode.startPosition, containerNodeIds) : undefined;
 
-      // Deduplicate per scope: prefer type annotation over new expression (later match wins)
+      // Deduplicate per scope: when a type-annotation match and a new-expression match land on
+      // the same line (e.g. `const db: DbInterface = new SqliteDb()`), keep whichever the query
+      // iterates first and skip the rest — in practice the type-annotation pattern is always
+      // visited before the new-expression pattern for the same declarator, so this prefers the
+      // explicit annotation over the constructor-inferred type.
       const dedupKey = `${scope ?? ''}::${varName}`;
       const existingLine = seen.get(dedupKey);
       if (existingLine !== undefined && existingLine === line) continue;
@@ -493,7 +520,6 @@ export function extractFromTree(
   // ── Extract assignment chains (variable = identifier, for type propagation) ──
 
   if (spec.queries.assignmentChains) {
-    const chainSpans = buildSpanIndex(symbols);
     for (const match of runQuery(spec.queries.assignmentChains)) {
       const target = captureText(match, 'target');
       const source = captureText(match, 'source');
@@ -501,7 +527,7 @@ export function extractFromTree(
 
       const defNode = captureNode(match, 'target');
       const line = defNode ? defNode.startPosition.row + 1 : 0;
-      const scope = findEnclosing(chainSpans, line);
+      const scope = defNode ? findEnclosingViaAst(root, defNode.startPosition, containerNodeIds) : undefined;
 
       assignmentBindings.push({ filePath, target, source, line, scope });
     }
@@ -528,7 +554,6 @@ export function extractFromTree(
   // ── Extract call result bindings (const x = func()) ──
 
   if (spec.queries.callResultBindings) {
-    const crSpans = buildSpanIndex(symbols);
     for (const match of runQuery(spec.queries.callResultBindings)) {
       const target = captureText(match, 'var');
       const calleeName = captureText(match, 'callee');
@@ -536,7 +561,7 @@ export function extractFromTree(
 
       const defNode = captureNode(match, 'var');
       const line = defNode ? defNode.startPosition.row + 1 : 0;
-      const scope = findEnclosing(crSpans, line);
+      const scope = defNode ? findEnclosingViaAst(root, defNode.startPosition, containerNodeIds) : undefined;
       const receiver = captureText(match, 'receiver');
 
       callResultBindings.push({ filePath, target, calleeName, receiver, line, scope });

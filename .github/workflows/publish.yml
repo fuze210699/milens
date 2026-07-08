@@ -1,0 +1,42 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: node scripts/check-console.mjs
+      - run: npm test
+      # Fail fast if the Claude Code plugin manifest wasn't synced to this release's
+      # version (npm's "version" lifecycle script should have done this — see
+      # scripts/sync-version.mjs). A stale plugin.json ships a mismatched version.
+      - name: Verify plugin manifest version matches package.json
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          PLUGIN_VERSION=$(node -p "require('./adapters/claude-code/.claude-plugin/plugin.json').version")
+          if [ "$PKG_VERSION" != "$PLUGIN_VERSION" ]; then
+            echo "::error::plugin.json version ($PLUGIN_VERSION) != package.json version ($PKG_VERSION). Run 'npm run version' or 'node scripts/sync-version.mjs' and commit."
+            exit 1
+          fi
+      # Build and smoke test
+      - run: npm run build
+      - run: node dist/cli.js analyze -p . --force
+      - run: node scripts/smoke-test.mjs
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

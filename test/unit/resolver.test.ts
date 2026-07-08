@@ -611,4 +611,286 @@ describe('Resolver', () => {
     expect(importLinks.some(l => l.toId === 'models.ts#interface:User:1')).toBe(true);
     expect(importLinks.some(l => l.toId === 'models.ts#type:UserRole:7')).toBe(true);
   });
+
+  it('resolves destructured dynamic import links', () => {
+    const callerSymbols: CodeSymbol[] = [
+      { id: 'caller.ts#function:main:10', name: 'main', kind: 'function', filePath: 'caller.ts', startLine: 10, endLine: 15, exported: true },
+      { id: 'caller.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'caller.ts', startLine: 0, endLine: 20, exported: true },
+    ];
+    const targetSymbols: CodeSymbol[] = [
+      { id: 'foo.ts#function:foo:1', name: 'foo', kind: 'function', filePath: 'foo.ts', startLine: 1, endLine: 3, exported: true },
+      { id: 'foo.ts#function:bar:5', name: 'bar', kind: 'function', filePath: 'foo.ts', startLine: 5, endLine: 7, exported: true },
+      { id: 'foo.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'foo.ts', startLine: 0, endLine: 10, exported: true },
+    ];
+
+    const imports: RawImport[] = [{
+      filePath: 'caller.ts',
+      modulePath: './foo',
+      names: [{ name: 'foo' }],
+      isDefault: false,
+      isWildcard: false,
+      isDynamic: true,
+      line: 1,
+    }];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['caller.ts', callerSymbols], ['foo.ts', targetSymbols]]),
+      allSymbols: [...callerSymbols, ...targetSymbols],
+      imports,
+      calls: [],
+      heritage: [],
+      resolvedImportPaths: new Map([['caller.ts::./foo', 'foo.ts']]),
+    });
+
+    const importLinks = result.links.filter(l => l.type === 'imports');
+    // Should create one import link: caller.ts → foo
+    expect(importLinks.length).toBe(1);
+    expect(importLinks[0].toId).toBe('foo.ts#function:foo:1');
+    expect(importLinks[0].fromId).toBe('caller.ts#module:_top:0');
+  });
+
+  it('resolves namespace-style dynamic import as wildcard', () => {
+    const callerSymbols: CodeSymbol[] = [
+      { id: 'caller.ts#module:_top:0', name: '_top', kind: 'module', filePath: 'caller.ts', startLine: 0, endLine: 20, exported: true },
+    ];
+    const targetSymbols: CodeSymbol[] = [
+      { id: 'lib.ts#function:foo:1', name: 'foo', kind: 'function', filePath: 'lib.ts', startLine: 1, endLine: 3, exported: true },
+      { id: 'lib.ts#function:bar:5', name: 'bar', kind: 'function', filePath: 'lib.ts', startLine: 5, endLine: 7, exported: true },
+    ];
+
+    const imports: RawImport[] = [{
+      filePath: 'caller.ts',
+      modulePath: './lib',
+      names: [],
+      isDefault: false,
+      isWildcard: true,
+      isDynamic: true,
+      line: 1,
+    }];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['caller.ts', callerSymbols], ['lib.ts', targetSymbols]]),
+      allSymbols: [...callerSymbols, ...targetSymbols],
+      imports,
+      calls: [],
+      heritage: [],
+      resolvedImportPaths: new Map([['caller.ts::./lib', 'lib.ts']]),
+    });
+
+    const importLinks = result.links.filter(l => l.type === 'imports');
+    expect(importLinks.length).toBe(targetSymbols.filter(s => s.exported && s.kind !== 'module').length);
+  });
+
+  it('does not link receiver calls to unrelated same-name symbols', () => {
+    const fileASymbols: CodeSymbol[] = [
+      { id: 'a.ts#function:exec:1', name: 'exec', kind: 'function', filePath: 'a.ts', startLine: 1, endLine: 3, exported: true },
+    ];
+    const fileBSymbols: CodeSymbol[] = [
+      { id: 'b.ts#function:exec:1', name: 'exec', kind: 'function', filePath: 'b.ts', startLine: 1, endLine: 3, exported: true },
+    ];
+    const callerSymbols: CodeSymbol[] = [
+      { id: 'caller.ts#method:scan:5', name: 'scan', kind: 'function', filePath: 'caller.ts', startLine: 5, endLine: 10, exported: false },
+    ];
+
+    const calls: RawCall[] = [{
+      filePath: 'caller.ts',
+      enclosingSymbolId: 'caller.ts#method:scan:5',
+      calleeName: 'exec',
+      receiver: 'pattern',
+      line: 7,
+    }];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['a.ts', fileASymbols], ['b.ts', fileBSymbols], ['caller.ts', callerSymbols]]),
+      allSymbols: [...fileASymbols, ...fileBSymbols, ...callerSymbols],
+      imports: [],
+      calls,
+      heritage: [],
+      resolvedImportPaths: new Map(),
+    });
+
+    const callLinks = result.links.filter(l => l.type === 'calls');
+    expect(callLinks.length).toBe(0);
+    expect(result.unresolvedCalls).toBe(1);
+  });
+
+  it('does not link external imports to unrelated same-name project symbols', () => {
+    const projectSymbols: CodeSymbol[] = [
+      { id: 'src/engine.ts#method:resolve:61', name: 'resolve', kind: 'method', filePath: 'src/engine.ts', startLine: 61, endLine: 63, exported: true },
+    ];
+    const callerSymbols: CodeSymbol[] = [
+      { id: 'caller.ts#function:doStuff:10', name: 'doStuff', kind: 'function', filePath: 'caller.ts', startLine: 10, endLine: 20, exported: false },
+    ];
+
+    const imports: RawImport[] = [{
+      filePath: 'caller.ts',
+      modulePath: 'node:path',
+      names: [{ name: 'resolve' }],
+      isDefault: false,
+      isWildcard: false,
+      line: 1,
+    }];
+
+    const calls: RawCall[] = [{
+      filePath: 'caller.ts',
+      enclosingSymbolId: 'caller.ts#function:doStuff:10',
+      calleeName: 'resolve',
+      line: 12,
+    }];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['src/engine.ts', projectSymbols], ['caller.ts', callerSymbols]]),
+      allSymbols: [...projectSymbols, ...callerSymbols],
+      imports,
+      calls,
+      heritage: [],
+      resolvedImportPaths: new Map(),
+    });
+
+    const callLinks = result.links.filter(l => l.type === 'calls');
+    expect(callLinks.length).toBe(0);
+    expect(result.externalCalls).toBe(1);
+  });
+
+  it('does not link Set.add() to unrelated project add functions', () => {
+    const addFileA: CodeSymbol[] = [
+      { id: 'math.ts#function:add:1', name: 'add', kind: 'function', filePath: 'math.ts', startLine: 1, endLine: 3, exported: true },
+    ];
+    const addFileB: CodeSymbol[] = [
+      { id: 'calc.ts#method:add:5', name: 'add', kind: 'method', filePath: 'calc.ts', startLine: 5, endLine: 7, exported: true },
+    ];
+    const callerSymbols: CodeSymbol[] = [
+      { id: 'main.ts#function:init:1', name: 'init', kind: 'function', filePath: 'main.ts', startLine: 1, endLine: 5, exported: false },
+    ];
+
+    const calls: RawCall[] = [{
+      filePath: 'main.ts',
+      enclosingSymbolId: 'main.ts#function:init:1',
+      calleeName: 'add',
+      receiver: 'mySet',
+      line: 3,
+    }];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['math.ts', addFileA], ['calc.ts', addFileB], ['main.ts', callerSymbols]]),
+      allSymbols: [...addFileA, ...addFileB, ...callerSymbols],
+      imports: [],
+      calls,
+      heritage: [],
+      resolvedImportPaths: new Map(),
+    });
+
+    const callLinks = result.links.filter(l => l.type === 'calls');
+    expect(callLinks.length).toBe(0);
+    expect(result.unresolvedCalls).toBe(1);
+  });
+
+  it('does not link a receiver call to a globally-unique same-name project symbol (fast-path gap)', () => {
+    // Regression for the gap the earlier `add`/`resolve`/`exec` tests didn't cover:
+    // those all used 2+ candidates across files, which routes through the
+    // receiver-aware-narrowing branch. Here `exec` matches exactly ONE project
+    // symbol, so it must not take the "unique name globally" fast path just
+    // because it's a receiver call (e.g. `pattern.exec(content)` — RegExp.prototype.exec).
+    const uniqueExecFile: CodeSymbol[] = [
+      { id: 'scripts/create-pr.cjs#function:exec:56', name: 'exec', kind: 'function', filePath: 'scripts/create-pr.cjs', startLine: 56, endLine: 60, exported: true },
+    ];
+    const callerSymbols: CodeSymbol[] = [
+      { id: 'security.ts#function:scan:9', name: 'scan', kind: 'function', filePath: 'security.ts', startLine: 9, endLine: 90, exported: true },
+    ];
+
+    const calls: RawCall[] = [{
+      filePath: 'security.ts',
+      enclosingSymbolId: 'security.ts#function:scan:9',
+      calleeName: 'exec',
+      receiver: 'pattern',
+      line: 92,
+    }];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['scripts/create-pr.cjs', uniqueExecFile], ['security.ts', callerSymbols]]),
+      allSymbols: [...uniqueExecFile, ...callerSymbols],
+      imports: [],
+      calls,
+      heritage: [],
+      resolvedImportPaths: new Map(),
+    });
+
+    const callLinks = result.links.filter(l => l.type === 'calls');
+    expect(callLinks.length).toBe(0);
+    expect(result.unresolvedCalls).toBe(1);
+  });
+
+  it('does not link a bare argument-position identifier to an unrelated globally-unique symbol', () => {
+    // Regression for `resolve(root, file)` / `pattern.exec(content)`-shaped false edges:
+    // `root` here is a plain local variable passed as an argument, not a call — it must
+    // not be linked just because it happens to be the only symbol named "root" in the repo.
+    const unrelatedRootFile: CodeSymbol[] = [
+      { id: 'scripts/update-docs.js#variable:root:14', name: 'root', kind: 'variable', filePath: 'scripts/update-docs.js', startLine: 14, endLine: 14, exported: true },
+    ];
+    const callerSymbols: CodeSymbol[] = [
+      { id: 'security.ts#function:scan:9', name: 'scan', kind: 'function', filePath: 'security.ts', startLine: 9, endLine: 90, exported: true },
+    ];
+
+    const calls: RawCall[] = [{
+      filePath: 'security.ts',
+      enclosingSymbolId: 'security.ts#function:scan:9',
+      calleeName: 'root',
+      line: 53,
+      isArgumentRef: true,
+    }];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['scripts/update-docs.js', unrelatedRootFile], ['security.ts', callerSymbols]]),
+      allSymbols: [...unrelatedRootFile, ...callerSymbols],
+      imports: [],
+      calls,
+      heritage: [],
+      resolvedImportPaths: new Map(),
+    });
+
+    const callLinks = result.links.filter(l => l.type === 'calls');
+    expect(callLinks.length).toBe(0);
+    expect(result.unresolvedCalls).toBe(1);
+  });
+
+  it('still links an argument-position identifier when it is imported into the caller file', () => {
+    // The legitimate case this pattern exists for: passing an imported handler/callback
+    // reference, e.g. `onMounted(handleMount)` where `handleMount` was imported.
+    const handlerFile: CodeSymbol[] = [
+      { id: 'handlers.ts#function:handleMount:1', name: 'handleMount', kind: 'function', filePath: 'handlers.ts', startLine: 1, endLine: 3, exported: true },
+    ];
+    const callerSymbols: CodeSymbol[] = [
+      { id: 'view.ts#function:setup:1', name: 'setup', kind: 'function', filePath: 'view.ts', startLine: 1, endLine: 10, exported: true },
+    ];
+
+    const imports: RawImport[] = [{
+      filePath: 'view.ts',
+      modulePath: './handlers',
+      names: [{ name: 'handleMount' }],
+      isDefault: false,
+      isWildcard: false,
+      line: 1,
+    }];
+
+    const calls: RawCall[] = [{
+      filePath: 'view.ts',
+      enclosingSymbolId: 'view.ts#function:setup:1',
+      calleeName: 'handleMount',
+      line: 3,
+      isArgumentRef: true,
+    }];
+
+    const result = resolveLinksWithStats({
+      symbolsByFile: new Map([['handlers.ts', handlerFile], ['view.ts', callerSymbols]]),
+      allSymbols: [...handlerFile, ...callerSymbols],
+      imports,
+      calls,
+      heritage: [],
+      resolvedImportPaths: new Map([['view.ts::./handlers', 'handlers.ts']]),
+    });
+
+    const callLinks = result.links.filter(l => l.type === 'calls');
+    expect(callLinks.length).toBe(1);
+    expect(callLinks[0].toId).toBe('handlers.ts#function:handleMount:1');
+  });
 });

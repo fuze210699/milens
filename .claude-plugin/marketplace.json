@@ -1,0 +1,13 @@
+{
+  "name": "milens",
+  "owner": {
+    "name": "milens"
+  },
+  "plugins": [
+    {
+      "name": "milens",
+      "source": "./adapters/claude-code",
+      "description": "AI-DOS Code Intelligence Platform — knowledge graph, security scanning, impact analysis, and closed-loop AI development with 43 MCP tools"
+    }
+  ]
+}

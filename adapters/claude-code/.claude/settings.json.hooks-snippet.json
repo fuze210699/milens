@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "milens hooks session-start --repo ${CLAUDE_PROJECT_DIR} || true"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "milens hooks pre-compact --repo ${CLAUDE_PROJECT_DIR} || true"
+          }
+        ]
+      }
+    ]
+  }
+}

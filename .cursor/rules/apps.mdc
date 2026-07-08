@@ -27,7 +27,7 @@ When working with code in **apps/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 54 symbols (12 exported) across 10 files.
+Contains 40 symbols (8 exported) across 6 files.
 
 ## Key Symbols
 - **`Milens Desktop Dashboard`** [section] (apps/dashboard/README.md:1) — 0 refs
@@ -38,10 +38,6 @@ Contains 54 symbols (12 exported) across 10 files.
 - **`Features`** [section] (apps/github/README.md:5) — 0 refs
 - **`Deployment`** [section] (apps/github/README.md:10) — 0 refs
 - **`Local Development`** [section] (apps/github/README.md:15) — 0 refs
-- **`AgentsMdGenerator`** [class] (apps/github/generators/agents-md.js:1) — 0 refs
-- **`SecurityGenerator`** [class] (apps/github/generators/security.js:1) — 0 refs
-- **`SkillsGenerator`** [class] (apps/github/generators/skills.js:1) — 0 refs
-- **`MilensRunner`** [class] (apps/github/handlers/milens-runner.js:6) — 0 refs
 
 ## Entry Points
 - **`DASHBOARD_URL`** [variable] — 3 incoming references
@@ -51,10 +47,10 @@ Contains 54 symbols (12 exported) across 10 files.
 - **`setStatus`** [function] — 1 incoming references
 
 ## Dependencies
-- **store**: `remove`, `getAnnotations`, `Database`, `getCodebaseSummary`, `close`
-- **test**: `add`, `dbPath`
-- **orchestrator**: `e`
+- **store**: `remove`, `getAnnotations`, `Database`, `getCodebaseSummary`
 - **analyzer**: `resolve`
+- **scripts**: `parseArgs`, `generatePrPayload`
+- **test**: `create`
 
 ## Files
 - apps/dashboard/README.md
@@ -63,7 +59,3 @@ Contains 54 symbols (12 exported) across 10 files.
 - apps/dashboard/preload.js
 - apps/github/README.md
 - apps/github/app.js
-- apps/github/generators/agents-md.js
-- apps/github/generators/security.js
-- apps/github/generators/skills.js
-- apps/github/handlers/milens-runner.js

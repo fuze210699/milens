@@ -1,7 +1,7 @@
 {
   "name": "milens",
   "description": "AI-DOS Code Intelligence Platform — knowledge graph, security scanning, impact analysis, and closed-loop AI development with 43 MCP tools",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "author": {
     "name": "milens"
   },

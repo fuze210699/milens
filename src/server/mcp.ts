@@ -2323,6 +2323,12 @@ export async function startStdio(rootPath?: string): Promise<void> {
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
 
+  // Many MCP hosts tear down the child by closing the stdio pipe (EOF) instead
+  // of sending a signal — StdioServerTransport doesn't detect this on its own,
+  // so without this the process leaks forever with no parent left to talk to.
+  process.stdin.on('end', cleanup);
+  process.stdin.on('close', cleanup);
+
   try {
     await server.connect(transport);
   } catch (err: any) {

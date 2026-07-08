@@ -214,6 +214,26 @@ describe('startStdio', () => {
     expect(exitSpy).toHaveBeenCalledWith(0);
     exitSpy.mockRestore();
   });
+
+  it('registers stdin end/close handlers so the process exits when the host closes the pipe without a signal', async () => {
+    const stdinEndBefore = process.stdin.listeners('end').length;
+    const stdinCloseBefore = process.stdin.listeners('close').length;
+    await startStdio(testDir);
+    expect(process.stdin.listeners('end').length).toBeGreaterThan(stdinEndBefore);
+    expect(process.stdin.listeners('close').length).toBeGreaterThan(stdinCloseBefore);
+  });
+
+  it('cleanup stops the watcher and exits when stdin ends (host closed pipe without a signal)', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    await startStdio(testDir);
+    const addedListeners = process.stdin.listeners('end').slice(-1);
+    if (addedListeners.length > 0) {
+      await (addedListeners[0] as Function)();
+    }
+    expect(mockWatcherStop).toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    exitSpy.mockRestore();
+  });
 });
 
 describe('startHttp', () => {

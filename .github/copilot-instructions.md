@@ -1,7 +1,7 @@
 <!-- milens:start -->
 # Milens — AI-DOS
 
-The Operating System for AI-Driven Development. This project is indexed by milens (1366 symbols, 2347 links, 166 files).
+The Operating System for AI-Driven Development. This project is indexed by milens (2294 symbols, 2962 links, 229 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
@@ -98,7 +98,7 @@ When the user says... → do this FIRST:
 | "compare impact of `X`" | `mcp_milens_compare_impact({name: "X", action: "snapshot"|"compare", repo: "<workspaceRoot>"})` |
 | "check pre-commit" | `mcp_milens_pre_commit_check({repo: "<workspaceRoot>"})` |
 | "save/restore context" | `mcp_milens_hook_preCompact()` / `mcp_milens_hook_postCompact()` |
-| "scan security / audit security" | `mcp_milens_security_scan({repo: "<workspaceRoot>"})` — full audit across all 50+ rules |
+| "scan security / audit security" | `mcp_milens_security_scan({repo: "<workspaceRoot>"})` — full audit across all 190 rules |
 | "end session" / "finish work" | `mcp_milens_session_end({session_id: "..."})` — record stats, trigger onSessionEnd hook |
 | "what did session X do" | `mcp_milens_session_context({session_id: "..."})` — get annotations + tool calls |
 | "file changed to X" | `mcp_milens_hook_onFileChange({files: ["path/to/file"], repo: "<workspaceRoot>"})` |
@@ -170,7 +170,7 @@ Every time you discover something important about a symbol, annotate it. The sys
 | Find what needs testing most | `mcp_milens_test_coverage_gaps()` — sorted by risk |
 | Get a test strategy | `mcp_milens_test_plan({name: "functionName"})` — mocks + scenarios |
 | Review your changes | `mcp_milens_review_pr()` — risk scores for changed symbols |
-| Check for security issues | `mcp_milens_security_scan()` — 50+ rules in one call |
+| Check for security issues | `mcp_milens_security_scan()` — 190 rules in one call |
 | Remove dead code safely | `mcp_milens_find_dead_code()` then use `dead_code_remove` prompt |
 | Trace how code executes | `mcp_milens_trace({name: "functionName", direction: "to"})` |
 | Find API endpoints | `mcp_milens_routes()` — auto-detect across 7 frameworks |
@@ -247,7 +247,7 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symb
 | `mcp_milens_test_coverage_gaps` | Untested symbols sorted by risk | Finding test priorities |
 | `mcp_milens_test_impact` | Maps changes → test files | After making edits |
 | `mcp_milens_test_generate` | Auto-generate test file | Starting tests from scratch |
-| `mcp_milens_security_scan` | 50+ security rules | Security audit requested |
+| `mcp_milens_security_scan` | 190 security rules | Security audit requested |
 | `mcp_milens_trace` | Call chains from entrypoints | Debugging execution flow |
 | `mcp_milens_routes` | Framework routes/endpoints | Finding API endpoints |
 | `mcp_milens_smart_context` | Intent-aware context | Understand/edit/debug/test modes |
@@ -290,8 +290,11 @@ After significant code changes: `npx milens analyze -p . --force` (replace `.` w
 | Task | Read this skill file |
 |------|---------------------|
 | General milens tools reference | `.github/instructions/milens.instructions.md` |
-| Work in the Adapters area | `.github/instructions/adapters.instructions.md` |
+| Work in the .agents area | `.github/instructions/.agents.instructions.md` |
+| Work in the .claude area | `.github/instructions/.claude.instructions.md` |
+| Work in the .github area | `.github/instructions/.github.instructions.md` |
 | Work in the Root area | `.github/instructions/root.instructions.md` |
+| Work in the Adapters area | `.github/instructions/adapters.instructions.md` |
 | Work in the Apps area | `.github/instructions/apps.instructions.md` |
 | Work in the Docs area | `.github/instructions/docs.instructions.md` |
 | Work in the Test area | `.github/instructions/test.instructions.md` |

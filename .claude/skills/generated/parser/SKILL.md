@@ -37,8 +37,8 @@ Contains 83 symbols (31 exported) across 16 files.
 - **`clearQueryCache`** [function] (src/parser/extract.ts:72) — 4 refs
 - **`extractHtmlRefs`** [function] (src/parser/lang-html.ts:57) — 4 refs
 - **`extractHtmlLinks`** [function] (src/parser/lang-html.ts:99) — 4 refs
+- **`spec`** [variable] (src/parser/lang-js.ts:5) — 4 refs
 - **`extractVueTemplateRefs`** [function] (src/parser/lang-vue.ts:38) — 4 refs
-- **`extractVueTemplateAst`** [function] (src/parser/lang-vue.ts:90) — 4 refs
 
 ## Entry Points
 - **`LangSpec`** [interface] — 32 incoming references
@@ -48,9 +48,7 @@ Contains 83 symbols (31 exported) across 16 files.
 - **`supportedExtensions`** [function] — 6 incoming references
 
 ## Dependencies
-- **root**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+4 more)
-- **test**: `lang`, `add`, `parser`
-- **scripts**: `root`
+- **root**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+3 more)
 - **analyzer**: `resolve`
 - **store**: `load`
 

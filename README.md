@@ -98,15 +98,15 @@ Then connect your editor:
 claude mcp add milens -- milens serve -p .
 ```
 
-Or in .mcp.json at plugin root:
+Or drop this in `.mcp.json` at your project root (equivalent, works the same in the CLI, VS Code extension, and desktop app):
 
-```bash
+```json
 {
   "mcpServers": {
     "milens": {
       "type": "stdio",
       "command": "milens",
-      "args": ["serve", "-p", "${workspaceFolder}"]
+      "args": ["serve", "-p", "."]
     }
   }
 }

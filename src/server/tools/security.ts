@@ -1,10 +1,18 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { resolve, relative, join } from 'node:path';
+import { resolve, relative, join, sep } from 'node:path';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { loadRules } from '../../security/rules.js';
 import { globToRegex } from '../../utils.js';
 import type { Deps } from './deps.js';
+
+/** Resolve `file` under `root` and reject any path that escapes it (path traversal / symlink). */
+function resolveInsideRoot(root: string, file: string): string | null {
+  const resolvedRoot = resolve(root);
+  const fullPath = resolve(resolvedRoot, file);
+  if (fullPath !== resolvedRoot && !fullPath.startsWith(resolvedRoot + sep)) return null;
+  return fullPath;
+}
 
 export function registerSecurityTools(server: McpServer, deps: Deps): void {
   const { getDb } = deps;
@@ -162,7 +170,8 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
         return { content: [{ type: 'text' as const, text: `CRITICAL rule "${ruleId}" requires confirmation. Set confirm: true to proceed.` }] };
       }
 
-      const fullPath = resolve(root, file);
+      const fullPath = resolveInsideRoot(root, file);
+      if (!fullPath) return { content: [{ type: 'text' as const, text: `Invalid file path: "${file}" resolves outside the repo root.` }] };
       if (!existsSync(fullPath)) return { content: [{ type: 'text' as const, text: `File not found: ${file}` }] };
 
       const content = readFileSync(fullPath, 'utf-8');

@@ -25,49 +25,46 @@ When working with code in **analyzer/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 128 symbols (29 exported) across 8 files.
+Contains 119 symbols (24 exported) across 8 files.
 
 ## Key Symbols
+- **`analyze`** [function] (src/analyzer/engine.ts:139) — 10 refs
 - **`resolveLinksWithStats`** [function] (src/analyzer/resolver.ts:37) — 9 refs
-- **`reviewPr`** [function] (src/analyzer/review.ts:284) — 9 refs
-- **`analyze`** [function] (src/analyzer/engine.ts:139) — 8 refs
+- **`reviewPr`** [function] (src/analyzer/review.ts:244) — 9 refs
+- **`countDependentFiles`** [function] (src/analyzer/risk.ts:13) — 9 refs
 - **`loadAliases`** [function] (src/analyzer/config.ts:10) — 6 refs
 - **`ResolutionResult`** [interface] (src/analyzer/resolver.ts:24) — 6 refs
+- **`classifyRisk`** [function] (src/analyzer/risk.ts:33) — 5 refs
+- **`scoreSymbolRisk`** [function] (src/analyzer/risk.ts:41) — 5 refs
 - **`diffResolutions`** [function] (src/analyzer/scope-resolver.ts:768) — 5 refs
 - **`enrichMetadata`** [function] (src/analyzer/enrich.ts:21) — 4 refs
-- **`ReviewResult`** [interface] (src/analyzer/review.ts:17) — 4 refs
+- **`ReviewResult`** [interface] (src/analyzer/review.ts:19) — 4 refs
 - **`scanFiles`** [function] (src/analyzer/scanner.ts:11) — 4 refs
 - **`resolveWithScopes`** [function] (src/analyzer/scope-resolver.ts:48) — 4 refs
 - **`clearTreeCache`** [function] (src/analyzer/engine.ts:29) — 3 refs
 - **`resolveLinks`** [function] (src/analyzer/resolver.ts:32) — 3 refs
-- **`computeDiffStats`** [function] (src/analyzer/scope-resolver.ts:806) — 3 refs
-- **`getCachedTree`** [function] (src/analyzer/engine.ts:26) — 2 refs
-- **`reviewSymbol`** [function] (src/analyzer/review.ts:396) — 2 refs
 
 ## Entry Points
-- **`resolve`** [method] — 25 incoming references
-- **`find`** [function] — 14 incoming references
 - **`ScopeNode`** [interface] — 11 incoming references
+- **`analyze`** [function] — 10 incoming references
 - **`resolveLinksWithStats`** [function] — 9 incoming references
 - **`reviewPr`** [function] — 9 incoming references
+- **`countDependentFiles`** [function] — 9 incoming references
 
 ## Dependencies
 - **parser**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `extractVueScript`, `extractVueTemplateRefs` (+9 more)
-- **root**: `isTestFile`, `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding` (+8 more)
-- **store**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `get`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile` (+22 more)
-- **ui**: `ProgressPhase`, `ProgressReporter`, `startPhase`, `tick`, `endPhase`, `done`, `finalize`
-- **test**: `add`, `parser`, `lang`
-- **scripts**: `root`
+- **root**: `isTestFile`, `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding` (+7 more)
+- **store**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction` (+18 more)
+- **ui**: `ProgressPhase`, `ProgressReporter`, `startPhase`, `tick`, `endPhase`, `finalize`
 
 ## Used By
-- **root**: `loadAliases`, `analyze`, `resolve`, `clear`
+- **root**: `loadAliases`, `analyze`, `resolve`
 - **orchestrator**: `reviewPr`, `ReviewResult`, `SymbolRisk`
-- **server**: `reviewPr`, `analyze`, `resolve`, `clear`
-- **test**: `analyze`, `loadAliases`, `getCachedTree`, `clearTreeCache`, `enrichMetadata`, `resolveLinksWithStats`, `resolveLinks`, `reviewSymbol` (+10 more)
+- **server**: `reviewPr`, `countDependentFiles`, `analyze`
+- **test**: `analyze`, `loadAliases`, `getCachedTree`, `clearTreeCache`, `enrichMetadata`, `resolveLinksWithStats`, `resolveLinks`, `reviewSymbol` (+9 more)
 - **apps**: `resolve`
 - **scripts**: `resolve`
 - **parser**: `resolve`
-- **store**: `resolve`
 
 ## Files
 - src/analyzer/config.ts
@@ -75,6 +72,6 @@ Contains 128 symbols (29 exported) across 8 files.
 - src/analyzer/enrich.ts
 - src/analyzer/resolver.ts
 - src/analyzer/review.ts
+- src/analyzer/risk.ts
 - src/analyzer/scanner.ts
 - src/analyzer/scope-resolver.ts
-- src/analyzer/testplan.ts

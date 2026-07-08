@@ -10,7 +10,7 @@ Milens is a code intelligence MCP server that provides deep symbol search, depen
 
 | Harness | Directory | What's included |
 |---|---|---|
-| **Claude Code** | `claude-code/` | `.claude-plugin/plugin.json` + `.mcp.json` + `.claude/mcp.json` + `CLAUDE.md` |
+| **Claude Code** | `claude-code/` | `.claude/mcp.json` + `CLAUDE.md` |
 | **OpenCode** | `opencode/` | `.opencode/config.json` + `AGENTS.md` |
 | **Codex** | `codex/` | `.codex/codex.md` |
 | **Cursor** | `cursor/` | `.cursorrules` |
@@ -22,30 +22,32 @@ Milens is a code intelligence MCP server that provides deep symbol search, depen
 
 ### Claude Code
 
-**Method 1: Plugin (recommended)**
+Register milens as a **project-scoped MCP server** — this is the one method that works identically across the Claude Code CLI, the VS Code extension, and the desktop app, because it relies on nothing but a plain `.mcp.json` file at your project root (no plugin marketplace involved).
 
-`.claude-plugin/plugin.json` holds the plugin metadata; `.mcp.json` at the plugin root is what actually registers milens as an MCP server (Claude Code currently drops an `mcpServers` block placed directly inside `plugin.json` — see [anthropics/claude-code#16143](https://github.com/anthropics/claude-code/issues/16143) — so keep the two files separate). Copy both into your project and install from the local directory:
-
-```bash
-cp -r adapters/claude-code/.claude-plugin/ .claude-plugin/
-cp adapters/claude-code/.mcp.json .mcp.json
-cp adapters/claude-code/CLAUDE.md CLAUDE.md
-```
-
-```text
-/plugin install .
-```
-
-> No public marketplace listing yet — `/plugin install .` installs directly from the folder in your project.
-
-**Method 2: Manual MCP Registration**
 ```bash
 cp -r adapters/claude-code/.claude .claude/
 cp adapters/claude-code/CLAUDE.md CLAUDE.md
 claude mcp add milens -- milens serve -p .
 ```
 
-> **Prerequisite for both:** `npm i -g milens`
+That command writes a `.mcp.json` at your project root equivalent to:
+
+```json
+{
+  "mcpServers": {
+    "milens": {
+      "command": "milens",
+      "args": ["serve", "-p", "."]
+    }
+  }
+}
+```
+
+`-p .` is resolved against the process's working directory, which Claude Code always sets to your project root when it spawns the server — so this is the most portable form and needs no environment-variable substitution.
+
+> **Note:** we previously shipped a `.claude-plugin/plugin.json` + `.mcp.json` pair for `/plugin install` (marketplace-style install). It used `${CLAUDE_PLUGIN_ROOT}` for `-p`, which actually resolves to the plugin's own install directory, not your project — so it silently indexed the wrong codebase. We removed it until Claude Code exposes a real workspace-root variable for plugin manifests ([anthropics/claude-code#9354](https://github.com/anthropics/claude-code/issues/9354)). The manual `.mcp.json` method above has no such issue.
+>
+> **Prerequisite:** `npm i -g milens`
 
 ### OpenCode
 

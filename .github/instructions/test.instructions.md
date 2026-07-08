@@ -25,13 +25,12 @@ When working with code in **test/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 328 symbols (119 exported) across 77 files.
+Contains 350 symbols (119 exported) across 80 files.
 
 ## Key Symbols
 - **`User`** [class] (test/fixtures/accuracy/py-project/src/models.py:1) — 6 refs
 - **`Calculator`** [class] (test/fixtures/accuracy/js-project/src/calculator.js:1) — 5 refs
 - **`User`** [interface] (test/fixtures/ts-project/src/models.ts:1) — 5 refs
-- **`save`** [method] (test/fixtures/accuracy/py-project/src/models.py:14) — 4 refs
 - **`User`** [interface] (test/fixtures/accuracy/ts-project/src/models.ts:1) — 3 refs
 - **`User`** [class] (test/fixtures/py-project/models.py:1) — 3 refs
 - **`User`** [class] (test/fixtures/accuracy/ruby-project/src/models.rb:1) — 3 refs
@@ -42,35 +41,28 @@ Contains 328 symbols (119 exported) across 77 files.
 - **`UserService`** [class] (test/fixtures/ts-project/src/nest-sample.ts:27) — 2 refs
 - **`Save`** [method] (test/fixtures/accuracy/go-project/src/models/user.go:16) — 2 refs
 - **`UserRepo`** [class] (test/fixtures/accuracy/py-project/src/models.py:10) — 2 refs
+- **`save`** [method] (test/fixtures/accuracy/py-project/src/models.py:14) — 2 refs
 - **`UserService`** [class] (test/fixtures/accuracy/py-project/src/service.py:4) — 2 refs
 
 ## Entry Points
-- **`add`** [method] — 46 incoming references
-- **`lang`** [variable] — 12 incoming references
-- **`dbPath`** [function] — 10 incoming references
+- **`dbPath`** [function] — 8 incoming references
 - **`User`** [class] — 6 incoming references
 - **`Calculator`** [class] — 5 incoming references
+- **`User`** [interface] — 5 incoming references
+- **`lang`** [variable] — 4 incoming references
 
 ## Dependencies
-- **analyzer**: `analyze`, `loadAliases`, `getCachedTree`, `clearTreeCache`, `enrichMetadata`, `resolveLinksWithStats`, `resolveLinks`, `reviewSymbol` (+10 more)
-- **store**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+77 more)
+- **analyzer**: `analyze`, `loadAliases`, `getCachedTree`, `clearTreeCache`, `enrichMetadata`, `resolveLinksWithStats`, `resolveLinks`, `reviewSymbol` (+9 more)
+- **store**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+76 more)
 - **root**: `generateAgentsMd`, `AnnotationKey`, `CodeSymbol`, `SymbolLink`, `computeMetrics`, `formatMetricsReport`, `MilensMetrics`, `RawImport` (+17 more)
+- **server**: `defaultOnSessionStart`, `defaultOnPreCompact`, `defaultOnSessionEnd`, `defaultOnPostCompact`, `HookManager`, `HookConfig`, `defaultOnPreCommit`, `defaultOnFileChange` (+19 more)
 - **security**: `detectEcosystem`, `parseDependencies`, `checkVulnerabilities`, `auditDependencies`, `loadRules`, `getRulesByCategory`, `getRulesBySeverity`
 - **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `extractVueCompositionApi`, `extractVueTemplateAst`, `spec` (+11 more)
-- **server**: `HookManager`, `HookConfig`, `defaultOnSessionStart`, `defaultOnSessionEnd`, `defaultOnPreCommit`, `defaultOnFileChange`, `defaultOnPreCompact`, `defaultOnPostCompact` (+10 more)
 - **orchestrator**: `Orchestrator`, `formatReport`, `OrchestratorReport`, `subscribe`, `run`, `snapshot`, `compare`, `cancel` (+3 more)
-- **scripts**: `root`
+- **scripts**: `detectTypeFromBranch`, `detectScopeFromBranch`, `detectBreakingFromBranch`, `detectBreakingFromLabels`, `slugify`, `parseArgs`, `generateTitle`, `generateBody` (+1 more)
 
 ## Used By
-- **apps**: `add`, `dbPath`
-- **docs**: `add`
-- **root**: `add`, `dbPath`
-- **analyzer**: `add`, `parser`, `lang`
-- **orchestrator**: `add`
-- **parser**: `lang`, `add`, `parser`
-- **security**: `add`
-- **server**: `add`, `dbPath`
-- **store**: `add`, `dbPath`
+- **apps**: `create`
 
 ## Files
 - test/fixtures/accuracy/go-project/src/admin.go
@@ -132,21 +124,24 @@ Contains 328 symbols (119 exported) across 77 files.
 - test/unit/markdown.test.ts
 - test/unit/mcp-prompts.test.ts
 - test/unit/mcp-tools.test.ts
+- test/unit/mcp-transport.test.ts
 - test/unit/metrics.test.ts
 - test/unit/mro.test.ts
 - test/unit/orchestrator.test.ts
 - test/unit/parser-extract-cache.test.ts
 - test/unit/parser-loader.test.ts
+- test/unit/pr-generator.test.ts
 - test/unit/registry.test.ts
 - test/unit/resolver.test.ts
 - test/unit/review.test.ts
+- test/unit/risk.test.ts
 - test/unit/scanner.test.ts
 - test/unit/scope-resolver.test.ts
 - test/unit/security-rules.test.ts
 - test/unit/server-test-plan.test.ts
 - test/unit/skills.test.ts
-- test/unit/testplan.test.ts
 - test/unit/uninstall.test.ts
 - test/unit/utils.test.ts
 - test/unit/vectors.test.ts
 - test/unit/vue-import.test.ts
+- test/unit/watcher.test.ts

@@ -21,26 +21,29 @@ When working with code in **adapters/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 34 symbols (31 exported) across 3 files.
+Contains 60 symbols (54 exported) across 6 files.
 
 ## Key Symbols
-- **`Milens — Code Intelligence for Claude Code`** [section] (adapters/claude-code/CLAUDE.md:1) — 0 refs
-- **`⚠️ BEFORE ANYTHING ELSE`** [section] (adapters/claude-code/CLAUDE.md:3) — 0 refs
-- **`⭐ Core Tools (Use Every Session)`** [section] (adapters/claude-code/CLAUDE.md:19) — 0 refs
-- **`🔧 Situational Tools (Use When Needed)`** [section] (adapters/claude-code/CLAUDE.md:32) — 0 refs
-- **`Session Workflow`** [section] (adapters/claude-code/CLAUDE.md:46) — 0 refs
-- **`Edit Safety (Mandatory)`** [section] (adapters/claude-code/CLAUDE.md:54) — 0 refs
-- **`Tool Selection`** [section] (adapters/claude-code/CLAUDE.md:70) — 0 refs
-- **`Reference`** [section] (adapters/claude-code/CLAUDE.md:76) — 0 refs
-- **`Milens — Code Intelligence for OpenCode`** [section] (adapters/opencode/AGENTS.md:1) — 0 refs
-- **`⚠️ BEFORE ANYTHING ELSE`** [section] (adapters/opencode/AGENTS.md:3) — 0 refs
-- **`⭐ Core Tools (Use Every Session)`** [section] (adapters/opencode/AGENTS.md:19) — 0 refs
-- **`🔧 Situational Tools (Use When Needed)`** [section] (adapters/opencode/AGENTS.md:32) — 0 refs
-- **`Session Workflow`** [section] (adapters/opencode/AGENTS.md:46) — 0 refs
-- **`Edit Safety (Mandatory)`** [section] (adapters/opencode/AGENTS.md:54) — 0 refs
-- **`Tool Selection`** [section] (adapters/opencode/AGENTS.md:70) — 0 refs
+- **`Milens Adapter Packs`** [section] (adapters/README.md:1) — 0 refs
+- **`What is milens?`** [section] (adapters/README.md:5) — 0 refs
+- **`Available Adapters`** [section] (adapters/README.md:9) — 0 refs
+- **`Installation`** [section] (adapters/README.md:21) — 0 refs
+- **`Claude Code`** [section] (adapters/README.md:23) — 0 refs
+- **`OpenCode`** [section] (adapters/README.md:52) — 0 refs
+- **`Codex`** [section] (adapters/README.md:59) — 0 refs
+- **`Cursor`** [section] (adapters/README.md:65) — 0 refs
+- **`GitHub Copilot`** [section] (adapters/README.md:71) — 0 refs
+- **`Gemini`** [section] (adapters/README.md:77) — 0 refs
+- **`Zed`** [section] (adapters/README.md:83) — 0 refs
+- **`Verification`** [section] (adapters/README.md:89) — 0 refs
+- **`Index Maintenance`** [section] (adapters/README.md:97) — 0 refs
+- **`All Tools Available`** [section] (adapters/README.md:105) — 0 refs
+- **`Safety Rules (applies to all harnesses)`** [section] (adapters/README.md:123) — 0 refs
 
 ## Files
 - adapters/README.md
 - adapters/claude-code/CLAUDE.md
+- adapters/codex/.codex/codex.md
+- adapters/copilot/.github/copilot-instructions.md
+- adapters/gemini/.gemini/context.md
 - adapters/opencode/AGENTS.md

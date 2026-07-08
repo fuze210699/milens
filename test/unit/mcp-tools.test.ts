@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdirSync, rmSync, existsSync } from 'node:fs';
+import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from '../../src/store/db.js';
 import { RepoRegistry } from '../../src/store/registry.js';
@@ -804,6 +804,27 @@ describe('createMcpServer', () => {
       expect(typeof parsed.summary.totalScanned).toBe('number');
       expect(typeof parsed.summary.score).toBe('number');
       expect(Array.isArray(parsed.findings)).toBe(true);
+    });
+
+    it('fix_apply rejects a file path that escapes the repo root (path traversal)', async () => {
+      const outsidePath = resolve(TEST_ROOT, '..', 'fix-apply-canary.txt');
+      const original = 'password = "admin123"\n';
+      writeFileSync(outsidePath, original, 'utf-8');
+      try {
+        const server = createMcpServer(TEST_ROOT);
+        const handler = getToolHandler(server, 'fix_apply');
+        const result = await handler({
+          ruleId: 'SEC-001',
+          file: '../fix-apply-canary.txt',
+          line: 1,
+          confirm: true,
+          repo: TEST_ROOT,
+        });
+        expect(result.content[0].text).toMatch(/resolves outside the repo root/);
+        expect(readFileSync(outsidePath, 'utf-8')).toBe(original);
+      } finally {
+        rmSync(outsidePath, { force: true });
+      }
     });
   });
 

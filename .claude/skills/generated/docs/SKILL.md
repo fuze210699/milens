@@ -21,9 +21,12 @@ When working with code in **docs/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 137 symbols (114 exported) across 21 files.
+Contains 122 symbols (112 exported) across 10 files.
 
 ## Key Symbols
+- **`Milens Documentation`** [section] (docs/README.md:1) — 0 refs
+- **`Getting Started`** [section] (docs/README.md:5) — 0 refs
+- **`Reference`** [section] (docs/README.md:12) — 0 refs
 - **`Accuracy Engine`** [section] (docs/accuracy.md:1) — 0 refs
 - **`Type Bindings`** [section] (docs/accuracy.md:5) — 0 refs
 - **`Method Resolution Order (MRO)`** [section] (docs/accuracy.md:29) — 0 refs
@@ -35,39 +38,16 @@ Contains 137 symbols (114 exported) across 21 files.
 - **`Available Adapters`** [section] (docs/adapters.md:5) — 0 refs
 - **`Quick Install`** [section] (docs/adapters.md:17) — 0 refs
 - **`Claude Code`** [section] (docs/adapters.md:21) — 0 refs
-- **`OpenCode`** [section] (docs/adapters.md:29) — 0 refs
-- **`Cursor`** [section] (docs/adapters.md:36) — 0 refs
-- **`GitHub Copilot`** [section] (docs/adapters.md:42) — 0 refs
-- **`Codex`** [section] (docs/adapters.md:48) — 0 refs
-
-## Entry Points
-- **`applyFilters`** [function] — 1 incoming references
-- **`applyFilters`** [function] — 1 incoming references
-
-## Dependencies
-- **scripts**: `main`
-- **store**: `remove`
-- **test**: `add`
+- **`OpenCode`** [section] (docs/adapters.md:37) — 0 refs
 
 ## Files
 - docs/README.md
 - docs/accuracy.md
-- docs/adapters.html
 - docs/adapters.md
-- docs/changelog.html
 - docs/cli.md
-- docs/compare.html
-- docs/github-app.html
-- docs/index.html
 - docs/languages.md
-- docs/learning.html
-- docs/platforms.html
-- docs/pricing.html
 - docs/pricing.md
 - docs/quickstart.md
 - docs/review.md
-- docs/scenarios.html
 - docs/security-presets.md
-- docs/security.html
-- docs/skills.html
 - docs/tools.md

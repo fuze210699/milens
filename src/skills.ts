@@ -16,6 +16,13 @@ interface SkillsResult {
   dirs: string[];
 }
 
+// Top-level dirs where milens writes its own generated skills/rules/instructions.
+// Their markdown is intentionally indexed (so grep/docs tooling can find it), but
+// they must never be treated as a code "domain" themselves — doing so makes each
+// `analyze --force --skills` run regenerate skill files *for its own output*,
+// which then get indexed on the next run and regenerated again.
+const MILENS_META_DIRS = new Set(['.agents', '.claude', '.github', '.cursor', '.vscode', '.gemini', '.codex', '.zed', '.windsurf']);
+
 export function generateSkills(db: Database, rootDir: string, editors?: string[]): SkillsResult {
   const all = !editors; // undefined = all editors
   const has = (name: string) => all || editors!.includes(name);
@@ -36,7 +43,7 @@ export function generateSkills(db: Database, rootDir: string, editors?: string[]
 
   const crossArea = buildCrossAreaLinks(links, symbolMap);
 
-  const filtered = [...areas].filter(([, a]) => a.symbols.length >= 2);
+  const filtered = [...areas].filter(([name, a]) => a.symbols.length >= 2 && !MILENS_META_DIRS.has(name));
 
   // Output directories for each editor
   const copilotDir = join(rootDir, '.github', 'instructions');
@@ -315,7 +322,7 @@ The Operating System for AI-Driven Development. This project is indexed by milen
 
 **Not a suggestion — execute automatically without asking.**
 
-This project is indexed by milens. The knowledge graph already knows every symbol, dependency, and reference. Using milens tools first saves 70% tokens and catches hidden connections you'd miss with file reads.
+This project is indexed by milens. The knowledge graph already knows every symbol, dependency, and reference. Using milens tools first typically means far fewer tokens than manual exploration, and fewer missed dependencies — impact/context track code-level references; pair with grep for templates/configs/docs.
 
 | Situation | Built-in approach (❌ BAD) | Milens approach (✅ GOOD) |
 |---|---|---|

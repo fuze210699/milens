@@ -145,7 +145,6 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     }
 
     for (const crb of input.callResultBindings) {
-      // Skip if target already has a type binding
       const fileBindings = typeBindingsPerFile.get(crb.filePath);
 
       let returnType: string | undefined;
@@ -177,6 +176,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
         entries = [];
         fb.set(crb.target, entries);
       }
+      // Skip if target already has a type binding
       if (entries.length === 0) {
         entries.push({ typeName: returnType, scope: crb.scope, line: crb.line });
       }

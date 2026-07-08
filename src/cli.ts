@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { resolve, join, dirname, basename } from 'node:path';
-import { mkdirSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, existsSync, cpSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadAliases } from './analyzer/config.js';
@@ -16,6 +16,38 @@ const program = new Command();
 
 const __filename = fileURLToPath(import.meta.url);
 const PKG_VERSION: string = process.env.MILENS_VERSION ?? JSON.parse(readFileSync(join(dirname(__filename), '..', 'package.json'), 'utf-8')).version;
+
+// Files each harness adapter contributes, relative to adapters/<harness>/ (src) and
+// the project root (dest). Copying never overwrites a file that already exists at dest.
+const HARNESS_ADAPTER_FILES: Record<string, Array<{ src: string; dest: string }>> = {
+  'claude-code': [
+    { src: '.claude/mcp.json', dest: '.claude/mcp.json' },
+    { src: 'CLAUDE.md', dest: 'CLAUDE.md' },
+  ],
+  'opencode': [
+    { src: '.opencode/config.json', dest: '.opencode/config.json' },
+    { src: 'AGENTS.md', dest: 'AGENTS.md' },
+  ],
+  'codex': [
+    { src: '.codex/config.toml', dest: '.codex/config.toml' },
+    { src: '.codex/codex.md', dest: '.codex/codex.md' },
+  ],
+  'cursor': [
+    { src: '.cursor/mcp.json', dest: '.cursor/mcp.json' },
+    { src: '.cursorrules', dest: '.cursorrules' },
+  ],
+  'copilot': [
+    { src: '.vscode/mcp.json', dest: '.vscode/mcp.json' },
+    { src: '.github/copilot-instructions.md', dest: '.github/copilot-instructions.md' },
+  ],
+  'gemini': [
+    { src: '.gemini/settings.json', dest: '.gemini/settings.json' },
+    { src: '.gemini/context.md', dest: '.gemini/context.md' },
+  ],
+  'zed': [
+    { src: '.zed/settings.json', dest: '.zed/settings.json' },
+  ],
+};
 
 program
   .name('milens')
@@ -67,7 +99,6 @@ program
         onProgress: reporter,
       });
 
-      // Register in global registry
       const contentHash = createHash('sha256').update(JSON.stringify(stats)).digest('hex').slice(0, 12);
       const { RepoRegistry } = await import('./store/registry.js');
       new RepoRegistry().register(rootPath, dbPath, contentHash);
@@ -305,7 +336,6 @@ program
     console.log('╚══════════════════════════════════════════╝');
     console.log();
 
-    // Run initial scan
     const initialScan = uninstall({
       rootPath,
       dryRun: false,
@@ -316,7 +346,6 @@ program
       scanOnly: true,
     });
 
-    // Collect all items for display
     const allScanned: string[] = [];
     for (const item of initialScan.autoRemoved) {
       allScanned.push(`${item.file} (${item.action})`);
@@ -345,7 +374,6 @@ program
     console.log('╚══════════════════════════════════════════╝');
     console.log();
 
-    // Run auto-remove (without interactive items)
     const autoResult = uninstall({
       rootPath,
       dryRun: false,
@@ -356,7 +384,6 @@ program
       scanOnly: false,
     });
 
-    // Show only auto-removed items
     for (const item of autoResult.autoRemoved) {
       console.log(`  ✓ ${item.file} — ${item.action}`);
     }
@@ -588,7 +615,6 @@ program
     const { Database } = await import('./store/db.js');
     const db = new Database(trackDbPath);
     
-    // Determine repo filter from --path
     let repoFilter: string | undefined;
     if (opts.path) {
       repoFilter = resolve(opts.path);
@@ -1038,7 +1064,7 @@ program
           console.log(`Loaded ${rules.length} active security rules\n`);
 
           const findings: Array<{ severity: string; rule: string; file: string; line: number; match: string; category: string; fix?: string }> = [];
-          const MAX_FILE_SIZE = 200 * 1024;
+          const MAX_FILE_SIZE = 200 * 1024; // skip files >200KB to avoid regex timeout
 
           function scanDir(dir: string): void {
             try {
@@ -1093,7 +1119,6 @@ program
               if (bySeverity[s]) console.log(`  ${s}: ${bySeverity[s]}`);
             }
             console.log();
-            // Show top findings by severity
             const sorted = [...findings].sort((a, b) => {
               const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
               return (order[a.severity] ?? 4) - (order[b.severity] ?? 4);
@@ -1197,6 +1222,7 @@ program
   .option('-p, --path <path>', 'Repository root path', '.')
   .option('--profile <profile>', 'minimal|standard|full', 'standard')
   .option('--with <modules>', 'Comma-separated extra modules (security,ci,hooks)')
+  .option('--target <harnesses>', `Comma-separated harnesses to install adapters for (${Object.keys(HARNESS_ADAPTER_FILES).join(',')},all)`)
   .option('--interactive', 'Interactive install mode')
   .action(async (opts) => {
     const root = resolve(opts.path);
@@ -1245,6 +1271,8 @@ program
       console.log('  claude-code, opencode, codex, cursor, copilot, gemini, zed, all');
       const harnessChoice = await ask('Harnesses [all]: ');
       const harnesses = harnessChoice.trim() || 'all';
+
+      opts.target = harnesses;
 
       // Generate command
       const withFlags = opts.with ? `--with ${opts.with}` : '';
@@ -1356,6 +1384,38 @@ echo "Milens: Done."
         console.log('  ✓ Pre-commit hook installed');
       } catch (e: any) {
         console.log(`  ⚠ Hook install skipped: ${e.message}`);
+      }
+    }
+
+    if (opts.target) {
+      console.log('Installing harness adapters...');
+      const targetTokens: string[] = opts.target.split(',').map((h: string) => h.trim()).filter(Boolean);
+      const requested: string[] = targetTokens.includes('all')
+        ? Object.keys(HARNESS_ADAPTER_FILES)
+        : targetTokens;
+
+      const adaptersRoot = join(dirname(__filename), '..', 'adapters');
+      for (const harness of requested) {
+        const files = HARNESS_ADAPTER_FILES[harness];
+        if (!files) {
+          console.log(`  ⚠ Unknown harness "${harness}" — skipped. Valid: ${Object.keys(HARNESS_ADAPTER_FILES).join(', ')}, all`);
+          continue;
+        }
+        for (const { src, dest } of files) {
+          const srcPath = join(adaptersRoot, harness, src);
+          const destPath = resolve(root, dest);
+          if (!existsSync(srcPath)) {
+            console.log(`  ⚠ ${harness}: template not found (${src}) — run from an npm install of milens`);
+            continue;
+          }
+          if (existsSync(destPath)) {
+            console.log(`  - ${dest} already exists — skipped (not overwritten)`);
+            continue;
+          }
+          mkdirSync(dirname(destPath), { recursive: true });
+          cpSync(srcPath, destPath);
+          console.log(`  ✓ ${dest} (${harness})`);
+        }
       }
     }
 

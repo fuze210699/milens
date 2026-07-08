@@ -522,11 +522,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
 
   clearQueryCache();
   clearTreeCache();
-  try {
-    db.close();
-  } finally {
-    // ensure close even on error
-  }
+  db.close();
   return stats;
 }
 
@@ -784,7 +780,7 @@ async function parseFile(
     }
     }
 
-    // Rails DSL detection: associations, scopes, validations, callbacks
+    // Rails DSL detection: associations, scopes, callbacks
     if (filePath.includes('/app/models/') || filePath.includes('/app/controllers/')) {
       const className = result.symbols.find(s => s.kind === 'class')?.name;
 

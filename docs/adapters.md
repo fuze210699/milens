@@ -8,10 +8,10 @@ Connect milens to any AI coding harness. Each adapter includes the MCP server co
 |---|---|---|---|
 | **Claude Code** | `.claude/mcp.json` | `CLAUDE.md` | standard |
 | **OpenCode** | `.opencode/config.json` | `AGENTS.md` | standard |
-| **Codex** | `.codex/codex.md` | `codex.md` | standard |
-| **Cursor** | `.cursorrules` | `.cursorrules` | standard |
+| **Codex** | `.codex/config.toml` | `.codex/codex.md` | standard |
+| **Cursor** | `.cursor/mcp.json` | `.cursorrules` | standard |
 | **GitHub Copilot** | `.vscode/mcp.json` | `.github/copilot-instructions.md` | standard |
-| **Gemini** | `.gemini/context.md` | `context.md` | minimal |
+| **Gemini** | `.gemini/settings.json` | `.gemini/context.md` | minimal |
 | **Zed** | `.zed/settings.json` | `settings.json` | minimal |
 
 ## Quick Install
@@ -44,24 +44,28 @@ cp adapters/opencode/AGENTS.md AGENTS.md
 ### Cursor
 
 ```bash
+cp adapters/cursor/.cursor/mcp.json .cursor/
 cp adapters/cursor/.cursorrules .cursorrules
 ```
 
 ### GitHub Copilot
 
 ```bash
+cp adapters/copilot/.vscode/mcp.json .vscode/
 cp adapters/copilot/.github/copilot-instructions.md .github/
 ```
 
 ### Codex
 
 ```bash
+cp adapters/codex/.codex/config.toml .codex/
 cp adapters/codex/.codex/codex.md .codex/
 ```
 
 ### Gemini
 
 ```bash
+cp adapters/gemini/.gemini/settings.json .gemini/
 cp adapters/gemini/.gemini/context.md .gemini/
 ```
 
@@ -73,11 +77,13 @@ cp adapters/zed/.zed/settings.json .zed/
 
 ## Automated Install
 
-Use `milens init --interactive` and select your harnesses during setup. Milens will copy the appropriate adapter files automatically.
+Use `milens init --target <harnesses>` (comma-separated, or `all`) to copy the adapter files for you — equivalent to the `cp` commands above, skipping any file that already exists in your project so it never clobbers your own config.
 
 ```bash
 milens init --profile standard --target claude-code,opencode,cursor
 ```
+
+`milens init --interactive` walks through profile, extras, and harness selection, then runs the equivalent non-interactive command for you.
 
 ## Profile Selection
 

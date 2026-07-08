@@ -21,7 +21,7 @@ When working with code in **root/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 266 symbols (188 exported) across 12 files.
+Contains 236 symbols (156 exported) across 12 files.
 
 ## Key Symbols
 - **`CodeSymbol`** [interface] (src/types.ts:8) — 50 refs

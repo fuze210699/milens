@@ -163,7 +163,10 @@ class SessionGuard {
 
 // ── Tool usage tracking ──
 
-// Estimated tokens an agent would spend WITHOUT milens (manual exploration cost per tool)
+// Hand-picked heuristic estimates of tokens an agent would spend WITHOUT milens
+// (manual exploration cost per tool). Not derived from measurement — these feed
+// the "tokens saved" numbers in usage tracking/dashboards, so treat them as a
+// rough directional signal, not a validated benchmark.
 const TOKEN_SAVINGS_MULTIPLIER: Record<string, number> = {
   query: 3,           // vs 3+ separate grep/file reads
   grep: 2,            // vs terminal grep + manual filtering
@@ -351,7 +354,11 @@ function matchesScope(lineText: string, scope: 'imports' | 'definitions'): boole
   return /^(export\s+)?(async\s+)?(function|class|interface|type|enum|struct|trait|const|let|var|def|fn|pub\s+fn|pub\s+struct|pub\s+enum|module)\s/.test(trimmed);
 }
 
-/** Validate user-supplied regex is safe from catastrophic backtracking (ReDoS). */
+/**
+ * Validate user-supplied regex is safe from catastrophic backtracking (ReDoS).
+ * This is a heuristic blocklist of known-dangerous constructs, not a formal
+ * proof of safety — it catches common patterns but isn't exhaustive.
+ */
 function safeRegex(pattern: string, flags: string): RegExp {
   if (pattern.length > 200) throw new Error('Pattern too long');
   // Reject nested quantifiers like (a+)+, (a*)*,  (a{1,})+
@@ -397,7 +404,7 @@ RULE: Before opening ANY file to understand code, call the appropriate milens to
 
 AUDIT: session_end reports which symbols were safety-checked. Editing without checks = audit gap.
 
-TOKEN SAVINGS: Using milens first = 70% fewer tokens, zero missed dependencies.
+TOKEN SAVINGS: Using milens first typically means far fewer tokens than manual exploration, and fewer missed dependencies — impact/context track code-level references; pair with grep for templates/configs/docs.
 
 milens — code intelligence engine. Indexes codebases into symbol graphs.
 
@@ -449,6 +456,9 @@ export function createMcpServer(rootPath?: string): McpServer {
   const trackDb = getTrackingDb();
   const guard = new SessionGuard();
 
+  // On Windows, the same path can arrive as "c:\..." or "C:\..." depending on the
+  // caller — without normalizing the drive letter, those resolve to different
+  // registry keys and split one repo's index across two entries.
   function normalizePath(p: string): string {
     const abs = resolve(p);
     if (process.platform === 'win32') {
@@ -502,7 +512,11 @@ export function createMcpServer(rootPath?: string): McpServer {
     { instructions: MILENS_INSTRUCTIONS },
   );
 
-  // Auto-wrap every tool handler with usage tracking + background decay tick
+  // Auto-wrap every tool handler with usage tracking + background decay tick.
+  // This replaces `server.tool` itself, so every `server.tool(...)` call below —
+  // including the ones inside registerTestingTools/registerSessionTools/
+  // registerSecurityTools/registerResources in other files, which all receive
+  // this same `server` instance — goes through this wrapper too.
   const origTool = server.tool.bind(server);
   let lastDecayTick = 0;
   const DECAY_INTERVAL = 5 * 60_000; // 5 minutes between decay ticks
@@ -538,7 +552,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     return (origTool as any)(...args);
   }) as typeof server.tool;
 
-  // ── Selective tool profiles (W4) ──
+  // ── Selective tool profiles ──
   const profile = process.env.MILENS_PROFILE || undefined;
   
   if (profile && profile !== 'full') {
@@ -547,7 +561,9 @@ export function createMcpServer(rootPath?: string): McpServer {
     
     const allowed = profile === 'minimal' ? minimal : standard;
     
-    // Wrap server.tool again to gate by profile
+    // Wrap the tracking-wrapped server.tool again, so profile gating sits on
+    // top: disabled tools still get registered (via the no-op handler below)
+    // and still get tracked, they just short-circuit to the disabled message.
     const profileWrappedTool = server.tool.bind(server);
     server.tool = ((...args: any[]) => {
       const toolName = args[0] as string;
@@ -827,7 +843,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: overview ──
   server.tool(
     'overview',
-    'ONE call replaces 3-5 file reads. Combined context + impact + grep. Use BEFORE reading any source file. Saves 70% tokens vs reading files individually. Preferred before editing/deleting/renaming a symbol.',
+    'ONE call replaces 3-5 file reads. Combined context + impact + grep. Use BEFORE reading any source file. Typically far fewer tokens than reading files individually. Preferred before editing/deleting/renaming a symbol.',
     {
       name: z.string().describe('Symbol name'),
       repo: z.string().optional(),
@@ -963,6 +979,9 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
     async ({ ref, repo }) => {
       const { db, root } = getDb(repo);
+      // `ref` is passed straight to `git diff` below. Restrict it to characters
+      // valid in a git ref so it can't be crafted as a flag (e.g. a leading "-")
+      // and get interpreted as a git option instead of a revision.
       if (!/^[a-zA-Z0-9\/._~^\-]+$/.test(ref)) {
         return { content: [{ type: 'text' as const, text: 'Invalid git ref.' }] };
       }
@@ -1481,7 +1500,9 @@ export function createMcpServer(rootPath?: string): McpServer {
       const root = resolveRoot(repo);
       const { db } = getDb(repo);
 
-      // Route patterns for different frameworks
+      // Route patterns for different frameworks. Best-effort, single-line regex
+      // matching — route declarations split across multiple lines (e.g. a decorator
+      // and its path on separate lines) will not be detected.
       const routePatterns: Array<{ name: string; pattern: RegExp; fileGlob: string }> = [
         { name: 'express', pattern: /\b(?:app|router)\.(get|post|put|patch|delete|use|all)\s*\(\s*['"`]([^'"`]+)['"`]/, fileGlob: '**/*.{ts,js,mjs,cjs}' },
         { name: 'fastapi', pattern: /@(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
@@ -1849,7 +1870,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
-  // ═══ codebase_summary ═══
+  // ── Tool: codebase_summary ──
   server.tool(
     'codebase_summary',
     '500-token project overview. Use at session start INSTEAD of reading README, exploring directory structure, or reading multiple files to understand the codebase. Returns domains, key symbols, coverage %.',
@@ -1882,7 +1903,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
-  // ═══ review_pr ═══
+  // ── Tool: review_pr ──
   server.tool(
     'review_pr',
     'PR risk assessment: git diff -> affected symbols with risk scores (LOW/MEDIUM/HIGH/CRITICAL).',
@@ -1913,7 +1934,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
-  // ═══ review_symbol ═══
+  // ── Tool: review_symbol ──
   server.tool(
     'review_symbol',
     'Deep-dive single symbol risk: role, heat, dependents, test status, risk level.',
@@ -1965,7 +1986,7 @@ export function createMcpServer(rootPath?: string): McpServer {
 
   registerSessionTools(server, { getDb, fmtSymbol, fmtImpact, rootPath, toolCallCounts, resolveRoot, guard, getToolCallCount });
 
-  // ═══ semantic_search ═══
+  // ── Tool: semantic_search ──
   server.tool(
     'semantic_search',
     'Search symbols by semantic meaning (falls back to FTS5 keyword search when embeddings unavailable).',
@@ -1984,7 +2005,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
-  // ═══ find_similar ═══
+  // ── Tool: find_similar ──
   server.tool(
     'find_similar',
     'Find symbols topologically similar to a given symbol (shared callers/callees). Useful for finding patterns to copy or refactor together.',
@@ -2003,9 +2024,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
-  // ══════════════════════════════════════════════
   // ── MCP Resources ──
-  // ══════════════════════════════════════════════
   registerResources(server, {
     getDb,
     fmtSymbol,
@@ -2175,13 +2194,13 @@ export function createMcpServer(rootPath?: string): McpServer {
     }),
   );
 
-  // ── Register MCP Prompts (W1) ──
+  // ── Register MCP Prompts ──
   registerAllPrompts(server);
 
   registerSecurityTools(server, { getDb, fmtSymbol, fmtImpact, rootPath, toolCallCounts, resolveRoot, guard, getToolCallCount });
 
 
-  // ═══ compare_impact ═══
+  // ── Tool: compare_impact ──
   server.tool(
     'compare_impact',
     'Compare impact graph before/after an edit. Takes a snapshot first, then call again to see the diff. Returns new/removed dependents and heat changes.',
@@ -2237,7 +2256,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
-  // ═══ orchestrate ═══
+  // ── Tool: orchestrate ──
   server.tool(
     'orchestrate',
     'Run full orchestration cycle: detect_changes → review_pr → impact → coverage gaps → dead code. Returns structured action plan.',
@@ -2281,8 +2300,6 @@ export function createMcpServer(rootPath?: string): McpServer {
 
   return server;
 }
-
-// ── Helpers ──
 
 // ── Transport: stdio ──
 

@@ -167,6 +167,15 @@ describe('CLI', () => {
         expect(output).toContain(cmd);
       }
     });
+
+    it('init --help documents --target with all supported harnesses', async () => {
+      await importCli(['init', '--help']);
+      const output = getOutput(stdoutSpy);
+      expect(output).toContain('--target');
+      for (const harness of ['claude-code', 'opencode', 'codex', 'cursor', 'copilot', 'gemini', 'zed', 'all']) {
+        expect(output).toContain(harness);
+      }
+    });
   });
 
   // ── Package metadata ────────────────────────────────────────────────

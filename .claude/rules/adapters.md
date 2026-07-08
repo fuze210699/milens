@@ -34,16 +34,16 @@ Contains 60 symbols (54 exported) across 6 files.
 - **`Available Adapters`** [section] (adapters/README.md:9) — 0 refs
 - **`Installation`** [section] (adapters/README.md:21) — 0 refs
 - **`Claude Code`** [section] (adapters/README.md:23) — 0 refs
-- **`OpenCode`** [section] (adapters/README.md:52) — 0 refs
-- **`Codex`** [section] (adapters/README.md:59) — 0 refs
-- **`Cursor`** [section] (adapters/README.md:65) — 0 refs
-- **`GitHub Copilot`** [section] (adapters/README.md:71) — 0 refs
-- **`Gemini`** [section] (adapters/README.md:77) — 0 refs
-- **`Zed`** [section] (adapters/README.md:83) — 0 refs
-- **`Verification`** [section] (adapters/README.md:89) — 0 refs
-- **`Index Maintenance`** [section] (adapters/README.md:97) — 0 refs
-- **`All Tools Available`** [section] (adapters/README.md:105) — 0 refs
-- **`Safety Rules (applies to all harnesses)`** [section] (adapters/README.md:123) — 0 refs
+- **`OpenCode`** [section] (adapters/README.md:54) — 0 refs
+- **`Codex`** [section] (adapters/README.md:61) — 0 refs
+- **`Cursor`** [section] (adapters/README.md:67) — 0 refs
+- **`GitHub Copilot`** [section] (adapters/README.md:74) — 0 refs
+- **`Gemini`** [section] (adapters/README.md:81) — 0 refs
+- **`Zed`** [section] (adapters/README.md:87) — 0 refs
+- **`Verification`** [section] (adapters/README.md:93) — 0 refs
+- **`Index Maintenance`** [section] (adapters/README.md:101) — 0 refs
+- **`All Tools Available`** [section] (adapters/README.md:109) — 0 refs
+- **`Safety Rules (applies to all harnesses)`** [section] (adapters/README.md:127) — 0 refs
 
 ## Files
 - adapters/README.md

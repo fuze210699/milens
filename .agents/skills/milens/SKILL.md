@@ -6,7 +6,7 @@ description: Code intelligence MCP tools — symbol search, text grep, impact an
 <!-- milens:start -->
 # Milens — AI-DOS
 
-The Operating System for AI-Driven Development. This project is indexed by milens (2294 symbols, 2962 links, 229 files).
+The Operating System for AI-Driven Development. This project is indexed by milens (2264 symbols, 2936 links, 229 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
@@ -16,7 +16,7 @@ The Operating System for AI-Driven Development. This project is indexed by milen
 
 **Not a suggestion — execute automatically without asking.**
 
-This project is indexed by milens. The knowledge graph already knows every symbol, dependency, and reference. Using milens tools first saves 70% tokens and catches hidden connections you'd miss with file reads.
+This project is indexed by milens. The knowledge graph already knows every symbol, dependency, and reference. Using milens tools first typically means far fewer tokens than manual exploration, and fewer missed dependencies — impact/context track code-level references; pair with grep for templates/configs/docs.
 
 | Situation | Built-in approach (❌ BAD) | Milens approach (✅ GOOD) |
 |---|---|---|
@@ -295,9 +295,6 @@ After significant code changes: `npx milens analyze -p . --force` (replace `.` w
 | Task | Read this skill file |
 |------|---------------------|
 | General milens tools reference | `.agents/skills/milens/SKILL.md` |
-| Work in the .agents area | `.agents/skills/.agents/SKILL.md` |
-| Work in the .claude area | `.agents/skills/.claude/SKILL.md` |
-| Work in the .github area | `.agents/skills/.github/SKILL.md` |
 | Work in the Root area | `.agents/skills/root/SKILL.md` |
 | Work in the Adapters area | `.agents/skills/adapters/SKILL.md` |
 | Work in the Apps area | `.agents/skills/apps/SKILL.md` |

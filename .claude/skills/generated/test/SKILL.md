@@ -21,7 +21,7 @@ When working with code in **test/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ## Overview
-Contains 350 symbols (119 exported) across 80 files.
+Contains 351 symbols (119 exported) across 80 files.
 
 ## Key Symbols
 - **`User`** [class] (test/fixtures/accuracy/py-project/src/models.py:1) — 6 refs
@@ -45,7 +45,7 @@ Contains 350 symbols (119 exported) across 80 files.
 - **`User`** [class] — 6 incoming references
 - **`Calculator`** [class] — 5 incoming references
 - **`User`** [interface] — 5 incoming references
-- **`lang`** [variable] — 4 incoming references
+- **`lang`** [variable] — 5 incoming references
 
 ## Dependencies
 - **analyzer**: `analyze`, `loadAliases`, `getCachedTree`, `clearTreeCache`, `enrichMetadata`, `resolveLinksWithStats`, `resolveLinks`, `reviewSymbol` (+9 more)

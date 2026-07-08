@@ -95,6 +95,127 @@ describe('TypeScript extractor', () => {
   });
 });
 
+// Regression coverage for findEnclosingViaAst (src/parser/extract.ts): it walks up from
+// `descendantForPosition(defNode.startPosition)` to find the tightest enclosing
+// function/method/class/struct/trait. An earlier version synthesized the query position as
+// `{row, column: 0}` instead of using the real node position — column 0 usually falls on
+// leading indentation, which belongs to the *parent* node (e.g. the class body) rather than
+// the target node (e.g. a method), so every one of these previously mis-attributed indented
+// members to their enclosing class instead of the tighter method/function scope.
+describe('Enclosing scope resolution (calls/typeBindings/assignmentChains/callResultBindings)', () => {
+  async function extractTs(source: string) {
+    const parser = await getParser(tsSpec.wasmName);
+    const lang = await loadLanguage(tsSpec.wasmName);
+    const tree = parser.parse(source);
+    return extractFromTree(tree, lang, tsSpec, 'src/scope.ts');
+  }
+
+  it('attributes a call inside an indented method to the method, not the class', async () => {
+    const source = `
+export class UserRepository {
+  private users: User[] = [];
+
+  save(user: User): void {
+    this.users.push(user);
+  }
+}
+`;
+    const result = await extractTs(source);
+    const pushCall = result.calls.find(c => c.calleeName === 'push');
+    expect(pushCall).toBeDefined();
+    expect(pushCall!.enclosingSymbolId).toContain('#method:save:');
+    expect(pushCall!.enclosingSymbolId).not.toContain('#class:UserRepository:');
+  });
+
+  it('attributes a method-parameter type annotation to the method, not the class (regression: was mis-attributed to class via column-0 lookup)', async () => {
+    const source = `
+export interface User { id: number; }
+
+export class UserRepository {
+  private users: User[] = [];
+
+  save(user: User): void {
+    this.users.push(user);
+  }
+}
+`;
+    const result = await extractTs(source);
+    const paramBinding = result.typeBindings.find(tb => tb.variableName === 'user' && tb.typeName === 'User');
+    expect(paramBinding).toBeDefined();
+    expect(paramBinding!.scope).toContain('#method:save:');
+    expect(paramBinding!.scope).not.toContain('#class:UserRepository:');
+  });
+
+  it('attributes a class-field type annotation directly to the class when there is no enclosing method', async () => {
+    const source = `
+export interface User { id: number; }
+
+export class UserRepository {
+  active: User;
+}
+`;
+    const result = await extractTs(source);
+    const fieldBinding = result.typeBindings.find(tb => tb.variableName === 'active' && tb.typeName === 'User');
+    expect(fieldBinding).toBeDefined();
+    expect(fieldBinding!.scope).toContain('#class:UserRepository:');
+  });
+
+  it('attributes a call inside a deeply nested (indented) function to the innermost function', async () => {
+    const source = `
+function outer() {
+  function inner() {
+    doSomething();
+  }
+}
+`;
+    const result = await extractTs(source);
+    const call = result.calls.find(c => c.calleeName === 'doSomething');
+    expect(call).toBeDefined();
+    expect(call!.enclosingSymbolId).toContain('#function:inner:');
+  });
+
+  it('falls back to the module top-level symbol for a call outside any function/class', async () => {
+    const source = `
+doSomething();
+`;
+    const result = await extractTs(source);
+    const call = result.calls.find(c => c.calleeName === 'doSomething');
+    expect(call).toBeDefined();
+    expect(call!.enclosingSymbolId).toBe('src/scope.ts#module:_top:0');
+  });
+
+  it('attributes an assignment chain inside an indented method to the method', async () => {
+    const source = `
+class Wrapper {
+  run() {
+    const a = 1;
+    const b = a;
+  }
+}
+`;
+    const result = await extractTs(source);
+    const chain = result.assignmentBindings.find(ab => ab.target === 'b' && ab.source === 'a');
+    expect(chain).toBeDefined();
+    expect(chain!.scope).toContain('#method:run:');
+    expect(chain!.scope).not.toContain('#class:Wrapper:');
+  });
+
+  it('attributes a call-result binding inside an indented method to the method', async () => {
+    const source = `
+class Wrapper {
+  run() {
+    const user = getUser();
+  }
+}
+`;
+    const result = await extractTs(source);
+    const binding = result.callResultBindings.find(cr => cr.target === 'user' && cr.calleeName === 'getUser');
+    expect(binding).toBeDefined();
+    expect(binding!.scope).toContain('#method:run:');
+    expect(binding!.scope).not.toContain('#class:Wrapper:');
+  });
+});
+
 describe('Python extractor', () => {
   it('extracts classes and functions', async () => {
     const source = readFileSync(join(FIXTURES, 'py-project', 'models.py'), 'utf-8');

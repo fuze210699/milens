@@ -35,10 +35,10 @@ Contains 113 symbols (22 exported) across 10 files.
 - **`defaultOnPreCommit`** [function] (src/server/hooks.ts:237) — 4 refs
 - **`defaultOnFileChange`** [function] (src/server/hooks.ts:323) — 4 refs
 - **`SessionContext`** [interface] (src/server/hooks.ts:15) — 4 refs
-- **`registerAllPrompts`** [function] (src/server/mcp-prompts.ts:637) — 4 refs
-- **`createMcpServer`** [function] (src/server/mcp.ts:445) — 4 refs
-- **`startStdio`** [function] (src/server/mcp.ts:2289) — 4 refs
-- **`startHttp`** [function] (src/server/mcp.ts:2346) — 4 refs
+- **`registerAllPrompts`** [function] (src/server/mcp-prompts.ts:623) — 4 refs
+- **`createMcpServer`** [function] (src/server/mcp.ts:452) — 4 refs
+- **`startStdio`** [function] (src/server/mcp.ts:2306) — 4 refs
+- **`startHttp`** [function] (src/server/mcp.ts:2363) — 4 refs
 
 ## Entry Points
 - **`HookManager`** [class] — 9 incoming references

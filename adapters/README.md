@@ -10,12 +10,12 @@ Milens is a code intelligence MCP server that provides deep symbol search, depen
 
 | Harness | Directory | What's included |
 |---|---|---|
-| **Claude Code** | `claude-code/` | `.claude/mcp.json` + `CLAUDE.md` |
+| **Claude Code** | `claude-code/` | `.claude/mcp.json` + `CLAUDE.md` (+ optional hooks snippet) |
 | **OpenCode** | `opencode/` | `.opencode/config.json` + `AGENTS.md` |
-| **Codex** | `codex/` | `.codex/codex.md` |
-| **Cursor** | `cursor/` | `.cursorrules` |
-| **GitHub Copilot** | `copilot/` | `.github/copilot-instructions.md` |
-| **Gemini** | `gemini/` | `.gemini/context.md` |
+| **Codex** | `codex/` | `.codex/config.toml` + `.codex/codex.md` |
+| **Cursor** | `cursor/` | `.cursor/mcp.json` + `.cursorrules` |
+| **GitHub Copilot** | `copilot/` | `.vscode/mcp.json` + `.github/copilot-instructions.md` |
+| **Gemini** | `gemini/` | `.gemini/settings.json` + `.gemini/context.md` |
 | **Zed** | `zed/` | `.zed/settings.json` |
 
 ## Installation
@@ -49,6 +49,8 @@ That command writes a `.mcp.json` at your project root equivalent to:
 >
 > **Prerequisite:** `npm i -g milens`
 
+**Optional: session-start / pre-compact hooks.** Merge the `hooks` key from `adapters/claude-code/.claude/settings.json.hooks-snippet.json` into your project's `.claude/settings.json` (create the file if it doesn't exist yet). Not copied automatically since `.claude/settings.json` commonly holds other project settings you don't want overwritten.
+
 ### OpenCode
 
 ```bash
@@ -65,12 +67,14 @@ cp -r adapters/codex/.codex .codex/
 ### Cursor
 
 ```bash
+cp -r adapters/cursor/.cursor .cursor/
 cp adapters/cursor/.cursorrules .cursorrules
 ```
 
 ### GitHub Copilot
 
 ```bash
+cp -r adapters/copilot/.vscode .vscode/
 cp -r adapters/copilot/.github .github/
 ```
 

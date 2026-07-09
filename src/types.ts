@@ -21,7 +21,7 @@ export interface CodeSymbol {
 
 export type SymbolRole = 'entrypoint' | 'hub' | 'utility' | 'leaf' | 'datatype';
 
-export type LinkType = 'imports' | 'calls' | 'extends' | 'implements' | 'contains';
+export type LinkType = 'imports' | 'calls' | 'extends' | 'implements' | 'contains' | 'references';
 
 export interface SymbolLink {
   id: string;

@@ -301,6 +301,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
       } else {
         unresolvedCalls++;
       }
+      tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links);
       continue;
     }
 
@@ -341,6 +342,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
           links.push(makeLink(call.enclosingSymbolId, narrowed.symbol.id, 'calls', narrowed.confidence, call.line));
         } else {
           unresolvedCalls++;
+          tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links);
         }
         continue;
       }
@@ -352,6 +354,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
       } else {
         unresolvedCalls++;
       }
+      tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links);
       continue;
     }
 
@@ -843,6 +846,57 @@ function makeLink(fromId: string, toId: string, type: LinkType, confidence: numb
     confidence,
     line,
   };
+}
+
+/**
+ * Last resort when a receiver-based call's callee could not be resolved to a
+ * project symbol (whether because no candidate shares its name at all, or
+ * because receiver-type narrowing failed/scored too low). The callee itself
+ * (e.g. `.join()`, `.has()`) may genuinely be external/builtin — but the
+ * receiver it's invoked on can still be a real local symbol worth recording
+ * as a dependency (e.g. `SAFETY_TOOLS.join('/')`: SAFETY_TOOLS is a project
+ * const, `join` is Array.prototype.join and will never resolve). Without
+ * this, the receiver reference is silently dropped from the graph entirely.
+ * Only a bare-identifier receiver is considered — compound paths (`this.foo`,
+ * `a.b`) are intentionally out of scope. Resolution prefers the file the
+ * receiver was actually imported from (see the import-map lookup below);
+ * otherwise falls back to a same-file match. This is a best-effort fallback,
+ * not a scope-accurate resolution — it can miss renamed/aliased imports.
+ */
+function tryLinkReceiverReference(
+  call: RawCall,
+  symbolByName: Map<string, CodeSymbol[]>,
+  importedNamesPerFile: Map<string, Map<string, string>>,
+  links: SymbolLink[],
+): void {
+  if (
+    !call.receiver ||
+    call.receiver.includes('.') ||
+    call.receiver === 'this' ||
+    call.receiver === 'self' ||
+    call.isArgumentRef
+  ) {
+    return;
+  }
+  const receiverCandidates = symbolByName.get(call.receiver);
+  if (!receiverCandidates || receiverCandidates.length === 0) return;
+
+  // Prefer the file the receiver name was actually imported from, if any —
+  // this correctly disambiguates when another file coincidentally declares a
+  // same-named symbol. Falls back to a same-file match otherwise. Like the
+  // resolver's existing "imported type name" strategy, this assumes the local
+  // import binding name matches the target symbol's own name — it will miss
+  // renamed/aliased default imports (e.g. `import Foo from './registry'` where
+  // the exported symbol is actually named something else); that is a known,
+  // accepted limitation shared with the rest of the receiver-resolution logic.
+  const importedFile = importedNamesPerFile.get(call.filePath)?.get(call.receiver);
+  const target = importedFile
+    ? receiverCandidates.find(s => s.filePath === importedFile)
+    : receiverCandidates.find(s => s.filePath === call.filePath);
+
+  if (target) {
+    links.push(makeLink(call.enclosingSymbolId, target.id, 'references', 0.85, call.line));
+  }
 }
 
 function deduplicateLinks(links: SymbolLink[]): SymbolLink[] {

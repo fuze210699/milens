@@ -97,9 +97,23 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
               let match;
               // Reset regex lastIndex for global patterns
               pattern.lastIndex = 0;
-              while ((match = pattern.exec(content)) !== null) {
-                const lineNum = content.substring(0, match.index).split('\n').length;
-                const ctxStart = Math.max(0, lineNum - 3);
+                while ((match = pattern.exec(content)) !== null) {
+                  const lineNum = content.substring(0, match.index).split('\n').length;
+                  const matchedLine = lines[lineNum - 1] || '';
+
+                  // Filter SEC-001 false positives in Vue/HTML template attributes:
+                  // - kebab-case event names (e.g., @generate-password="...")
+                  // - template attribute bindings (e.g., @toggle-password="...", :password="...")
+                  if (rule.id === 'SEC-001' && file.endsWith('.vue')) {
+                    const beforeMatch = matchedLine.substring(0, matchedLine.indexOf(match[0]));
+                    if (beforeMatch.includes('@') || beforeMatch.includes('v-on:') ||
+                        beforeMatch.match(/(^|\s):(\w+-)*password/)) continue;
+                    // Check if 'password' preceded by hyphen (kebab-case compound)
+                    const keywordIdx = matchedLine.indexOf(match[0]);
+                    if (keywordIdx > 0 && matchedLine[keywordIdx - 1] === '-') continue;
+                  }
+
+                  const ctxStart = Math.max(0, lineNum - 3);
                 const ctxEnd = Math.min(lines.length, lineNum + 2);
                 const context = lines.slice(ctxStart, ctxEnd).join('\n');
 

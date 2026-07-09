@@ -110,12 +110,11 @@ export const ALL_RULES: SecurityRule[] = [
     description: 'Password value appears to be hardcoded in source code. Use environment variables or a secrets manager instead.',
     patterns: [
       /(?:password|passwd|pwd)\s*[:=]\s*['"`][^'"`\n]{4,}['"`]/i,
-      /(?:password|passwd|pwd)\s*=\s*(?!process\.env\.)[^'"`\s;]{4,}/i,
     ],
     excludeGlob: SECRETS_EXCLUDE,
-    fix: 'Replace hardcoded password with process.env.DB_PASSWORD or a secrets manager.',
+    fix: 'Replace hardcoded password with an environment variable or a secrets manager.',
     confidence: 0.92,
-    falsePositiveRisk: 'low', enabled: true,
+    falsePositiveRisk: 'high', enabled: true,
   },
 
   {

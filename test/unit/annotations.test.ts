@@ -28,7 +28,8 @@ describe('AnnotationStore', () => {
         confidence REAL DEFAULT 0.5,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        expires_at TEXT
+        expires_at TEXT,
+        symbol_hash TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_annotations_symbol ON annotations(symbol, key);
       CREATE INDEX IF NOT EXISTS idx_annotations_session ON annotations(session_id);
@@ -114,6 +115,26 @@ describe('AnnotationStore', () => {
       const ann = store.annotate('optTest', 'note', 'value', { agent: 'myAgent', sessionId: 'session-1' });
       expect(ann.agent).toBe('myAgent');
       expect(ann.sessionId).toBe('session-1');
+    });
+
+    it('uses caller-supplied confidence instead of default 0.5 for new annotations', () => {
+      const ann = store.annotate('confTest', 'note', 'value', { confidence: 0.9 });
+      expect(ann.confidence).toBe(0.9);
+    });
+
+    it('uses caller-supplied confidence for changed-value annotations', () => {
+      store.annotate('confTest2', 'note', 'old value');
+      const ann = store.annotate('confTest2', 'note', 'new value', { confidence: 0.7 });
+      expect(ann.confidence).toBe(0.7);
+      expect(ann.value).toBe('new value');
+    });
+
+    it('clamps caller-supplied confidence to [0, 1]', () => {
+      const high = store.annotate('clampTestHigh', 'note', 'value', { confidence: 5.0 });
+      expect(high.confidence).toBe(1.0);
+
+      const low = store.annotate('clampTestLow', 'note', 'value', { confidence: -3.0 });
+      expect(low.confidence).toBe(0.0);
     });
   });
 

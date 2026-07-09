@@ -307,13 +307,16 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
 
     // Fast path: unique name globally.
     // Skip this shortcut when:
+    // - the call has a receiver AND the only candidate is a standalone
+    //   function (not a method) AND the caller file is a dynamically-typed
+    //   language (Python, PHP, Ruby) — this prevents linking
+    //   `self.x.func()` to an unrelated top-level `def func()` that
+    //   happens to share the same name, when the receiver's type cannot
+    //   be statically determined.
     // - the call has a receiver AND the name is a common built-in prototype method
     //   (`pattern.exec()`, `fileSet.add()`) — those must go through receiver-aware
     //   narrowing below instead of being linked by bare name to an unrelated project
-    //   symbol that merely happens to share the name. Receiver calls to any other
-    //   (non-built-in) method name still take the fast path, since that's what
-    //   correctly resolves single-candidate methods like `self.save()` in
-    //   Python/Go/Rust fixtures — narrowing isn't reliable for those receiver types.
+    //   symbol that merely happens to share the name.
     // - the identifier was captured from an argument position, not an actual
     //   invocation (`onMounted(handler)`, decorator args) — it may just be a plain
     //   local variable (e.g. `resolve(root, file)`), not a function reference. Let it
@@ -322,6 +325,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     if (
       candidates.length === 1 &&
       !(call.receiver && BUILTIN_METHOD_NAMES.has(call.calleeName)) &&
+      !(call.receiver && candidates[0].kind === 'function' && isDynamicLang(call.filePath)) &&
       !call.isArgumentRef
     ) {
       // Check if the caller imported this name from an external module, or it's a builtin global
@@ -983,6 +987,14 @@ function findDefaultExport(targetSymbols: CodeSymbol[]): CodeSymbol | undefined 
 
   // Fallback to first
   return exported[0];
+}
+
+// ── Dynamic language detection ──
+
+/** Files in dynamically-typed languages where receiver types can't be statically resolved */
+function isDynamicLang(filePath: string): boolean {
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  return ext === 'py' || ext === 'rb' || ext === 'php';
 }
 
 // ── External module detection ──

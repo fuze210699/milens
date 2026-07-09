@@ -30,19 +30,21 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
     async ({ symbol, key, value, agent, session_id, confidence }) => {
       const { db } = getDb();
       const store = new AnnotationStore(db.connection);
-      const ann = store.annotate(symbol, key as any, value, { agent, sessionId: session_id });
+      const symbolHash = store.getCurrentSymbolHash(symbol) ?? undefined;
+      const ann = store.annotate(symbol, key as any, value, { agent, sessionId: session_id, confidence, symbolHash });
       return { content: [{ type: 'text' as const, text: `Annotation saved: ${ann.id}\n  symbol: ${ann.symbol}\n  key: ${ann.key}\n  confidence: ${ann.confidence}` }] };
     },
   );
 
   server.tool(
     'recall',
-    'Retrieve annotations saved in previous sessions. Filter by symbol, key, or agent.',
+    'Retrieve annotations saved in previous sessions. Filter by symbol, key, or agent. Set history=true to include evolution log entries (previous values before overwrites).',
     {
       symbol: z.string().optional(), key: z.enum(['note', 'bug', 'security', 'architecture', 'workflow', 'test', 'dependency', 'refactor']).optional(),
       agent: z.string().optional(), limit: z.number().optional().default(50),
+      history: z.boolean().optional().default(false).describe('Include evolution log entries showing previous values before overwrites'),
     },
-    async ({ symbol, key, agent, limit }) => {
+    async ({ symbol, key, agent, limit, history }) => {
       const { db } = getDb();
       const store = new AnnotationStore(db.connection);
       const results = store.recall({ symbol, key, agent, limit });
@@ -50,7 +52,19 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
       const lines = [`${results.length} annotation(s):\n`];
       for (const a of results) {
         lines.push(`[${a.key}] ${a.symbol} — ${a.value.slice(0, 120)}`);
-        lines.push(`  confidence: ${a.confidence.toFixed(1)} | agent: ${a.agent ?? '?'} | ${a.updatedAt}\n`);
+        lines.push(`  confidence: ${a.confidence.toFixed(1)} | agent: ${a.agent ?? '?'} | ${a.updatedAt}`);
+        if (history) {
+          const events = store.getHistory(a.id);
+          if (events.length > 0) {
+            lines.push(`  evolution history (${events.length} event(s)):`);
+            for (const e of events) {
+              const oldVal = e.oldValue ? `"${e.oldValue.slice(0, 80)}"` : '(none)';
+              const newVal = e.newValue ? `"${e.newValue.slice(0, 80)}"` : '(none)';
+              lines.push(`    ${e.createdAt} | ${e.event}: ${oldVal} → ${newVal}`);
+            }
+          }
+        }
+        lines.push('');
       }
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     },

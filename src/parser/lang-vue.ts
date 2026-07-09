@@ -259,29 +259,6 @@ export function extractVueCompositionApi(
         });
       }
     }
-
-    // defineEmits(['update', 'delete']) — runtime declaration
-    const emitsArrMatch = line.match(/const\s+(\w+)\s*=\s*defineEmits\s*\(\s*\[\s*([^\]]*)\s*\]/);
-    if (emitsArrMatch) {
-      const varName = emitsArrMatch[1];
-      const eventsStr = emitsArrMatch[2];
-      const parentId = `${filePath}#variable:${varName}:${absLine}`;
-
-      const eventRe = /'([\w][\w:.-]*)'/g;
-      let em: RegExpExecArray | null;
-      while ((em = eventRe.exec(line)) !== null) {
-        symbols.push({
-          id: `${filePath}#variable:${em[1]}:${absLine}`,
-          name: em[1],
-          kind: 'variable',
-          filePath,
-          startLine: absLine,
-          endLine: absLine,
-          exported: true,
-          parentId,
-        });
-      }
-    }
   }
 
   return symbols;

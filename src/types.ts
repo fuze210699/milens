@@ -152,6 +152,7 @@ export interface Annotation {
   confidence: number;
   createdAt: string;
   updatedAt: string;
+  symbolHash?: string;
 }
 
 export interface Session {

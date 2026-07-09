@@ -151,6 +151,9 @@ export class Database {
       if (!annNames.has('updated_at')) {
         this.db.exec(`ALTER TABLE annotations ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`);
       }
+      if (!annNames.has('symbol_hash')) {
+        this.db.exec(`ALTER TABLE annotations ADD COLUMN symbol_hash TEXT`);
+      }
       // Rebuild index if column was renamed
       if (annNames.has('symbol_id')) {
         this.db.exec(`DROP INDEX IF EXISTS idx_annotations_symbol`);
@@ -307,17 +310,31 @@ export class Database {
     const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE 'app/%/layout.%'
       AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE 'app/layout.%'
       AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE 'jest.config.%'
-      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE 'src/routes/+layout.%'`;
+      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE 'src/routes/+layout.%'
+      AND s.file_path NOT LIKE '%/alembic/versions/%'
+      AND s.file_path NOT LIKE '%/migrations/%'
+      AND s.file_path NOT LIKE 'api/%'`;
+    // Vue SFC root components imported via <Component/> template tags get their
+    // import link on _top [module], not on the [class] root symbol. Treat the class
+    // as referenced if its file's _top module has incoming links from other files.
+    const vueRootGuard = `AND NOT (s.file_path LIKE '%.vue' AND s.kind = 'class' AND EXISTS (
+      SELECT 1 FROM symbols s2
+      JOIN links l2 ON l2.to_id = s2.id AND l2.type != 'contains'
+      WHERE s2.file_path = s.file_path AND s2.kind = 'module' AND s2.name = '_top'
+      AND EXISTS (SELECT 1 FROM links l3 WHERE l3.to_id = s2.id AND l3.type = 'imports')
+    ))`;
     const sql = kind
       ? `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
          WHERE s.exported = 1 AND s.kind = ? AND s.kind != 'section' AND l.id IS NULL
          ${frameworkExclude}
+         ${vueRootGuard}
          LIMIT ?`
       : `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
          WHERE s.exported = 1 AND s.kind != 'section' AND l.id IS NULL
          ${frameworkExclude}
+         ${vueRootGuard}
          LIMIT ?`;
     const rows = kind
       ? this.db.prepare(sql).all(kind, limit) as any[]
@@ -335,7 +352,10 @@ export class Database {
     const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE 'app/%/layout.%'
       AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE 'app/layout.%'
       AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE 'jest.config.%'
-      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE 'src/routes/+layout.%'`;
+      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE 'src/routes/+layout.%'
+      AND s.file_path NOT LIKE '%/alembic/versions/%'
+      AND s.file_path NOT LIKE '%/migrations/%'
+      AND s.file_path NOT LIKE 'api/%'`;
     // Get ALL exported symbols that HAVE at least one incoming link (not caught by findDeadCode).
     // No SQL LIMIT here: the JS post-filter below narrows this down to test-only-referenced
     // symbols, which can be a small minority of low-heat candidates — applying `limit` before

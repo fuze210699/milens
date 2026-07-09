@@ -466,6 +466,18 @@ export function createMcpServer(rootPath?: string): McpServer {
     return abs;
   }
 
+  function isInsideDocstring(content: string, lineNumber: number): boolean {
+    const lines = content.split('\n');
+    let inside = false;
+    for (let i = 0; i < lineNumber; i++) {
+      if (i >= lines.length) break;
+      const trimmed = lines[i].trim();
+      const tripleCount = (trimmed.match(/"""|'''/g) || []).length;
+      for (let j = 0; j < tripleCount; j++) inside = !inside;
+    }
+    return inside;
+  }
+
   function resolveRoot(repoPath?: string): string {
     if (repoPath) {
       const root = normalizePath(repoPath);
@@ -776,6 +788,18 @@ export function createMcpServer(rootPath?: string): McpServer {
       const unresolved = db.getUnresolvedStats();
       const coverage = db.getTestCoverage();
       let text = `repo: ${root}\nbuild: ${BUILD_SHA} (built: ${BUILT_AT})\nversion: ${PKG_VERSION}\nsymbols: ${stats.symbols}\nlinks: ${stats.links}\nfiles: ${stats.files}`;
+
+      // Warn if the running server build differs from the on-disk build
+      try {
+        const distBuildPath = join(__dirname, '..', 'build-info.js');
+        if (existsSync(distBuildPath)) {
+          const diskBuild = readFileSync(distBuildPath, 'utf-8');
+          const m = diskBuild.match(/export const BUILD_SHA = '([^']+)'/);
+          if (m && m[1] !== BUILD_SHA) {
+            text += `\n⚠ Running server build (${BUILD_SHA}) differs from on-disk build (${m[1]}) — restart the MCP server to pick up recent changes.`;
+          }
+        }
+      } catch { /* best-effort */ }
       if (unresolved.imports > 0 || unresolved.calls > 0) {
         text += `\n⚠ unresolved (internal): ${unresolved.imports} imports, ${unresolved.calls} calls — callers may be incomplete`;
       }
@@ -866,8 +890,12 @@ export function createMcpServer(rootPath?: string): McpServer {
       // Section 2: Context (incoming + outgoing) for each symbol
       if (symbols.length > 0) {
         for (const sym of symbols) {
-          const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-          const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+          const incoming = db.getIncomingLinks(sym.id);
+          const outgoing = db.getOutgoingLinks(sym.id);
+
+          if (symbols.length > 1) {
+            sections.push(`─── ${fmtSymbol(sym, detail)} ---`);
+          }
 
           if (incoming.length > 0) {
             sections.push(`[incoming] ${incoming.length} refs:`);
@@ -1493,7 +1521,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     {
       repo: z.string().optional(),
       framework: z.string().optional().describe('Filter by framework (express, fastapi, nestjs, flask, go, php, rails). Default: auto-detect all.'),
-      limit: z.number().optional().default(50),
+      limit: z.number().optional().default(200).describe('Max routes to display. Internal search always scans up to 500 matches per framework, so a low limit only affects display truncation, not detection accuracy.'),
     },
     async ({ repo, framework, limit }) => {
       const root = resolveRoot(repo);
@@ -1505,7 +1533,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       const routePatterns: Array<{ name: string; pattern: RegExp; fileGlob: string }> = [
         { name: 'express', pattern: /\b(?:app|router)\.(get|post|put|patch|delete|use|all)\s*\(\s*['"`]([^'"`]+)['"`]/, fileGlob: '**/*.{ts,js,mjs,cjs}' },
         { name: 'fastapi', pattern: /@(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
-        { name: 'flask', pattern: /@(?:app|bp|blueprint)\.(route|get|post|put|delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
+        { name: 'flask', pattern: /@(?:app|bp|blueprint)\.route\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
         { name: 'nestjs', pattern: /@(Get|Post|Put|Patch|Delete)\s*\(\s*['"]?([^'")]*?)['"]?\s*\)/, fileGlob: '**/*.ts' },
         { name: 'go', pattern: /\b(?:mux|router|http)\.(HandleFunc|Handle|Get|Post|Put|Delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.go' },
         { name: 'php', pattern: /Route::(get|post|put|patch|delete|any)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.php' },
@@ -1525,12 +1553,22 @@ export function createMcpServer(rootPath?: string): McpServer {
 
       for (const rp of activePatterns) {
         const matches = grepFiles(root, rp.pattern.source, {
-          isRegex: true, maxResults: limit, includePattern: rp.fileGlob,
+          isRegex: true, maxResults: 500, includePattern: rp.fileGlob,
         });
 
         for (const m of matches) {
           const match = rp.pattern.exec(m.text);
           if (!match) continue;
+
+          // Skip matches inside Python docstrings (triple-quoted strings)
+          if (rp.fileGlob === '**/*.py') {
+            try {
+              const filePath = resolve(root, m.file);
+              const content = readFileSync(filePath, 'utf-8');
+              if (isInsideDocstring(content, m.line)) continue;
+            } catch { /* can't read file — skip filtering */ }
+          }
+
           const method = match[1].toUpperCase();
           const path = match[2] || '/';
 
@@ -1567,10 +1605,12 @@ export function createMcpServer(rootPath?: string): McpServer {
         grouped.set(r.framework, arr);
       }
 
-      const lines: string[] = [`${routes.length} routes detected:\n`];
+      const displayRoutes = routes.slice(0, limit);
+      const lines: string[] = [`${routes.length} routes detected${routes.length > limit ? ` (showing first ${limit})` : ''}:\n`];
       for (const [fw, fwRoutes] of grouped) {
         lines.push(`[${fw}]`);
         for (const r of fwRoutes) {
+          if (!displayRoutes.includes(r)) break;
           const handlerInfo = r.handler ? ` → ${r.handler}` : '';
           lines.push(`  ${r.method.padEnd(7)} ${r.path}  (${r.file}:${r.line})${handlerInfo}`);
         }

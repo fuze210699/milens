@@ -176,6 +176,56 @@ describe('review', () => {
     }
   });
 
+  it('reviewPr tags symbols with a binary-diff warning instead of silently flagging the whole file', () => {
+    const gitDir = join(import.meta.dirname, '..', 'tmp', 'binary-review');
+    mkdirSync(gitDir, { recursive: true });
+    try {
+      execSync('git init', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git config user.name "test"', { cwd: gitDir, stdio: 'pipe' });
+      mkdirSync(join(gitDir, 'src'), { recursive: true });
+      // A NUL byte makes git treat the file as binary, so `git diff --unified=0`
+      // produces no @@ hunks and reviewPr must fall back to whole-file flagging —
+      // but it should say so explicitly rather than silently flagging unrelated symbols.
+      writeFileSync(join(gitDir, 'src', 'rp-binary.ts'), Buffer.from('// touched\0\n// untouched\n'));
+      execSync('git add -A', { cwd: gitDir, stdio: 'pipe' });
+      execSync('git commit -m "init"', { cwd: gitDir, stdio: 'pipe' });
+      writeFileSync(join(gitDir, 'src', 'rp-binary.ts'), Buffer.from('// touched, modified\0\n// untouched\n'));
+    } catch {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return;
+    }
+
+    db.insertSymbol({
+      id: 'src/rp-binary.ts#function:touched:1',
+      name: 'touched',
+      kind: 'function',
+      filePath: 'src/rp-binary.ts',
+      startLine: 1, endLine: 1,
+      exported: true,
+    });
+    db.insertSymbol({
+      id: 'src/rp-binary.ts#function:untouched:2',
+      name: 'untouched',
+      kind: 'function',
+      filePath: 'src/rp-binary.ts',
+      startLine: 2, endLine: 2,
+      exported: true,
+    });
+
+    try {
+      const result = reviewPr(db, gitDir);
+      expect(result.changedFiles).toContain('src/rp-binary.ts');
+      expect(result.symbols.length).toBe(2);
+      for (const s of result.symbols) {
+        expect(s.reasons.some(r => r.includes('binary/undiffable file'))).toBe(true);
+      }
+      expect(result.summary).toContain('diffed as binary');
+    } finally {
+      try { rmSync(gitDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
   it('reviewPr skips test files', () => {
     const gitDir = join(import.meta.dirname, '..', 'tmp', 'skip-review');
     mkdirSync(gitDir, { recursive: true });

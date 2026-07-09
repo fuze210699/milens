@@ -45,17 +45,12 @@ describe('Security Rules', () => {
     const rules = loadRules();
     const passwordRule = rules.find((r) => r.id === 'SEC-001');
     expect(passwordRule).toBeTruthy();
-    expect(passwordRule!.patterns.length).toBe(2);
+    expect(passwordRule!.patterns.length).toBe(1);
 
     // Pattern 0: colon/equals with quoted value
     const code1 = `const config = { password: "admin123" };`;
     passwordRule!.patterns[0].lastIndex = 0;
     expect(passwordRule!.patterns[0].test(code1)).toBe(true);
-
-    // Pattern 1: equals with unquoted value
-    const code2 = `password = admin123`;
-    passwordRule!.patterns[1].lastIndex = 0;
-    expect(passwordRule!.patterns[1].test(code2)).toBe(true);
   });
 
   it('detects eval() usage', () => {
@@ -92,5 +87,35 @@ describe('Security Rules', () => {
       }
     }
     expect(triggered).toBe(0);
+  });
+
+  it('SEC-001 still catches hardcoded passwords in JavaScript objects', () => {
+    const rules = loadRules();
+    const passwordRule = rules.find((r) => r.id === 'SEC-001')!;
+    const genuine = [
+      'const password = "admin123"',
+      'password: "secret123"',
+      'pwd = "mypassword"',
+    ];
+    for (const text of genuine) {
+      const matched = passwordRule.patterns.some(p => { p.lastIndex = 0; return p.test(text); });
+      expect(matched, `should match: ${text}`).toBe(true);
+    }
+  });
+
+  it('SEC-001 does not false-positive on os.getenv() and Column() patterns', () => {
+    const rules = loadRules();
+    const passwordRule = rules.find((r) => r.id === 'SEC-001')!;
+    const safe = [
+      'password = os.getenv("DB_PASSWORD", "")',
+      'password = Column(String(255), nullable=False)',
+      'password = payload.get("password")',
+      'password = ref(false)',
+      'password = quote_plus(password_raw)',
+    ];
+    for (const text of safe) {
+      const matched = passwordRule.patterns.some(p => { p.lastIndex = 0; return p.test(text); });
+      expect(matched, `should not match: ${text}`).toBe(false);
+    }
   });
 });

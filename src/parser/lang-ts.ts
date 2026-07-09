@@ -239,9 +239,12 @@ const spec: LangSpec = {
     const dir = aliased ? root : dirname(join(root, fromFile));
     const rawBase = join(dir, raw);
 
-    // Strip .js/.jsx/.mjs/.cjs extension — TS convention: `import './foo.js'` → file is `foo.ts`
-    const JS_EXT = /\.(js|jsx|mjs|cjs)$/;
-    const base = JS_EXT.test(rawBase) ? rawBase.replace(JS_EXT, '') : rawBase;
+    // Strip .js/.jsx/.mjs/.cjs extension — TS convention: `import './foo.js'` → file is `foo.ts`.
+    // Also strip an explicit .vue/.ts/.tsx extension if present, so a candidate path isn't built
+    // by appending another extension on top of one the import specifier already has
+    // (e.g. `import './Foo.vue'` must resolve against `Foo.vue`, not `Foo.vue.ts`/`Foo.vue.vue`).
+    const KNOWN_EXT = /\.(js|jsx|mjs|cjs|ts|tsx|vue)$/;
+    const base = KNOWN_EXT.test(rawBase) ? rawBase.replace(KNOWN_EXT, '') : rawBase;
 
     const candidates = [
       base + '.ts', base + '.tsx',
@@ -260,7 +263,7 @@ const spec: LangSpec = {
       const originalRaw = raw.replace(aliasTargets[0], '');
       for (let i = 1; i < aliasTargets.length; i++) {
         const altBase = join(root, aliasTargets[i] + originalRaw);
-        const altStripped = JS_EXT.test(altBase) ? altBase.replace(JS_EXT, '') : altBase;
+        const altStripped = KNOWN_EXT.test(altBase) ? altBase.replace(KNOWN_EXT, '') : altBase;
         const altCandidates = [
           altStripped + '.ts', altStripped + '.tsx',
           altStripped + '.js', altStripped + '.jsx',

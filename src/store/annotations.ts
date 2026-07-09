@@ -19,14 +19,14 @@ export class AnnotationStore {
   private prepareStatements() {
     return {
       insertAnnotation: this.db.prepare(
-        `INSERT OR REPLACE INTO annotations (id, symbol, key, value, agent, session_id, confidence, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT OR REPLACE INTO annotations (id, symbol, key, value, agent, session_id, confidence, symbol_hash, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ),
       findBySymbolKey: this.db.prepare(
         'SELECT * FROM annotations WHERE symbol = ? AND key = ?'
       ),
       updateAnnotation: this.db.prepare(
-        'UPDATE annotations SET value = ?, confidence = ?, agent = ?, session_id = ?, updated_at = datetime(\'now\') WHERE id = ?'
+        'UPDATE annotations SET value = ?, confidence = ?, agent = ?, session_id = ?, symbol_hash = ?, updated_at = datetime(\'now\') WHERE id = ?'
       ),
       queryBySymbol: this.db.prepare(
         'SELECT * FROM annotations WHERE symbol = ? ORDER BY confidence DESC, updated_at DESC LIMIT ?'
@@ -72,16 +72,24 @@ export class AnnotationStore {
       boostRecallConfidence: this.db.prepare(
         "UPDATE annotations SET confidence = MIN(confidence + 0.05, 0.95), updated_at = datetime('now') WHERE id = ? AND confidence < 0.9"
       ),
+
+      getEvolutionEvents: this.db.prepare(
+        'SELECT * FROM evolution_log WHERE annotation_id = ? ORDER BY created_at ASC'
+      ),
     };
   }
 
   // ── Annotation CRUD ──
 
-  annotate(symbol: string, key: string, value: string, options?: { agent?: string; sessionId?: string }): Annotation {
+  annotate(symbol: string, key: string, value: string, options?: { agent?: string; sessionId?: string; confidence?: number; symbolHash?: string }): Annotation {
     if (!VALID_KEYS.includes(key as AnnotationKey)) {
       throw new Error(`Invalid annotation key: "${key}". Valid: ${VALID_KEYS.join(', ')}`);
     }
     const annotationKey = key as AnnotationKey;
+
+    const initialConfidence = options?.confidence !== undefined
+      ? Math.max(0, Math.min(1, options.confidence))
+      : 0.5;
 
     const existing = this.stmts.findBySymbolKey.get(symbol, annotationKey) as any;
 
@@ -90,7 +98,7 @@ export class AnnotationStore {
       const updatedSessionId = options?.sessionId ?? existing.session_id;
       if (existing.value === value) {
         const newConfidence = Math.min(existing.confidence + 0.1, 1.0);
-        this.stmts.updateAnnotation.run(value, newConfidence, updatedAgent, updatedSessionId, existing.id);
+        this.stmts.updateAnnotation.run(value, newConfidence, updatedAgent, updatedSessionId, options?.symbolHash ?? existing.symbol_hash, existing.id);
         const eventType = newConfidence >= 0.8 && existing.confidence < 0.8 ? 'promoted' : 'confidence_up';
         this.logEvolutionEvent(existing.id, eventType, existing.value, value);
         return rowToAnnotation({
@@ -102,14 +110,14 @@ export class AnnotationStore {
         });
       }
 
-      this.stmts.updateAnnotation.run(value, 0.5, updatedAgent, updatedSessionId, existing.id);
+      this.stmts.updateAnnotation.run(value, initialConfidence, updatedAgent, updatedSessionId, options?.symbolHash ?? existing.symbol_hash, existing.id);
       this.logEvolutionEvent(existing.id, 'created', existing.value, value);
       return rowToAnnotation({
         ...existing,
         value,
         agent: updatedAgent,
         session_id: updatedSessionId,
-        confidence: 0.5,
+        confidence: initialConfidence,
         updated_at: new Date().toISOString(),
       });
     }
@@ -120,14 +128,15 @@ export class AnnotationStore {
       id, symbol, annotationKey, value,
       options?.agent ?? null,
       options?.sessionId ?? null,
-      0.5, now, now,
+      initialConfidence, options?.symbolHash ?? null, now, now,
     );
     this.logEvolutionEvent(id, 'created', undefined, value);
     return {
       id, symbol, key: annotationKey, value,
       agent: options?.agent,
       sessionId: options?.sessionId,
-      confidence: 0.5,
+      confidence: initialConfidence,
+      symbolHash: options?.symbolHash,
       createdAt: now,
       updatedAt: now,
     };
@@ -156,7 +165,13 @@ export class AnnotationStore {
       this.stmts.boostRecallConfidence.run(row.id);
     }
 
-    return rows.map(rowToAnnotation);
+    return rows.map(row => {
+      const ann = rowToAnnotation(row);
+      if (this.isAnnotationStale(ann)) {
+        ann.value = `⚠ STALE (code changed since annotation) ${ann.value}`;
+      }
+      return ann;
+    });
   }
 
   // ── Session management ──
@@ -240,6 +255,24 @@ export class AnnotationStore {
     this.stmts.insertEvent.run(annotationId, event, oldValue ?? null, newValue ?? null);
   }
 
+  getHistory(annotationId: string): EvolutionEvent[] {
+    const rows = this.stmts.getEvolutionEvents.all(annotationId) as any[];
+    return rows.map(rowToEvolutionEvent);
+  }
+
+  getCurrentSymbolHash(symbolName: string): string | null {
+    const row = this.db.prepare(
+      'SELECT fh.hash FROM symbols s JOIN file_hashes fh ON s.file_path = fh.path WHERE s.name = ? LIMIT 1'
+    ).get(symbolName) as any;
+    return row?.hash ?? null;
+  }
+
+  isAnnotationStale(annotation: Annotation): boolean {
+    if (!annotation.symbolHash) return false;
+    const current = this.getCurrentSymbolHash(annotation.symbol);
+    return current !== null && current !== annotation.symbolHash;
+  }
+
   // ── Stats ──
 
   getAnnotationCount(): number {
@@ -260,6 +293,18 @@ function rowToAnnotation(row: any): Annotation {
     confidence: row.confidence,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    symbolHash: row.symbol_hash ?? undefined,
+  };
+}
+
+function rowToEvolutionEvent(row: any): EvolutionEvent {
+  return {
+    id: row.id,
+    annotationId: String(row.annotation_id),
+    event: row.event as EvolutionEvent['event'],
+    oldValue: row.old_value ?? undefined,
+    newValue: row.new_value ?? undefined,
+    createdAt: row.created_at,
   };
 }
 

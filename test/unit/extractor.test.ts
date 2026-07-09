@@ -391,12 +391,12 @@ describe('Vue extractor', () => {
     expect(child!.parentId).toContain('props');
   });
 
-  it('extracts Composition API defineEmits event names from array', () => {
+  it('does not emit symbols for defineEmits event name string literals', () => {
     const scriptContent = `const emit = defineEmits(['update:modelValue', 'change']);`;
     const syms = extractVueCompositionApi(scriptContent, 'Test.vue', 5);
     const names = syms.map(s => s.name);
-    expect(names).toContain('update:modelValue');
-    expect(names).toContain('change');
+    expect(names).not.toContain('update:modelValue');
+    expect(names).not.toContain('change');
   });
 });
 

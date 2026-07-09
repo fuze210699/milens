@@ -20,6 +20,9 @@ When working with code in **orchestrator/**, follow these mandatory safety rules
 | Text search across files | `mcp_milens_grep` |
 | See file symbols | `mcp_milens_get_file_symbols` |
 
+### Edit-safety enforcement
+A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`/`smart_context`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
+
 ## Overview
 Contains 23 symbols (7 exported) across 2 files.
 

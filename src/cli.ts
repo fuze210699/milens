@@ -1439,6 +1439,7 @@ program
   .option('--repo <path>', 'Repository root path (alias for --path)')
   .option('--agent <name>', 'Agent name (for session-start/session-end)')
   .option('--hook <hook>', 'Hook name (sessionStart, sessionEnd, preCommit, fileChange, preCompact, postCompact)')
+  .option('--mode <mode>', 'Enforcement mode (warn | strict) for guard-set-mode')
   .action(async (action: string, opts) => {
     const { HookManager, defaultOnSessionStart, defaultOnSessionEnd, defaultOnPreCompact, defaultOnPostCompact } = await import('./server/hooks.js');
     const manager = new HookManager();
@@ -1555,8 +1556,41 @@ program
         console.log(`Hook profile set to "${profileName}" for ${projectPath}`);
         break;
       }
+      case 'guard-mark-checked': {
+        const chunks: Buffer[] = [];
+        for await (const chunk of process.stdin) {
+          chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+        }
+        const rawStdin = Buffer.concat(chunks).toString();
+        const { handleMarkChecked } = await import('./server/guard-hook.js');
+        handleMarkChecked(rawStdin, projectPath);
+        break;
+      }
+      case 'guard-check-edit': {
+        const chunks: Buffer[] = [];
+        for await (const chunk of process.stdin) {
+          chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+        }
+        const rawStdin = Buffer.concat(chunks).toString();
+        const { handleCheckEdit } = await import('./server/guard-hook.js');
+        const result = handleCheckEdit(rawStdin, projectPath);
+        process.stdout.write(result.stdout + '\n');
+        if (result.exitCode !== 0) process.exit(result.exitCode);
+        break;
+      }
+      case 'guard-set-mode': {
+        const mode = opts.mode;
+        if (mode !== 'warn' && mode !== 'strict') {
+          console.error(`Invalid mode "${mode}". Use "warn" or "strict".`);
+          process.exit(1);
+        }
+        const { writeMode } = await import('./server/guard-hook.js');
+        writeMode(projectPath, mode as 'warn' | 'strict');
+        console.log(`Guard enforcement mode set to "${mode}" for ${projectPath}`);
+        break;
+      }
       default:
-        console.log(`Unknown action: ${action}. Use: enable, disable, list, profile, session-start, session-end, pre-compact, post-compact`);
+        console.log(`Unknown action: ${action}. Use: enable, disable, list, profile, session-start, session-end, pre-compact, post-compact, guard-mark-checked, guard-check-edit, guard-set-mode`);
     }
   });
 

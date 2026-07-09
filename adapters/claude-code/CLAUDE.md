@@ -67,6 +67,8 @@ All tool calls must include `repo` set to the absolute workspace root.
 **Before committing:**
 - Call `mcp_milens_detect_changes` — if unexpected files appear, stop and report.
 
+> **Edit-safety enforcement (2026-07-09):** A `PreToolUse` hook is bundled with this plugin. Default **warn** mode reminds you if no milens safety check ran before an `Edit`/`Write`/`MultiEdit` — it never blocks. Opt-in **strict** mode denies the edit; enable via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying Claude Code `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362) — do not treat strict mode as unbypassable.
+
 ## Tool Selection
 
 - Use `mcp_milens_query` for symbol names (camelCase, PascalCase, snake_case).

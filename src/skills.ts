@@ -200,6 +200,9 @@ function renderSkillContent(
   lines.push('| Text search across files | `mcp_milens_grep` |');
   lines.push('| See file symbols | `mcp_milens_get_file_symbols` |');
   lines.push('');
+  lines.push('### Edit-safety enforcement');
+  lines.push('A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`/`smart_context`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).');
+  lines.push('');
 
   lines.push('## Overview');
   lines.push(`Contains ${area.symbols.length} symbols (${area.exported.length} exported) across ${area.files.size} files.`);

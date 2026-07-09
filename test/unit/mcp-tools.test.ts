@@ -458,6 +458,48 @@ describe('createMcpServer', () => {
     });
   });
 
+  // ── grep tool ──
+  // Regression: grepFiles() used to unconditionally skip every directory
+  // entry starting with '.', so config/doc directories that milens itself
+  // generates (.claude/rules, .claude/skills/generated, .github/instructions,
+  // .cursor/rules, .agents/skills) were silently invisible to grep — directly
+  // contradicting the tool's own advertised claim of searching "templates,
+  // configs, docs". Only real noise dirs (.git, .idea, etc.) should be skipped.
+
+  describe('grep tool', () => {
+    const dotDirsRoot = join(TEST_ROOT, 'dotdir-grep-fixture');
+
+    beforeAll(() => {
+      mkdirSync(join(dotDirsRoot, '.claude', 'rules'), { recursive: true });
+      mkdirSync(join(dotDirsRoot, '.github', 'instructions'), { recursive: true });
+      mkdirSync(join(dotDirsRoot, '.git'), { recursive: true });
+      writeFileSync(join(dotDirsRoot, '.claude', 'rules', 'server.md'), 'UNIQUE_DOTDIR_MARKER_TOKEN in claude rules\n');
+      writeFileSync(join(dotDirsRoot, '.github', 'instructions', 'server.md'), 'UNIQUE_DOTDIR_MARKER_TOKEN in github instructions\n');
+      writeFileSync(join(dotDirsRoot, '.git', 'HEAD'), 'UNIQUE_DOTDIR_MARKER_TOKEN should never be found (real .git noise)\n');
+    });
+
+    afterAll(() => {
+      rmSync(dotDirsRoot, { recursive: true, force: true });
+    });
+
+    it('finds text inside .claude/rules (generated docs), not just plain directories', async () => {
+      const registry2 = new RepoRegistry();
+      registry2.register(dotDirsRoot, DB_PATH, 'test-hash-dotdir');
+      const server = createMcpServer(dotDirsRoot);
+      try {
+        const handler = getToolHandler(server, 'grep');
+        const result = await handler({ pattern: 'UNIQUE_DOTDIR_MARKER_TOKEN', repo: dotDirsRoot, limit: 50, scope: 'all' });
+        const text = result.content[0].text as string;
+
+        expect(text).toContain('.claude/rules/server.md');
+        expect(text).toContain('.github/instructions/server.md');
+        expect(text).not.toContain('.git/HEAD');
+      } finally {
+        registry2.remove(dotDirsRoot);
+      }
+    });
+  });
+
   // ── get_file_symbols tool ──
 
   describe('get_file_symbols tool', () => {

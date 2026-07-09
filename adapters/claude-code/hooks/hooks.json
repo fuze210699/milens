@@ -1,0 +1,27 @@
+{
+  "description": "Milens edit-safety enforcement hooks. Default mode: warn (reminds) — no edit is blocked. Opt-in strict mode: deny edits without prior safety check. Enable strict via: milens hooks guard-set-mode --mode strict",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "milens hooks guard-check-edit --repo \"${CLAUDE_PROJECT_DIR}\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__milens__(impact|context|overview|guard_edit_check|edit_check|smart_context)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "milens hooks guard-mark-checked --repo \"${CLAUDE_PROJECT_DIR}\""
+          }
+        ]
+      }
+    ]
+  }
+}

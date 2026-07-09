@@ -257,10 +257,10 @@ function isTestFilePath(filePath: string): boolean {
 
 const GREP_SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', 'out',
-  '.next', '.nuxt', '.svelte-kit',
+  '.next', '.nuxt', '.svelte-kit', '.turbo', '.cache', '.parcel-cache',
   '__pycache__', '.venv', 'venv', 'env',
   'vendor', 'target',
-  '.idea', '.vscode',
+  '.idea',
   'coverage', '.nyc_output',
 ]);
 
@@ -308,7 +308,6 @@ function grepFiles(
       const abs = join(dir, entry);
       const rel = relative(rootPath, abs).replace(/\\/g, '/');
 
-      if (entry.startsWith('.') && entry !== '.') continue;
       if (GREP_SKIP_DIRS.has(entry)) continue;
       if (ig.ignores(rel)) continue;
 

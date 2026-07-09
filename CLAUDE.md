@@ -1,7 +1,7 @@
 <!-- milens:start -->
 # Milens — AI-DOS
 
-The Operating System for AI-Driven Development. This project is indexed by milens (2264 symbols, 2936 links, 229 files).
+The Operating System for AI-Driven Development. This project is indexed by milens (2317 symbols, 3016 links, 232 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 

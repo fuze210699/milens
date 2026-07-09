@@ -20,8 +20,11 @@ When working with code in **server/**, follow these mandatory safety rules:
 | Text search across files | `mcp_milens_grep` |
 | See file symbols | `mcp_milens_get_file_symbols` |
 
+### Edit-safety enforcement
+A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`/`smart_context`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
+
 ## Overview
-Contains 113 symbols (22 exported) across 10 files.
+Contains 131 symbols (29 exported) across 11 files.
 
 ## Key Symbols
 - **`HookManager`** [class] (src/server/hooks.ts:43) — 9 refs
@@ -32,13 +35,13 @@ Contains 113 symbols (22 exported) across 10 files.
 - **`defaultOnPostCompact`** [function] (src/server/hooks.ts:368) — 8 refs
 - **`HookConfig`** [interface] (src/server/hooks.ts:5) — 5 refs
 - **`FileWatcher`** [class] (src/server/watcher.ts:50) — 5 refs
+- **`readMode`** [function] (src/server/guard-hook.ts:38) — 4 refs
+- **`writeMode`** [function] (src/server/guard-hook.ts:50) — 4 refs
+- **`handleMarkChecked`** [function] (src/server/guard-hook.ts:147) — 4 refs
+- **`handleCheckEdit`** [function] (src/server/guard-hook.ts:161) — 4 refs
 - **`defaultOnPreCommit`** [function] (src/server/hooks.ts:237) — 4 refs
 - **`defaultOnFileChange`** [function] (src/server/hooks.ts:323) — 4 refs
 - **`SessionContext`** [interface] (src/server/hooks.ts:15) — 4 refs
-- **`registerAllPrompts`** [function] (src/server/mcp-prompts.ts:623) — 4 refs
-- **`createMcpServer`** [function] (src/server/mcp.ts:452) — 4 refs
-- **`startStdio`** [function] (src/server/mcp.ts:2306) — 4 refs
-- **`startHttp`** [function] (src/server/mcp.ts:2363) — 4 refs
 
 ## Entry Points
 - **`HookManager`** [class] — 9 incoming references
@@ -56,10 +59,11 @@ Contains 113 symbols (22 exported) across 10 files.
 - **security**: `loadRules`
 
 ## Used By
-- **root**: `startHttp`, `startStdio`, `HookManager`, `defaultOnSessionStart`, `defaultOnSessionEnd`, `defaultOnPreCompact`, `defaultOnPostCompact`, `enableHook` (+3 more)
-- **test**: `defaultOnSessionStart`, `defaultOnPreCompact`, `defaultOnSessionEnd`, `defaultOnPostCompact`, `HookManager`, `HookConfig`, `defaultOnPreCommit`, `defaultOnFileChange` (+19 more)
+- **root**: `startHttp`, `startStdio`, `HookManager`, `defaultOnSessionStart`, `defaultOnSessionEnd`, `defaultOnPreCompact`, `defaultOnPostCompact`, `handleMarkChecked` (+6 more)
+- **test**: `defaultOnSessionStart`, `defaultOnPreCompact`, `defaultOnSessionEnd`, `defaultOnPostCompact`, `markChecked`, `checkEdit`, `readMode`, `writeMode` (+25 more)
 
 ## Files
+- src/server/guard-hook.ts
 - src/server/hooks.ts
 - src/server/mcp-prompts.ts
 - src/server/mcp.ts

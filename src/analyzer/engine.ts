@@ -431,7 +431,16 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
 
   // Phase 7: Persist to database in single transaction
   reporter?.startPhase(ProgressPhase.PERSIST, 1);
-  const isFullScan = !opts.files || opts.files.length === 0;
+  // "Full scan" gates whether we overwrite the persisted aggregate meta stats
+  // (test coverage, unresolved import/call counts). It must require that this
+  // run actually re-parsed every scanned file — not just "no --files filter" —
+  // otherwise a no-op incremental run (opts.force=false, nothing changed) has
+  // empty allImports/allCalls (skipped files are never re-parsed), producing a
+  // near-empty `links` array in Phase 6.5 that would silently clobber correct
+  // historical stats with near-zero numbers. --files-targeted runs are never
+  // full scans regardless, since they only cover an explicit file subset.
+  const isFullScan = (!opts.files || opts.files.length === 0) &&
+    (opts.force === true || (totalToParse > 0 && parsedFiles.size === totalToParse));
   db.transaction(() => {
     if (opts.force) {
       if (opts.files && opts.files.length > 0) {

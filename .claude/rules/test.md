@@ -25,8 +25,11 @@ When working with code in **test/**, follow these mandatory safety rules:
 | Text search across files | `mcp_milens_grep` |
 | See file symbols | `mcp_milens_get_file_symbols` |
 
+### Edit-safety enforcement
+A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`/`smart_context`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
+
 ## Overview
-Contains 351 symbols (119 exported) across 80 files.
+Contains 357 symbols (119 exported) across 81 files.
 
 ## Key Symbols
 - **`User`** [class] (test/fixtures/accuracy/py-project/src/models.py:1) — 6 refs
@@ -56,7 +59,7 @@ Contains 351 symbols (119 exported) across 80 files.
 - **analyzer**: `analyze`, `loadAliases`, `getCachedTree`, `clearTreeCache`, `enrichMetadata`, `resolveLinksWithStats`, `resolveLinks`, `reviewSymbol` (+9 more)
 - **store**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+76 more)
 - **root**: `generateAgentsMd`, `AnnotationKey`, `CodeSymbol`, `SymbolLink`, `computeMetrics`, `formatMetricsReport`, `MilensMetrics`, `RawImport` (+17 more)
-- **server**: `defaultOnSessionStart`, `defaultOnPreCompact`, `defaultOnSessionEnd`, `defaultOnPostCompact`, `HookManager`, `HookConfig`, `defaultOnPreCommit`, `defaultOnFileChange` (+19 more)
+- **server**: `defaultOnSessionStart`, `defaultOnPreCompact`, `defaultOnSessionEnd`, `defaultOnPostCompact`, `markChecked`, `checkEdit`, `readMode`, `writeMode` (+25 more)
 - **security**: `detectEcosystem`, `parseDependencies`, `checkVulnerabilities`, `auditDependencies`, `loadRules`, `getRulesByCategory`, `getRulesBySeverity`
 - **parser**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `extractVueCompositionApi`, `extractVueTemplateAst`, `spec` (+11 more)
 - **orchestrator**: `Orchestrator`, `formatReport`, `OrchestratorReport`, `subscribe`, `run`, `snapshot`, `compare`, `cancel` (+3 more)
@@ -119,6 +122,7 @@ Contains 351 symbols (119 exported) across 80 files.
 - test/unit/engine.test.ts
 - test/unit/enrich.test.ts
 - test/unit/extractor.test.ts
+- test/unit/guard-hook.test.ts
 - test/unit/hooks.test.ts
 - test/unit/html-css.test.ts
 - test/unit/languages.test.ts

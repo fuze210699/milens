@@ -539,13 +539,14 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` sy
 
 ## Reference
 
-### ⭐ Core Tools — Use Every Session (8)
+### ⭐ Core Tools — Use Every Session (9)
 
 | Tool | Purpose |
 |---|---|
 | \`${t('overview')}\` | **Use this first.** Combined context + impact + grep. 1 call replaces 3-5 file reads. |
 | \`${t('impact')}\` | Blast radius BEFORE editing. Shows what WILL BREAK. |
 | \`${t('edit_check')}\` | Pre-edit safety: callers + exports + re-export chains + test coverage |
+| \`${t('guard_edit_check')}\` | HARD pre-edit gate: blocks if dependents > 5, tracks checks for session audit |
 | \`${t('context')}\` | 360° view: all callers + all callees. Instant dependency graph. |
 | \`${t('query')}\` | Find symbol definitions by name (FTS5 instant search) |
 | \`${t('grep')}\` | Search ALL files for any text (templates, configs, docs, styles) |
@@ -572,10 +573,11 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` sy
 | \`${t('find_dead_code')}\` | Unused exported symbols | Before major refactors |
 | \`${t('find_similar')}\` | Symbols with shared callers/callees | Finding refactor patterns |
 
-### 📚 Advanced Tools — Reference (19)
+### 📚 Advanced Tools — Reference (20)
 
 | Tool | Purpose |
 |---|---|
+| \`${t('generate_findings_report')}\` | Render investigated findings into a Markdown+XML report for a worker/coder agent |
 | \`${t('status')}\` | Index health: symbols, links, files, coverage, staleness |
 | \`${t('repos')}\` | List all indexed repositories |
 | \`${t('annotate')}\` | Record observations about symbols (persists across sessions) |

@@ -15,6 +15,18 @@ const spec: LangSpec = {
       (keyframes_statement (keyframes_name) @name) @def
       (media_statement (feature_query (feature_name) @name)) @def
     ]`,
+    calls: `(call_expression
+      (function_name) @_fn
+      (arguments (plain_value) @callee)
+      (#eq? @_fn "var")) @def`,
+  },
+  /** Filter variables: keep custom properties (--*) and selectors; drop standard CSS properties */
+  filterSymbolName(name: string, defNodeType: string): boolean {
+    // Only filter declaration nodes — keep selectors, keyframes, media untouched
+    if (defNodeType === 'declaration') {
+      return name.startsWith('--');
+    }
+    return true;
   },
   resolveImport(raw, fromFile, root, aliases) {
     // Strip quotes from CSS string values

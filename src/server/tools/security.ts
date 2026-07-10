@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { resolve, relative, join, sep } from 'node:path';
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
 import { loadRules } from '../../security/rules.js';
 import { globToRegex } from '../../utils.js';
 import type { Deps } from './deps.js';
@@ -48,7 +48,28 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
           fileSet.add(s.filePath);
         }
       }
-      const files = [...fileSet].slice(0, 1000); // cap at 1000 files
+      // Also include non-code config files that may contain secrets
+      // (these typically have no indexed symbols but are critical for security scanning)
+      const SECRET_FILE_EXTS = new Set(['.env', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.tf', '.json', '.npmrc', '.yarnrc']);
+      const SECRET_FILE_NAMES = new Set(['Dockerfile', 'docker-compose.yml', 'docker-compose.yaml', '.dockerignore', '.env.example']);
+      try {
+        const walkDir = (dir: string): void => {
+          let entries;
+          try { entries = readdirSync(resolve(root, dir), { withFileTypes: true }); }
+          catch { return; }
+          for (const entry of entries) {
+            const relPath = join(dir, entry.name).replace(/\\/g, '/');
+            if (entry.name.startsWith('.git') || entry.name === 'node_modules' || entry.name === '.milens') continue;
+            if (entry.isDirectory()) { walkDir(relPath); continue; }
+            const ext = entry.name.includes('.') ? entry.name.substring(entry.name.lastIndexOf('.')) : '';
+            if (SECRET_FILE_EXTS.has(ext) || SECRET_FILE_NAMES.has(entry.name)) {
+              fileSet.add(relPath);
+            }
+          }
+        };
+        walkDir('.');
+      } catch { /* ignore directory walk errors */ }
+      const files = [...fileSet].slice(0, 2000); // cap at 2000 files (upped from 1000 to accommodate config files)
 
       const { readFileSync: rfs, existsSync: es } = await import('node:fs');
       const { resolve: resolvePath } = await import('node:path');
@@ -115,7 +136,14 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
 
                   const ctxStart = Math.max(0, lineNum - 3);
                 const ctxEnd = Math.min(lines.length, lineNum + 2);
-                const context = lines.slice(ctxStart, ctxEnd).join('\n');
+                // Minified/bundled files can have a single line spanning hundreds of KB
+                // (e.g. webpack bundles) — cap context length so one finding can't blow
+                // past the tool's output size limit.
+                const MAX_CONTEXT_LEN = 500;
+                let context = lines.slice(ctxStart, ctxEnd).join('\n');
+                if (context.length > MAX_CONTEXT_LEN) {
+                  context = context.slice(0, MAX_CONTEXT_LEN) + '... [truncated]';
+                }
 
                 findings.push({
                   ruleId: rule.id,
@@ -201,12 +229,17 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
       // Apply fix: add comment above the affected line with the fix suggestion
       const targetLine = lines[line - 1];
       const indent = targetLine.match(/^(\s*)/)?.[1] ?? '';
-      const fixComment = `${indent}// milens(fix): rule=${rule.id} — ${rule.fix ?? 'Review manually'}`;
+      const ext = file.split('.').pop()?.toLowerCase() ?? '';
+      const isPythonStyle = /^(py|rb|sh|yaml|yml|toml|cfg|ini|env)$/.test(ext);
+      const isHtmlStyle = /^(html|htm|vue|xml)$/.test(ext);
+      const commentPrefix = isPythonStyle ? '#' : isHtmlStyle ? '<!--' : '//';
+      const commentSuffix = isHtmlStyle ? ' -->' : '';
+      const fixComment = `${indent}${commentPrefix} milens(fix): rule=${rule.id} — ${rule.fix ?? 'Review manually'}${commentSuffix}`;
       lines.splice(line - 1, 0, fixComment);
       const newContent = lines.join('\n');
       writeFileSync(fullPath, newContent, 'utf-8');
 
-      return { content: [{ type: 'text' as const, text: `Fix applied for rule "${ruleId}" at ${file}:${line}\nSeverity: ${rule.severity}\nBackup: ${relative(root, backupPath)}\nFix: ${rule.fix ?? 'Manual review needed'}\n\nAdded fix comment above line ${line}.` }] };
+      return { content: [{ type: 'text' as const, text: `Fix comment added for rule "${ruleId}" at ${file}:${line}\nSeverity: ${rule.severity}\nBackup: ${relative(root, backupPath)}\nSuggestion: ${rule.fix ?? 'Manual review needed'}\n\nAdded fix annotation above line ${line}. Original line is preserved below — replace manually following the suggestion.` }] };
     },
   );
 }

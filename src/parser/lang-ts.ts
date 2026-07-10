@@ -25,8 +25,15 @@ const spec: LangSpec = {
     interfaces: `(interface_declaration name: (type_identifier) @name) @def`,
     enums: `(enum_declaration name: (identifier) @name) @def`,
     types: `(type_alias_declaration name: (type_identifier) @name) @def`,
-    variables: `(program (lexical_declaration
-      (variable_declarator name: (identifier) @name)) @def)`,
+    variables: `[
+      (program (lexical_declaration
+        (variable_declarator name: (identifier) @name))
+      ) @def
+      (export_statement
+        (lexical_declaration
+          (variable_declarator name: (identifier) @name))
+      ) @def
+    ]`,
     imports: `[
       (import_statement
         source: (string (string_fragment) @source)

@@ -22,6 +22,7 @@ import { countDependentFiles } from '../analyzer/risk.js';
 import { registerSessionTools } from './tools/session.js';
 import { registerTestingTools } from './tools/testing.js';
 import { registerSecurityTools } from './tools/security.js';
+import { registerFindingsReportTools } from './tools/findings-report.js';
 import { FileWatcher } from './watcher.js';
 import { reviewPr } from '../analyzer/review.js';
 import { globToRegex } from '../utils.js';
@@ -568,7 +569,7 @@ export function createMcpServer(rootPath?: string): McpServer {
   
   if (profile && profile !== 'full') {
     const minimal = new Set(['query', 'grep', 'context', 'impact', 'status', 'codebase_summary', 'edit_check', 'detect_changes', 'get_file_symbols', 'overview']);
-    const standard = new Set([...minimal, 'domains', 'repos', 'explain_relationship', 'find_dead_code', 'get_type_hierarchy', 'trace', 'routes', 'smart_context', 'review_pr', 'review_symbol', 'test_coverage_gaps', 'test_plan', 'test_impact', 'session_start', 'recall']);
+    const standard = new Set([...minimal, 'domains', 'repos', 'explain_relationship', 'find_dead_code', 'get_type_hierarchy', 'trace', 'routes', 'smart_context', 'review_pr', 'review_symbol', 'test_coverage_gaps', 'test_plan', 'test_impact', 'session_start', 'recall', 'generate_findings_report']);
     
     const allowed = profile === 'minimal' ? minimal : standard;
     
@@ -1105,7 +1106,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
     async ({ from, to, repo }) => {
       const { db } = getDb(repo);
-      const fromSyms = db.findSymbolByName(from);
+      let fromSyms = db.findSymbolByName(from);
       const toSyms = db.findSymbolByName(to);
       if (fromSyms.length === 0) {
         return { content: [{ type: 'text' as const, text: `Symbol "${from}" not found in index. Try \`grep\`.` }] };
@@ -1113,13 +1114,26 @@ export function createMcpServer(rootPath?: string): McpServer {
       if (toSyms.length === 0) {
         return { content: [{ type: 'text' as const, text: `Symbol "${to}" not found in index. Try \`grep\`.` }] };
       }
-      const path = db.findPath(from, to);
+
+      // Vue SFC: class-kind symbols have no call edges; resolve to file's _top module
+      const fromSym = fromSyms[0];
+      if (fromSym.kind === 'class' && fromSym.filePath.endsWith('.vue')) {
+        const topId = `${fromSym.filePath}#module:_top:0`;
+        const topSym = db.findSymbolById(topId);
+        if (topSym) fromSyms = [topSym];
+      }
+
+      // Use the id-based lookup once a symbol has been disambiguated above —
+      // findPath(name, ...) would re-resolve by name and could pick a
+      // different same-named symbol (e.g. some other file's "_top"),
+      // silently undoing the disambiguation.
+      const path = db.findPathFromId(fromSyms[0].id, to);
       if (!path) {
         return { content: [{ type: 'text' as const, text: `No path between "${from}" and "${to}".` }] };
       }
 
-      const fromSym = fromSyms[0];
-      const lines = [`FROM: ${fmtSymbol(fromSym)}`, ''];
+      const displaySym = fromSyms[0];
+      const lines = [`FROM: ${fmtSymbol(displaySym)}`, ''];
       for (const { symbol, depth, via } of path) {
         lines.push(`  ${'→'.repeat(depth)} [${via}] ${fmtSymbol(symbol)}`);
       }
@@ -1173,8 +1187,12 @@ export function createMcpServer(rootPath?: string): McpServer {
       file: z.string().describe('File path (relative to repo root)'),
       repo: z.string().optional(),
       detail: z.enum(['L0', 'L1', 'L2']).optional().default('L1').describe('Output detail: L0=names only, L1=default, L2=full metadata'),
+      limit: z.number().optional().default(100).describe('Max symbols to return'),
+      offset: z.number().optional().default(0).describe('Offset for pagination'),
     },
-    async ({ file, repo, detail }) => {
+    async ({ file, repo, detail, limit, offset }) => {
+      limit = limit ?? 100;
+      offset = offset ?? 0;
       const { db } = getDb(repo);
       const symbols = db.getSymbolsByFile(file);
       if (symbols.length === 0) {
@@ -1186,8 +1204,14 @@ export function createMcpServer(rootPath?: string): McpServer {
         ? [...symbols].sort((a, b) => ((b as any).heat ?? 0) - ((a as any).heat ?? 0))
         : symbols;
 
-      const lines: string[] = [`${file}: ${symbols.length} symbols\n`];
-      for (const sym of sorted) {
+      const paginated = sorted.slice(offset, offset + limit);
+      const total = sorted.length;
+      const pageInfo = total > limit || offset > 0
+        ? ` (showing ${offset + 1}-${Math.min(offset + limit, total)} of ${total}; use offset/limit to paginate)`
+        : '';
+
+      const lines: string[] = [`${file}: ${total} symbols${pageInfo}\n`];
+      for (const sym of paginated) {
         const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
         const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
         const exp = sym.exported ? ' (exported)' : '';
@@ -1597,6 +1621,58 @@ export function createMcpServer(rootPath?: string): McpServer {
         return { content: [{ type: 'text' as const, text: 'No framework routes detected.' }] };
       }
 
+      // NestJS: join controller prefix with method path
+      const nestjsRoutes = routes.filter(r => r.framework === 'nestjs');
+      if (nestjsRoutes.length > 0) {
+        const nestjsByFile = new Map<string, typeof nestjsRoutes>();
+        for (const r of nestjsRoutes) {
+          const arr = nestjsByFile.get(r.file) ?? [];
+          arr.push(r);
+          nestjsByFile.set(r.file, arr);
+        }
+        for (const [file, fileRoutes] of nestjsByFile) {
+          try {
+            const content = readFileSync(resolve(root, file), 'utf-8');
+            const lines = content.split('\n');
+            // Find @Controller decorators with their class body line ranges
+            const controllers: Array<{ prefix: string; startLine: number; endLine: number }> = [];
+            const ctrlRe = /@Controller\s*\(\s*['"]?([^'")]*?)['"]?\s*\)/;
+            const classRe = /export\s+(?:abstract\s+)?class\s+\w+/;
+            for (let i = 0; i < lines.length; i++) {
+              const cm = ctrlRe.exec(lines[i]);
+              if (!cm) continue;
+              // Find the class declaration within next 5 lines
+              let classLine = -1;
+              for (let j = i; j < Math.min(i + 5, lines.length); j++) {
+                if (classRe.test(lines[j])) { classLine = j; break; }
+              }
+              if (classLine === -1) continue;
+              // Track brace depth to find end of class body
+              let depth = 0;
+              let started = false;
+              let endLine = classLine;
+              for (let k = classLine; k < lines.length; k++) {
+                for (const ch of lines[k]) {
+                  if (ch === '{') { depth++; started = true; }
+                  else if (ch === '}') { depth--; }
+                }
+                if (started && depth === 0) { endLine = k; break; }
+              }
+              controllers.push({ prefix: cm[1] || '', startLine: classLine + 1, endLine: endLine + 1 });
+            }
+            // Map each route to its controller prefix
+            for (const r of fileRoutes) {
+              const ctrl = controllers.find(c => r.line >= c.startLine && r.line <= c.endLine);
+              if (ctrl && ctrl.prefix) {
+                const methodPath = r.path === '/' ? '' : r.path;
+                const joinPath = ctrl.prefix + (methodPath.startsWith('/') || methodPath === '' ? methodPath : '/' + methodPath);
+                r.path = joinPath || '/';
+              }
+            }
+          } catch { /* can't read file */ }
+        }
+      }
+
       // Group by framework
       const grouped = new Map<string, RouteMatch[]>();
       for (const r of routes) {
@@ -1724,10 +1800,18 @@ export function createMcpServer(rootPath?: string): McpServer {
           // Execution paths + data flow
           const traces = db.traceToEntrypoints(sym.id, 6);
           if (traces.length > 0) {
+            const seenChains = new Set<string>();
             sections.push(`execution paths (${traces.length}):`);
-            for (let i = 0; i < Math.min(traces.length, 3); i++) {
+            let shown = 0;
+            for (let i = 0; i < traces.length && shown < 3; i++) {
               const chain = traces[i].path;
-              sections.push(`  ${chain.map(s => s.symbol.name).join(' → ')}`);
+              const firstFile = chain[0]?.symbol?.filePath?.split('/').pop() ?? '';
+              const rendered = chain.map(s => s.symbol.name).join(' → ');
+              const key = `${firstFile}: ${rendered}`;
+              if (seenChains.has(key)) continue;
+              seenChains.add(key);
+              sections.push(`  ${key}`);
+              shown++;
             }
           } else {
             sections.push(`no call chains found (may be entrypoint or unreachable)`);
@@ -2238,6 +2322,7 @@ export function createMcpServer(rootPath?: string): McpServer {
 
   registerSecurityTools(server, { getDb, fmtSymbol, fmtImpact, rootPath, toolCallCounts, resolveRoot, guard, getToolCallCount });
 
+  registerFindingsReportTools(server, { getDb, fmtSymbol, fmtImpact, rootPath, toolCallCounts, resolveRoot, guard, getToolCallCount });
 
   // ── Tool: compare_impact ──
   server.tool(

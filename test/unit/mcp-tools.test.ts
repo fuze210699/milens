@@ -160,6 +160,7 @@ const EXPECTED_TOOLS = [
   'session_end', 'handoff', 'pre_commit_check', 'hook_onFileChange',
   'hook_preCompact', 'hook_postCompact', 'semantic_search', 'find_similar',
   'compare_impact', 'orchestrate', 'fix_apply', 'test_generate', 'security_scan',
+  'generate_findings_report',
 ];
 
 describe('createMcpServer', () => {
@@ -846,6 +847,23 @@ describe('createMcpServer', () => {
       expect(typeof parsed.summary.totalScanned).toBe('number');
       expect(typeof parsed.summary.score).toBe('number');
       expect(Array.isArray(parsed.findings)).toBe(true);
+    });
+
+    it('caps context length for findings in minified/bundled files with huge single lines', async () => {
+      const hugeLine = `PASSWORD="hunter2xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" ${'x'.repeat(200_000)}`;
+      const bundlePath = resolve(TEST_ROOT, 'huge-bundle.yml');
+      writeFileSync(bundlePath, hugeLine, 'utf-8');
+      try {
+        const server = createMcpServer(TEST_ROOT);
+        const handler = getToolHandler(server, 'security_scan');
+        const result = await handler({ scope: 'secrets', repo: TEST_ROOT, limit: 50 });
+        const parsed = JSON.parse(result.content[0].text);
+        const finding = parsed.findings.find((f: any) => f.file === 'huge-bundle.yml');
+        expect(finding).toBeDefined();
+        expect(finding.context.length).toBeLessThan(1000);
+      } finally {
+        rmSync(bundlePath, { force: true });
+      }
     });
 
     it('fix_apply rejects a file path that escapes the repo root (path traversal)', async () => {

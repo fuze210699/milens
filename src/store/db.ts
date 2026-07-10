@@ -419,10 +419,22 @@ export class Database {
     const fromSyms = this.findSymbolByName(fromName);
     const toSyms = this.findSymbolByName(toName);
     if (fromSyms.length === 0 || toSyms.length === 0) return null;
+    return this.findPathFromId(fromSyms[0].id, toSyms.map(s => s.id), maxDepth);
+  }
 
-    const fromId = fromSyms[0].id;
-    const toId = toSyms[0].id;
-    const toIds = new Set(toSyms.map(s => s.id));
+  /**
+   * Same as findPath, but takes an already-resolved source symbol id instead
+   * of re-resolving by name. Needed when the caller has disambiguated among
+   * several same-named symbols (e.g. picking the right file-scoped `_top`
+   * module out of many) — passing the name back through findPath() would
+   * silently re-resolve to an arbitrary same-named symbol and discard that
+   * disambiguation.
+   */
+  findPathFromId(fromId: string, toNameOrIds: string | string[], maxDepth = 5): Array<{ symbol: CodeSymbol; depth: number; via: string }> | null {
+    const toIds = Array.isArray(toNameOrIds)
+      ? new Set(toNameOrIds)
+      : new Set(this.findSymbolByName(toNameOrIds).map(s => s.id));
+    if (toIds.size === 0) return null;
 
     // Use path-accumulating CTE to track the actual predecessor chain
     interface PathRow { node_id: string; depth: number; via: string; path_ids: string; }
@@ -747,7 +759,9 @@ export class Database {
   // ── Test file detection ──
 
   private isTestFile(filePath: string): boolean {
-    return /[/\\]test[/\\]/.test(filePath) || /\.(test|spec)\./.test(filePath);
+    const codeExt = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rb|java|php|rs)$/i;
+    if (!codeExt.test(filePath)) return false;
+    return /[/\\]tests?[/\\]/.test(filePath) || /\.(test|spec)\./i.test(filePath);
   }
 
   // ── Heat / hubs ──

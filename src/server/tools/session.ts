@@ -109,7 +109,7 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
         `Session: ${s.id}`,
         `Agent: ${s.agent} | Status: ${s.status}`,
         `Started: ${s.startedAt} | Ended: ${s.endedAt ?? 'in progress'}`,
-        `Tool calls: ${displayCalls}${s.toolCallsCount === 0 ? ' (live count, resets on restart)' : ''} | Annotations: ${s.annotationsCount}`,
+        `Tool calls: ${displayCalls}${s.toolCallsCount === 0 ? ' (live count, resets on restart)' : ''} | Annotations: ${ctx.annotations.length}`,
       ];
       if (s.context) lines.push(`Context: ${s.context}`);
       if (ctx.annotations.length > 0) {
@@ -171,7 +171,7 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
       const { db } = getDb();
       const store = new AnnotationStore(db.connection);
       const result = store.handoff(from_session, to_agent, context);
-      return { content: [{ type: 'text' as const, text: `Handoff complete.\nNew session: ${result.newSessionId}\nAgent: ${to_agent}\nAnnotations copied: ${result.annotationsCopied}` }] };
+      return { content: [{ type: 'text' as const, text: `Handoff complete.\nNew session: ${result.newSessionId}\nAgent: ${to_agent}\nAnnotations recorded in prior session: ${result.annotationsCopied} (retrievable via recall())` }] };
     },
   );
 

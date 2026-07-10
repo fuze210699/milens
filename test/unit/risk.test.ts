@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdirSync, unlinkSync, existsSync, rmSync } from 'node:fs';
+import { mkdirSync, unlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from '../../src/store/db.js';
 import { countDependentFiles, scoreSymbolRisk, classifyRisk } from '../../src/analyzer/risk.js';
@@ -18,7 +18,6 @@ describe('countDependentFiles', () => {
   afterAll(() => {
     db.close();
     try { unlinkSync(TEST_DB); } catch {}
-    try { rmSync(join(TEST_DB, '..'), { recursive: true, force: true }); } catch {}
   });
 
   it('returns 0 for symbol with no incoming links', () => {

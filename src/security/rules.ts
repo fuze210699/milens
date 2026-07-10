@@ -109,7 +109,7 @@ export const ALL_RULES: SecurityRule[] = [
     name: 'Hardcoded password',
     description: 'Password value appears to be hardcoded in source code. Use environment variables or a secrets manager instead.',
     patterns: [
-      /(?:password|passwd|pwd)\s*[:=]\s*['"`][^'"`\n]{4,}['"`]/i,
+      /(?:password|passwd|pwd)\s*[:=]\s*(?!\$\{|\w+\.|\w+\()([A-Za-z0-9_\-/+!@#$%^&*]{4,}|['"`][^'"`\n]{4,}['"`])/im,
     ],
     excludeGlob: SECRETS_EXCLUDE,
     fix: 'Replace hardcoded password with an environment variable or a secrets manager.',
@@ -125,8 +125,8 @@ export const ALL_RULES: SecurityRule[] = [
     name: 'Hardcoded secret key',
     description: 'A secret or signing key appears to be hardcoded. Use a secure key management service.',
     patterns: [
-      /(?:secret|secretKey|secret_key|clientSecret)\s*[:=]\s*['"`][A-Za-z0-9_\-+=/]{16,}['"`]/i,
-      /(?:signingKey|signing_key|encryptionKey|encryption_key)\s*[:=]\s*['"`][A-Za-z0-9_\-+=/]{16,}['"`]/i,
+      /(?:secret|secretKey|secret_key|clientSecret)\s*[:=]\s*(?!\$\{)([A-Za-z0-9_\-+=/]{16,}|['"`][A-Za-z0-9_\-+=/]{16,}['"`])/i,
+      /(?:signingKey|signing_key|encryptionKey|encryption_key)\s*[:=]\s*(?!\$\{)([A-Za-z0-9_\-+=/]{16,}|['"`][A-Za-z0-9_\-+=/]{16,}['"`])/i,
     ],
     excludeGlob: SECRETS_EXCLUDE,
     fix: 'Store secrets in a vault (HashiCorp Vault, AWS Secrets Manager, etc.) or environment variables.',
@@ -142,8 +142,8 @@ export const ALL_RULES: SecurityRule[] = [
     name: 'Hardcoded API key',
     description: 'An API key literal is embedded in source code. Rotate the key immediately and use environment variables.',
     patterns: [
-      /(?:api[_-]?key|apiKey|apikey)\s*[:=]\s*['"`][A-Za-z0-9_\-]{20,}['"`]/i,
-      /(?:api[_-]?secret|apiSecret)\s*[:=]\s*['"`][A-Za-z0-9_\-]{20,}['"`]/i,
+      /(?:api[_-]?key|apiKey|apikey)\s*[:=]\s*(?!\$\{)([A-Za-z0-9_\-]{20,}|['"`][A-Za-z0-9_\-]{20,}['"`])/i,
+      /(?:api[_-]?secret|apiSecret)\s*[:=]\s*(?!\$\{)([A-Za-z0-9_\-]{20,}|['"`][A-Za-z0-9_\-]{20,}['"`])/i,
     ],
     excludeGlob: SECRETS_EXCLUDE,
     fix: 'Move the API key to process.env.API_KEY and never commit credentials.',
@@ -244,8 +244,8 @@ export const ALL_RULES: SecurityRule[] = [
     name: 'Generic token / bearer token hardcoded',
     description: 'A token or bearer token appears to be hardcoded in source code.',
     patterns: [
-      /(?:token|authToken|accessToken|bearerToken)\s*[:=]\s*['"`][A-Za-z0-9_\-+=.]{20,}['"`]/i,
-      /(?:authorization|Authorization)\s*[:=]\s*['"`]Bearer\s+[A-Za-z0-9_\-+=.]+['"`]/i,
+      /(?:token|authToken|accessToken|bearerToken)\s*[:=]\s*(?!\$\{)([A-Za-z0-9_\-+=.]{20,}|['"`][A-Za-z0-9_\-+=.]{20,}['"`])/i,
+      /(?:authorization|Authorization)\s*[:=]\s*(?!\$\{)(Bearer\s+[A-Za-z0-9_\-+=.]+|['"`]Bearer\s+[A-Za-z0-9_\-+=.]+['"`])/i,
     ],
     excludeGlob: SECRETS_EXCLUDE,
     fix: 'Use environment variables or a secure token store. Rotate the exposed token.',
@@ -261,9 +261,9 @@ export const ALL_RULES: SecurityRule[] = [
     name: 'Sensitive environment variable or AUTH_TOKEN',
     description: 'AUTH_TOKEN or similar sensitive credential is set to a literal value rather than referencing an external secret.',
     patterns: [
-      /AUTH_TOKEN\s*=\s*['"`][^'"`]{8,}['"`]/i,
-      /(?:\.env\s*(?:file)?\s*[:=]\s*['"`][^'"`]*['"`])/i,
-      /process\.env\.([A-Z_]+)\s*=\s*['"`][^'"`]{8,}['"`]/,
+      /AUTH_TOKEN\s*=\s*(?!\$\{)([^\s'"`\n]{8,}|['"`][^'"`\n]{8,}['"`])/i,
+      /(?:\.env\s*(?:file)?\s*[:=]\s*(?!\$\{)([^\s'"`\n]+|['"`][^'"`]*['"`]))/i,
+      /process\.env\.([A-Z_]+)\s*=\s*(?!\$\{)([^\s'"`\n]{8,}|['"`][^'"`\n]{8,}['"`])/,
     ],
     excludeGlob: SECRETS_EXCLUDE,
     fix: 'Never assign secret values to process.env in code. Use external .env files (gitignored) or a secrets manager.',
@@ -1066,10 +1066,10 @@ export const ALL_RULES: SecurityRule[] = [
     falsePositiveRisk: 'low', enabled: true,
   },
 
-  { id: 'SEC-051', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Hardcoded JWT secret', description: 'JWT signing secret hardcoded in source code.', patterns: [/\b(?:jwtSecret|JWT_SECRET|jwt_secret)\s*[:=]\s*['"`][A-Za-z0-9_\-]{16,}['"`]/, /secret\s*[:=]\s*['"`][A-Za-z0-9_\-]{16,}['"`].*jwt/i], excludeGlob: DEFAULT_EXCLUDE, fix: 'Use process.env.JWT_SECRET from environment variables.', confidence: 0.95, falsePositiveRisk: 'medium', enabled: true },
-  { id: 'SEC-052', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Hardcoded encryption key', description: 'Encryption key hardcoded in source code.', patterns: [/\b(?:encrypt(?:ion)?Key|ENCRYPT(?:ION)?_KEY|secretKey|SECRET_KEY)\s*[:=]\s*['"`][A-Za-z0-9_\-]{16,}['"`]/i], fix: 'Use process.env.ENCRYPTION_KEY or a key management service.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
-  { id: 'SEC-053', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Hardcoded AWS Secret Access Key', description: 'AWS secret access key exposed.', patterns: [/aws_secret_access_key\s*[:=]\s*['"`][A-Za-z0-9+\/=]{40}['"`]/i, /secretAccessKey\s*[:=]\s*['"`][A-Za-z0-9+\/=]{40}['"`]/], fix: 'Use AWS IAM roles or environment variables.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
-  { id: 'SEC-054', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Hardcoded AWS Session Token', description: 'AWS session token exposed.', patterns: [/aws_session_token\s*[:=]\s*['"`][A-Za-z0-9+\/=]{100,}['"`]/i], fix: 'Use temporary credentials via IAM roles.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
+  { id: 'SEC-051', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Hardcoded JWT secret', description: 'JWT signing secret hardcoded in source code.', patterns: [/\b(?:jwtSecret|JWT_SECRET|jwt_secret)\s*[:=]\s*(?!\$\{)([A-Za-z0-9_\-]{16,}|['"`][A-Za-z0-9_\-]{16,}['"`])/, /secret\s*[:=]\s*(?!\$\{)([A-Za-z0-9_\-]{16,}|['"`][A-Za-z0-9_\-]{16,}['"`]).*jwt/i], excludeGlob: DEFAULT_EXCLUDE, fix: 'Use process.env.JWT_SECRET from environment variables.', confidence: 0.95, falsePositiveRisk: 'medium', enabled: true },
+  { id: 'SEC-052', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Hardcoded encryption key', description: 'Encryption key hardcoded in source code.', patterns: [/\b(?:encrypt(?:ion)?Key|ENCRYPT(?:ION)?_KEY|secretKey|SECRET_KEY)\s*[:=]\s*(?!\$\{)([A-Za-z0-9_\-]{16,}|['"`][A-Za-z0-9_\-]{16,}['"`])/i], fix: 'Use process.env.ENCRYPTION_KEY or a key management service.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
+  { id: 'SEC-053', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Hardcoded AWS Secret Access Key', description: 'AWS secret access key exposed.', patterns: [/aws_secret_access_key\s*[:=]\s*(?!\$\{)([A-Za-z0-9+\/=]{40}|['"`][A-Za-z0-9+\/=]{40}['"`])/i, /secretAccessKey\s*[:=]\s*(?!\$\{)([A-Za-z0-9+\/=]{40}|['"`][A-Za-z0-9+\/=]{40}['"`])/], fix: 'Use AWS IAM roles or environment variables.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
+  { id: 'SEC-054', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Hardcoded AWS Session Token', description: 'AWS session token exposed.', patterns: [/aws_session_token\s*[:=]\s*(?!\$\{)([A-Za-z0-9+\/=]{100,}|['"`][A-Za-z0-9+\/=]{100,}['"`])/i], fix: 'Use temporary credentials via IAM roles.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
   { id: 'SEC-055', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'GCP Service Account Key', description: 'Google Cloud service account JSON key exposed.', patterns: [/"type"\s*:\s*"service_account"/, /"private_key_id"\s*:\s*"[a-f0-9]+"/], fileGlob: '**/*.{json,js,ts}', fix: 'Use GCP IAM roles or Workload Identity.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
   { id: 'SEC-056', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Azure Storage Key', description: 'Azure storage account key exposed.', patterns: [/AccountKey\s*=\s*[A-Za-z0-9+\/=]{88}/, /DefaultEndpointsProtocol.*AccountKey/], fix: 'Use Azure Managed Identity.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
   { id: 'SEC-057', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Slack Token', description: 'Slack bot or user token exposed.', patterns: [/xox[baprs]\-[0-9A-Za-z\-]{10,}/], fix: 'Store in environment variables.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
@@ -1080,12 +1080,12 @@ export const ALL_RULES: SecurityRule[] = [
   { id: 'SEC-062', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'DSA Private Key', description: 'DSA private key exposed.', patterns: [/-----BEGIN DSA PRIVATE KEY-----/], excludeGlob: DEFAULT_EXCLUDE, fix: 'Store outside the repository.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
   { id: 'SEC-063', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'PGP Private Key', description: 'PGP/GPG private key exposed.', patterns: [/-----BEGIN PGP PRIVATE KEY BLOCK-----/], excludeGlob: DEFAULT_EXCLUDE, fix: 'Store outside the repository.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
   { id: 'SEC-064', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'SSH Private Key', description: 'SSH private key exposed.', patterns: [/-----BEGIN (?:RSA|DSA|EC|OPENSSH) PRIVATE KEY-----/], excludeGlob: DEFAULT_EXCLUDE, fix: 'Store outside the repository.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
-  { id: 'SEC-065', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Generic Refresh Token', description: 'OAuth refresh token hardcoded.', patterns: [/refresh[_-]?token\s*[:=]\s*['"`][A-Za-z0-9_\-.]{16,}['"`]/i], fix: 'Store refresh tokens in secure storage.', confidence: 0.85, falsePositiveRisk: 'low', enabled: true },
+  { id: 'SEC-065', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Generic Refresh Token', description: 'OAuth refresh token hardcoded.', patterns: [/refresh[_-]?token\s*[:=]\s*(?!\$\{)([A-Za-z0-9_\-.]{16,}|['"`][A-Za-z0-9_\-.]{16,}['"`])/i], fix: 'Store refresh tokens in secure storage.', confidence: 0.85, falsePositiveRisk: 'low', enabled: true },
   { id: 'SEC-066', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Credential in Dockerfile', description: 'Credentials hardcoded in Dockerfile.', patterns: [/ENV\s+(?:PASSWORD|SECRET|TOKEN|KEY)\s*=\s*\S+/i, /ARG\s+(?:PASSWORD|SECRET|TOKEN|KEY)\s*=\s*\S+/i], fileGlob: DOCKER_FILES, excludeGlob: DEFAULT_EXCLUDE, fix: 'Use Docker secrets or build args without default values.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
   { id: 'SEC-067', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Credential in Terraform', description: 'Secrets hardcoded in Terraform files.', patterns: [/(?:password|secret|token|key)\s*=\s*"[^"]{4,}"/i], fileGlob: TF_FILES, fix: 'Use Terraform variables with sensitive=true.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
   { id: 'SEC-068', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Credential in Kubernetes Manifest', description: 'Secrets hardcoded in K8s manifests.', patterns: [/(?:password|secret|token)\s*:\s*[A-Za-z0-9_\-]{8,}/], fileGlob: K8S_FILES, fix: 'Use Kubernetes Secrets and reference via secretKeyRef.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
   { id: 'SEC-069', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'GitLab Token', description: 'GitLab PAT exposed.', patterns: [/glpat\-[A-Za-z0-9_\-]{20,}/, /gitlab.*token\s*[:=]\s*['"`][A-Za-z0-9_\-]{20,}['"`]/i], fix: 'Store in environment variables.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
-  { id: 'SEC-070', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Hardcoded OAuth client secret', description: 'OAuth client secret hardcoded.', patterns: [/client[_-]?secret\s*[:=]\s*['"`][A-Za-z0-9_\-]{16,}['"`]/i, /CLIENT_SECRET\s*=\s*['"`][A-Za-z0-9_\-]{16,}['"`]/], fix: 'Use environment variables or OAuth secret management.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
+  { id: 'SEC-070', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Hardcoded OAuth client secret', description: 'OAuth client secret hardcoded.', patterns: [/client[_-]?secret\s*[:=]\s*(?!\$\{)([A-Za-z0-9_\-]{16,}|['"`][A-Za-z0-9_\-]{16,}['"`])/i, /CLIENT_SECRET\s*=\s*(?!\$\{)([A-Za-z0-9_\-]{16,}|['"`][A-Za-z0-9_\-]{16,}['"`])/], fix: 'Use environment variables or OAuth secret management.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
 
   // ═══════════════════════════════════════════════════════════════
   // SEC-071 – SEC-087 : SQLi/NoSQLi/Template/Log Injection (A03:2021)
@@ -1289,11 +1289,11 @@ export const ALL_RULES: SecurityRule[] = [
   // ═══════════════════════════════════════════════════════════════
   // SEC-186 – SEC-190 : Additional Secrets
   // ═══════════════════════════════════════════════════════════════
-  { id: 'SEC-186', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Hardcoded SMTP Credential', description: 'SMTP credentials hardcoded.', patterns: [/smtp.*(?:user|pass)\s*[:=]\s*['"`][^'"`]{3,}['"`]/i, /nodemailer.*auth\s*:\s*\{[^}]*pass\s*:\s*['"`]/i], fix: 'Use environment variables.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
-  { id: 'SEC-187', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Hardcoded LDAP Credential', description: 'LDAP bind password.', patterns: [/ldap.*(?:password|bindpw)\s*[:=]\s*['"`][^'"`]{3,}['"`]/i], fix: 'Use environment variables.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
-  { id: 'SEC-188', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Hardcoded FTP Credential', description: 'FTP password hardcoded.', patterns: [/ftp.*(?:password|pass)\s*[:=]\s*['"`][^'"`]{3,}['"`]/i], fix: 'Use environment variables.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
+  { id: 'SEC-186', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Hardcoded SMTP Credential', description: 'SMTP credentials hardcoded.', patterns: [/smtp.*(?:user|pass)\s*[:=]\s*(?!\$\{)([^\s'"`\n]{3,}|['"`][^'"`\n]{3,}['"`])/i, /nodemailer.*auth\s*:\s*\{[^}]*pass\s*:\s*(?!\$\{)([^\s'"`,\n]{3,}|['"`][^'"`\n]{3,}['"`])/i], fix: 'Use environment variables.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
+  { id: 'SEC-187', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Hardcoded LDAP Credential', description: 'LDAP bind password.', patterns: [/ldap.*(?:password|bindpw)\s*[:=]\s*(?!\$\{)([^\s'"`\n]{3,}|['"`][^'"`\n]{3,}['"`])/i], fix: 'Use environment variables.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
+  { id: 'SEC-188', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Hardcoded FTP Credential', description: 'FTP password hardcoded.', patterns: [/ftp.*(?:password|pass)\s*[:=]\s*(?!\$\{)([^\s'"`\n]{3,}|['"`][^'"`\n]{3,}['"`])/i], fix: 'Use environment variables.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
   { id: 'SEC-189', category: 'secrets', owasp: 'A02:2021', severity: 'CRITICAL', name: 'Anthropic API Key', description: 'Anthropic API key exposed.', patterns: [/sk-ant-[a-zA-Z0-9\-_]{30,}/, /anthropic.*(?:api[_-]?key|key)\s*[:=]\s*['"`]sk-ant/i], fix: 'Store in environment variables.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
-  { id: 'SEC-190', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Hardcoded Database Password', description: 'DB password in connection string.', patterns: [/mysql:\/\/[^:]+:[^@]+@/, /postgres:\/\/[^:]+:[^@]+@/, /mongodb:\/\/[^:]+:[^@]+@/, /DATABASE_URL\s*=\s*[`'"][^`'"]*:[^`'"]*@/i], excludeGlob: DEFAULT_EXCLUDE, fix: 'Use environment variables for DB credentials.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
+  { id: 'SEC-190', category: 'secrets', owasp: 'A02:2021', severity: 'HIGH', name: 'Hardcoded Database Password', description: 'DB password in connection string.', patterns: [/mysql:\/\/[^:]+:[^@]+@/, /postgres(?:ql)?:\/\/[^:]+:[^@]+@/, /mongodb(?:\+srv)?:\/\/[^:]+:[^@]+@/, /redis:\/\/[^:]+:[^@]+@/, /DATABASE_URL\s*=\s*(?!\$)(\S+:\/\/[^\/\s:]+:[^@\s]+@|[`'"][^`'"]*:[^`'"]*@)/i, /DB_URL\s*=\s*(?!\$)(\S+:\/\/[^\/\s:]+:[^@\s]+@|[`'"][^`'"]*:[^`'"]*@)/i], excludeGlob: DEFAULT_EXCLUDE, fix: 'Use environment variables for DB credentials.', confidence: 0.95, falsePositiveRisk: 'low', enabled: true },
 ];
 
 // ── Utility functions ──

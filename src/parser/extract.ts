@@ -13,6 +13,9 @@ export interface LangSpec {
   importSemantics?: 'named' | 'wildcard-leaf' | 'wildcard-transitive' | 'namespace'; // How imports expose symbols
   /** Determine whether a symbol is exported (overrides allTopLevelExported/uppercaseExported) */
   isExported?: (symbol: CodeSymbol) => boolean;
+  /** Filter which captured @name values should become symbols. Return false to skip.
+   *  `defNodeType` is the tree-sitter node type of the @def capture (e.g. "declaration", "rule_set"). */
+  filterSymbolName?: (name: string, defNodeType: string) => boolean;
   queries: {
     functions?: string;
     classes?: string;
@@ -315,6 +318,9 @@ export function extractFromTree(
       const symKey = `${name}:${defNode.startPosition.row + 1}`;
       if (seenSymbolKeys.has(symKey)) continue;
       seenSymbolKeys.add(symKey);
+
+      // Filter: spec can define a name filter to skip certain captured symbols
+      if (spec.filterSymbolName && !spec.filterSymbolName(name, defNode.type)) continue;
 
       const sym: CodeSymbol = {
         id: makeSymbolId(kind, name, defNode.startPosition.row + 1),

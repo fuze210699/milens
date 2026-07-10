@@ -35,7 +35,12 @@ function isFixtureOrTest(file: string): boolean {
 }
 
 function isNonSourceFile(file: string): boolean {
-  if (!file.startsWith('src/')) return true;
+  // Match "src/" as a path segment anywhere, not just a literal prefix —
+  // monorepos commonly nest it under a package dir (backend/src/, frontend/src/,
+  // packages/foo/src/), and a strict prefix check silently excluded every
+  // changed file in those layouts, making reviewPr report "no changes" even
+  // when real source files were modified.
+  if (!/(^|\/)src\//.test(file)) return true;
   return /\.(md|json|lock|yml|yaml|toml)$/.test(file) ||
     /\/\.milens\//.test(file) ||
     /\/node_modules\//.test(file);

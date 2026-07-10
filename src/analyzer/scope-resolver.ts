@@ -182,7 +182,7 @@ export function resolveWithScopes(input: ScopeResolverInput): ResolutionResult {
     }
   }
 
-  const result = { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls, externalImports, externalCalls };
+  const result = { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls, externalImports, externalCalls, externalSymbols: [] };
   if (process.env.MILENS_DEBUG) console.log(`[dual:perf] Total: ${Date.now() - t0}ms, ${result.links.length} links`);
   return result;
 }

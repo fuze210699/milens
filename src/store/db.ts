@@ -469,18 +469,36 @@ export class Database {
     // Use path-accumulating CTE to track the actual predecessor chain
     interface PathRow { node_id: string; depth: number; via: string; path_ids: string; }
 
+    // Anchor branch 2 seeds the search by descending ONE 'contains' hop from the exact
+    // origin symbol into its own contained methods, then taking one real edge from there.
+    // This only ever applies to the literal starting symbol (later branches never re-descend
+    // into contains children mid-path) — a class/struct/trait passed as `fromId` typically
+    // has zero direct calls/imports edges of its own (its real behavior lives in its
+    // methods), so without this seed the search dead-ends immediately at depth 0 for any
+    // class-to-X query. Safe: it can't produce a false "relationship" between unrelated
+    // sibling methods, since it's scoped to fromId's own children only, never applied again
+    // to a class reached later in the chain.
     const rows = this.db.prepare(`
       WITH RECURSIVE chain(node_id, depth, via, path_ids) AS (
         SELECT l.to_id, 1, l.type, ',' || l.from_id || ',' || l.to_id || ','
         FROM links l WHERE l.from_id = ? AND l.type != 'contains'
         UNION ALL
+        SELECT l2.to_id, 2, l2.type, ',' || l.from_id || ',' || l.to_id || ',' || l2.to_id || ','
+        FROM links l JOIN links l2 ON l2.from_id = l.to_id
+        WHERE l.from_id = ? AND l.type = 'contains' AND l2.type != 'contains'
+        UNION ALL
         SELECT l.to_id, c.depth + 1, l.type, c.path_ids || l.to_id || ','
         FROM links l JOIN chain c ON l.from_id = c.node_id
         WHERE l.type != 'contains' AND c.depth < ?
           AND c.path_ids NOT LIKE '%,' || l.to_id || ',%'
+        UNION ALL
+        SELECT l.from_id, c.depth + 1, l.type, c.path_ids || l.from_id || ','
+        FROM links l JOIN chain c ON l.to_id = c.node_id
+        WHERE l.type = 'contains' AND c.depth < ?
+          AND c.path_ids NOT LIKE '%,' || l.from_id || ',%'
       )
       SELECT node_id, depth, via, path_ids FROM chain ORDER BY depth
-    `).all(fromId, maxDepth) as PathRow[];
+    `).all(fromId, fromId, maxDepth, maxDepth) as PathRow[];
 
     // Find the first (shortest-depth) row matching the target
     const targetRow = rows.find(r => toIds.has(r.node_id));
@@ -493,13 +511,23 @@ export class Database {
     for (let i = 0; i < idChain.length; i++) {
       const sym = this.findSymbolById(idChain[i]);
       if (!sym) continue;
-      // Determine via for this hop: lookup link from idChain[i] → idChain[i+1]
+      // Determine via for this hop: lookup link from idChain[i] → idChain[i+1]. Prefer a
+      // real calls/imports/etc. edge when one exists between the two nodes; only report
+      // 'contains' (in either direction — the traversal now allows both a class-to-method
+      // seed step and a method-to-class arrival step) when that's the only relationship.
       let via = 'calls';
       if (i < idChain.length - 1) {
         const linkRow = this.db.prepare(
           'SELECT type FROM links WHERE from_id = ? AND to_id = ? AND type != ? LIMIT 1'
         ).get(idChain[i], idChain[i + 1], 'contains') as any;
-        if (linkRow) via = linkRow.type;
+        if (linkRow) {
+          via = linkRow.type;
+        } else {
+          const containsRow = this.db.prepare(
+            'SELECT type FROM links WHERE ((from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)) AND type = ? LIMIT 1'
+          ).get(idChain[i], idChain[i + 1], idChain[i + 1], idChain[i], 'contains') as any;
+          if (containsRow) via = containsRow.type;
+        }
       }
       result.push({ symbol: sym, depth: i, via });
     }
@@ -935,30 +963,41 @@ export class Database {
     const target = this.findSymbolById(symbolId);
     if (!target) return [];
 
-    const incoming = this.getIncomingLinks(symbolId).filter(l => l.type !== 'contains');
-    const outgoing = this.getOutgoingLinks(symbolId).filter(l => l.type !== 'contains');
+    const CONTAINER_KINDS = new Set(['class', 'struct', 'trait']);
 
-    const targetLinks = new Set<string>();
-    for (const link of incoming) targetLinks.add(link.fromId);
-    for (const link of outgoing) targetLinks.add(link.toId);
+    const buildSig = (id: string): Set<string> => {
+      const sig = new Set<string>();
+      const sym = this.findSymbolById(id);
+      const incoming = this.getIncomingLinks(id).filter(l => l.type !== 'contains');
+      const outgoing = this.getOutgoingLinks(id).filter(l => l.type !== 'contains');
+      for (const link of incoming) sig.add(link.fromId);
+      for (const link of outgoing) sig.add(link.toId);
+      if (sym && CONTAINER_KINDS.has(sym.kind)) {
+        const contained = this.getOutgoingLinks(id).filter(l => l.type === 'contains');
+        for (const cl of contained) {
+          const mIn = this.getIncomingLinks(cl.toId).filter(l => l.type !== 'contains');
+          const mOut = this.getOutgoingLinks(cl.toId).filter(l => l.type !== 'contains');
+          for (const link of mIn) sig.add(link.fromId);
+          for (const link of mOut) sig.add(link.toId);
+        }
+      }
+      return sig;
+    };
+
+    const targetSig = buildSig(symbolId);
 
     // Search across all exported symbols, not just same-file siblings
     const allSymbols = this.getAllSymbols().filter(s => s.id !== symbolId && s.exported);
 
     const results: Array<{ symbol: CodeSymbol; similarity: number }> = [];
     for (const candidate of allSymbols) {
-      const candIncoming = this.getIncomingLinks(candidate.id).filter(l => l.type !== 'contains');
-      const candOutgoing = this.getOutgoingLinks(candidate.id).filter(l => l.type !== 'contains');
-
-      const candidateLinks = new Set<string>();
-      for (const link of candIncoming) candidateLinks.add(link.fromId);
-      for (const link of candOutgoing) candidateLinks.add(link.toId);
+      const candidateSig = buildSig(candidate.id);
 
       let intersection = 0;
-      for (const id of targetLinks) {
-        if (candidateLinks.has(id)) intersection++;
+      for (const id of targetSig) {
+        if (candidateSig.has(id)) intersection++;
       }
-      const union = new Set([...targetLinks, ...candidateLinks]).size;
+      const union = new Set([...targetSig, ...candidateSig]).size;
       const similarity = union > 0 ? intersection / union : 0;
 
       if (similarity >= 0.15) {

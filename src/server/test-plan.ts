@@ -1,16 +1,26 @@
 import type { Database } from '../store/db.js';
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve, dirname, basename, extname } from 'node:path';
+import { resolve, dirname, basename, extname, relative } from 'node:path';
 
 export interface TestPlan {
   symbol: string;
   kind: string;
   file: string;
   signature?: string;
-  mockStrategy: Array<{ dependency: string; type: 'mock' | 'stub' | 'spy'; reason: string }>;
+  mockStrategy: Array<{ dependency: string; type: 'mock' | 'stub' | 'spy'; reason: string; modulePath?: string }>;
   testScenarios: Array<{ name: string; description: string }>;
   existingTests: string[];
   planText: string;
+}
+
+/** Compute a relative module path from sourceFile's directory to targetFile */
+function relativeModulePath(sourceFile: string, targetFile: string): string {
+  const fromDir = dirname(sourceFile);
+  let rel = relative(fromDir, targetFile).replace(/\\/g, '/');
+  const ext = extname(rel);
+  if (ext) rel = rel.slice(0, -ext.length);
+  if (!rel.startsWith('.')) rel = './' + rel;
+  return rel;
 }
 
 /** Extract describe/it block names from a test file that reference the target symbol */
@@ -55,24 +65,30 @@ export function generateTestPlan(db: Database, name: string, rootPath?: string):
     const depName = dep.name;
     const sameFile = dep.filePath === sym.filePath;
     const isImport = link.type === 'imports';
+    const TYPE_ONLY_KINDS = new Set(['interface', 'type', 'enum']);
 
-    if (isImport && !sameFile) {
-      mockStrategy.push({
-        dependency: depName,
-        type: 'stub',
-        reason: 'Imported data type or value — minimal stub required',
-      });
-    } else if (sameFile) {
+    if (sameFile) {
+      if (TYPE_ONLY_KINDS.has(dep.kind)) continue;
       mockStrategy.push({
         dependency: depName,
         type: 'spy',
         reason: 'Same-file helper — spy to verify interaction',
       });
+    } else if (isImport) {
+      const modulePath = relativeModulePath(sym.filePath, dep.filePath);
+      mockStrategy.push({
+        dependency: depName,
+        type: 'stub',
+        reason: 'Imported data type or value — minimal stub required',
+        modulePath,
+      });
     } else {
+      const modulePath = relativeModulePath(sym.filePath, dep.filePath);
       mockStrategy.push({
         dependency: depName,
         type: 'mock',
         reason: 'External module dependency — mock to isolate unit under test',
+        modulePath,
       });
     }
   }

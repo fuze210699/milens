@@ -213,12 +213,13 @@ function generateTestCode(plan: TestPlan, framework: string, srcFile: string, ex
       lines.push(...importLines);
     }
 
-    // Mock imports
+    // Mock imports — only for cross-file dependencies with a real module path
     for (const m of plan.mockStrategy) {
+      if (!m.modulePath) continue;
       if (framework === 'vitest') {
-        lines.push(`vi.mock('${m.dependency}');`);
+        lines.push(`vi.mock('${m.modulePath}');`);
       } else if (framework === 'jest') {
-        lines.push(`jest.mock('${m.dependency}');`);
+        lines.push(`jest.mock('${m.modulePath}');`);
       }
     }
 

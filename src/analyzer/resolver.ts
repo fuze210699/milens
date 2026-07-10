@@ -5,6 +5,20 @@ import type { CodeSymbol, SymbolLink, RawImport, RawCall, RawHeritage, RawReExpo
 // "No link is better than a wrong link"
 const MIN_LINK_CONFIDENCE = 0.5;
 
+// Common JS/TS built-in types and globals — extend/implements these means external heritage
+const BUILTIN_TYPES = new Set([
+  'Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError',
+  'Array', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Promise', 'Date', 'RegExp',
+  'String', 'Number', 'Boolean', 'Object', 'Function', 'Symbol', 'BigInt',
+  'ArrayBuffer', 'DataView', 'Int8Array', 'Uint8Array', 'Uint8ClampedArray',
+  'Int16Array', 'Uint16Array', 'Int32Array', 'Uint32Array', 'Float32Array',
+  'Float64Array', 'BigInt64Array', 'BigUint64Array',
+  'EventTarget', 'AbortController', 'AbortSignal',
+  'URL', 'URLSearchParams', 'FormData', 'Blob', 'File', 'Response', 'Request',
+  'Headers', 'ReadableStream', 'WritableStream', 'TransformStream',
+  'TextEncoder', 'TextDecoder', 'EventEmitter',
+]);
+
 interface ResolutionInput {
   symbolsByFile: Map<string, CodeSymbol[]>;
   allSymbols: CodeSymbol[];
@@ -28,6 +42,8 @@ export interface ResolutionResult {
   unresolvedCalls: number;
   externalImports: number;
   externalCalls: number;
+  /** External heritage parents (symbols not defined in project, e.g. `Error`, `CanActivate`) */
+  externalSymbols: CodeSymbol[];
 }
 
 export function resolveLinks(input: ResolutionInput): SymbolLink[] {
@@ -37,6 +53,7 @@ export function resolveLinks(input: ResolutionInput): SymbolLink[] {
 
 export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult {
   const links: SymbolLink[] = [];
+  const externalSymbols: CodeSymbol[] = [];
   const symbolByName = buildNameIndex(input.allSymbols);
   const symbolById = buildIdIndex(input.allSymbols);
   let unresolvedImports = 0;
@@ -504,18 +521,40 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
   for (const h of input.heritage) {
     const children = symbolByName.get(h.childName);
     const parents = symbolByName.get(h.parentName);
-    if (!children || !parents) continue;
+
+    if (!children) continue;
 
     const child = children.find(s => s.filePath === h.filePath) ?? children[0];
+    if (!child) continue;
 
-    // Prefer imported parent > same-file parent > first match
-    const importedFile = importedNamesPerFile.get(h.filePath)?.get(h.parentName);
-    const parent = (importedFile ? parents.find(s => s.filePath === importedFile) : undefined)
-      ?? parents.find(s => s.filePath === h.filePath)
-      ?? parents[0];
+    if (parents && parents.length > 0) {
+      // Prefer imported parent > same-file parent > first match
+      const importedFile = importedNamesPerFile.get(h.filePath)?.get(h.parentName);
+      const parent = (importedFile ? parents.find(s => s.filePath === importedFile) : undefined)
+        ?? parents.find(s => s.filePath === h.filePath)
+        ?? parents[0];
 
-    if (child && parent) {
-      links.push(makeLink(child.id, parent.id, h.type, 0.95, h.line));
+      if (parent) {
+        links.push(makeLink(child.id, parent.id, h.type, 0.95, h.line));
+      }
+    } else {
+      // Parent not found in project symbols — check if it comes from an external import
+      const extNames = externalNamesPerFile.get(h.filePath);
+      const isExternal = extNames?.has(h.parentName) || BUILTIN_TYPES.has(h.parentName);
+      if (isExternal) {
+        const extId = `#external:${h.parentName}`;
+        const parentKind = h.type === 'implements' ? 'interface' : 'class';
+        externalSymbols.push({
+          id: extId,
+          name: h.parentName,
+          kind: parentKind,
+          filePath: '(external)',
+          startLine: 0,
+          endLine: 0,
+          exported: true,
+        });
+        links.push(makeLink(child.id, extId, h.type, 0.7, h.line));
+      }
     }
   }
 
@@ -557,7 +596,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     }
   }
 
-  return { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls, externalImports, externalCalls };
+  return { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls, externalImports, externalCalls, externalSymbols };
 }
 
 // ── Receiver-aware call narrowing ──

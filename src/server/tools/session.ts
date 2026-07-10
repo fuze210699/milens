@@ -26,9 +26,10 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
       agent: z.string().optional(),
       session_id: z.string().optional(),
       confidence: z.number().optional().default(0.5),
+      repo: z.string().optional().describe('Repository root path (for multi-repo workspaces)'),
     },
-    async ({ symbol, key, value, agent, session_id, confidence }) => {
-      const { db } = getDb();
+    async ({ symbol, key, value, agent, session_id, confidence, repo }) => {
+      const { db } = getDb(repo);
       const store = new AnnotationStore(db.connection);
       const symbolHash = store.getCurrentSymbolHash(symbol) ?? undefined;
       const ann = store.annotate(symbol, key as any, value, { agent, sessionId: session_id, confidence, symbolHash });
@@ -43,9 +44,10 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
       symbol: z.string().optional(), key: z.enum(['note', 'bug', 'security', 'architecture', 'workflow', 'test', 'dependency', 'refactor']).optional(),
       agent: z.string().optional(), limit: z.number().optional().default(50),
       history: z.boolean().optional().default(false).describe('Include evolution log entries showing previous values before overwrites'),
+      repo: z.string().optional().describe('Repository root path (for multi-repo workspaces)'),
     },
-    async ({ symbol, key, agent, limit, history }) => {
-      const { db } = getDb();
+    async ({ symbol, key, agent, limit, history, repo }) => {
+      const { db } = getDb(repo);
       const store = new AnnotationStore(db.connection);
       const results = store.recall({ symbol, key, agent, limit });
       if (results.length === 0) return { content: [{ type: 'text' as const, text: 'No annotations found.' }] };
@@ -97,9 +99,10 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
   server.tool(
     'session_context',
     'Get metadata about a session: annotations, tool calls, duration.',
-    { session_id: z.string() },
-    async ({ session_id }) => {
-      const { db, root } = getDb();
+    { session_id: z.string(),
+      repo: z.string().optional().describe('Repository root path (for multi-repo workspaces)') },
+    async ({ session_id, repo }) => {
+      const { db, root } = getDb(repo);
       const store = new AnnotationStore(db.connection);
       const ctx = store.sessionContext(session_id);
       if (!ctx.session) return { content: [{ type: 'text' as const, text: `Session "${session_id}" not found.` }] };
@@ -126,9 +129,10 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
   server.tool(
     'session_end',
     'End a session and record its stats. Shows audit trail: which symbols were safety-checked vs total edit operations. Use at the end of every session.',
-    { session_id: z.string(), status: z.enum(['completed', 'failed']).optional().default('completed') },
-    async ({ session_id, status }) => {
-      const { db, root, dbPath } = getDb();
+    { session_id: z.string(), status: z.enum(['completed', 'failed']).optional().default('completed'),
+      repo: z.string().optional().describe('Repository root path (for multi-repo workspaces)') },
+    async ({ session_id, status, repo }) => {
+      const { db, root, dbPath } = getDb(repo);
       const store = new AnnotationStore(db.connection);
       const summary = store.sessionEnd(session_id, status);
 
@@ -167,9 +171,10 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
     {
       from_session: z.string(), to_agent: z.string(),
       context: z.string().describe('Summary of what was done, key decisions, and caveats for the next agent'),
+      repo: z.string().optional().describe('Repository root path (for multi-repo workspaces)'),
     },
-    async ({ from_session, to_agent, context }) => {
-      const { db } = getDb();
+    async ({ from_session, to_agent, context, repo }) => {
+      const { db } = getDb(repo);
       const store = new AnnotationStore(db.connection);
       const result = store.handoff(from_session, to_agent, context);
       return { content: [{ type: 'text' as const, text: `Handoff complete.\nNew session: ${result.newSessionId}\nAgent: ${to_agent}\nAnnotations recorded in prior session: ${result.annotationsCopied} (retrievable via recall())` }] };

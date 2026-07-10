@@ -1269,14 +1269,18 @@ export function createMcpServer(rootPath?: string): McpServer {
         if (ancestors.length > 0) {
           lines.push('extends/implements:');
           for (const { symbol: a, depth } of ancestors) {
-            lines.push(`  ${'↑'.repeat(depth)} ${fmtSymbol(a)}`);
+            const isExternal = a.filePath === '(external)';
+            const label = isExternal ? ` ${fmtSymbol(a)} (external)` : ` ${fmtSymbol(a)}`;
+            lines.push(`  ${'↑'.repeat(depth)}${label}`);
           }
         }
 
         if (descendants.length > 0) {
           lines.push('extended/implemented by:');
           for (const { symbol: d, depth } of descendants) {
-            lines.push(`  ${'↓'.repeat(depth)} ${fmtSymbol(d)}`);
+            const isExternal = d.filePath === '(external)';
+            const label = isExternal ? ` ${fmtSymbol(d)} (external)` : ` ${fmtSymbol(d)}`;
+            lines.push(`  ${'↓'.repeat(depth)}${label}`);
           }
         }
 

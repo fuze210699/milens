@@ -350,6 +350,15 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     perFileMroStrategy,
   });
   const links = resolution.links;
+  if (resolution.externalSymbols.length > 0) {
+    const seenExternal = new Set<string>();
+    for (const es of resolution.externalSymbols) {
+      if (!seenExternal.has(es.id)) {
+        seenExternal.add(es.id);
+        allSymbols.push(es);
+      }
+    }
+  }
   if (opts.verbose) {
     console.error(`[link] Resolved ${links.length} relationships`);
     if (resolution.unresolvedImports > 0 || resolution.unresolvedCalls > 0) {

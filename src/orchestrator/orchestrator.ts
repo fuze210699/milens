@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, existsSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { Database } from '../store/db.js';
 import { reviewPr } from '../analyzer/review.js';
@@ -175,14 +175,19 @@ export class Orchestrator {
     this.changedFiles.clear();
   }
 
-  /** Persist all in-memory snapshots to .milens/snapshots/ */
+  /** Persist all in-memory snapshots to .milens/snapshots/ — one stable file per symbol */
   persistSnapshots(): string {
     const dir = join(this.config.rootPath, '.milens', 'snapshots');
     mkdirSync(dir, { recursive: true });
     let count = 0;
     for (const [name, snap] of this.snapshots) {
-      const fileName = `snapshot_${name.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.json`;
-      writeFileSync(join(dir, fileName), JSON.stringify(snap, null, 2), 'utf-8');
+      const fileName = `snapshot_${name.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+      const filePath = join(dir, fileName);
+      const existing = existsSync(filePath) ? readFileSync(filePath, 'utf-8') : '';
+      const updated = JSON.stringify(snap, null, 2);
+      if (existing !== updated) {
+        writeFileSync(filePath, updated, 'utf-8');
+      }
       count++;
     }
     this.cleanupOldSnapshots(dir, 10);
@@ -211,8 +216,11 @@ export class Orchestrator {
     try {
       const files = readdirSync(dir)
         .filter(f => f.startsWith('snapshot_') && f.endsWith('.json'))
-        .sort()
-        .reverse();
+        .sort((a, b) => {
+          const mtA = statSync(join(dir, a)).mtimeMs;
+          const mtB = statSync(join(dir, b)).mtimeMs;
+          return mtB - mtA;
+        });
       for (let i = keep; i < files.length; i++) {
         try { unlinkSync(join(dir, files[i])); } catch {}
       }

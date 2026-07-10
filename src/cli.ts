@@ -240,11 +240,13 @@ program
   .description('Show index status')
   .option('-p, --path <path>', 'Repository root path', '.')
   .action(async (opts) => {
+    const { existsSync } = await import('node:fs');
     const { Database } = await import('./store/db.js');
     const { RepoRegistry } = await import('./store/registry.js');
     const reg = new RepoRegistry();
     const entry = reg.findByRoot(resolve(opts.path));
     if (!entry) { console.log('Not indexed.'); return; }
+    if (!existsSync(entry.dbPath)) { console.log(`Not indexed. Run \`milens analyze\` first.\n(Registry entry stale — directory may have been deleted: ${entry.rootPath})`); return; }
     const db = new Database(entry.dbPath);
     const stats = db.getStats();
     console.log(`Repository: ${entry.rootPath}`);
@@ -1316,17 +1318,17 @@ program
     }
 
     console.log('Step 2/4: Generating AGENTS.md...');
+    let db: any = null;
     try {
       const dbPath = new RepoRegistry().findDbPath(root);
       if (dbPath) {
-        const db = new Database(dbPath);
+        db = new Database(dbPath);
         const { generateAgentsMd } = await import('./agents-md.js');
         const agentsMd = generateAgentsMd(db, root);
         const { writeFileSync, mkdirSync, existsSync } = await import('node:fs');
         if (!existsSync(root)) mkdirSync(root, { recursive: true });
         writeFileSync(resolve(root, 'AGENTS.md'), agentsMd);
         console.log('  ✓ AGENTS.md created');
-        db.close();
       }
     } catch (e: any) {
       console.log(`  ⚠ AGENTS.md generation skipped: ${e.message}`);
@@ -1335,30 +1337,43 @@ program
     if (opts.profile !== 'minimal') {
       console.log('Step 3/4: Installing skill files...');
       try {
-        const { cpSync, existsSync, mkdirSync } = await import('node:fs');
-        const { join: pathJoin } = await import('node:path');
-        const { fileURLToPath } = await import('node:url');
-        const skillSrc = pathJoin(resolve(fileURLToPath(import.meta.url), '..', '..'), '.agents', 'skills');
-        const skillDst = pathJoin(root, '.agents', 'skills');
-        if (existsSync(skillSrc)) {
-          if (!existsSync(skillDst)) mkdirSync(skillDst, { recursive: true });
-          cpSync(skillSrc, skillDst, { recursive: true });
-          console.log('  ✓ Skill files installed');
+        if (db) {
+          const { generateSkills } = await import('./skills.js');
+          const result = generateSkills(db, root, ['agents']);
+          console.log(`  ✓ Generated ${result.count} skill files`);
+          for (const d of result.dirs) console.log(`    ${d}`);
         } else {
-          console.log('  ⚠ Skill template not found (run from milens repo)');
+          console.log('  ⚠ Skills skipped: no database available (run analyze first)');
         }
       } catch (e: any) {
         console.log(`  ⚠ Skill install skipped: ${e.message}`);
       }
     }
 
+    if (db) db.close();
+
     if (opts.profile === 'full' || (opts.with && opts.with.includes('hooks'))) {
       console.log('Step 4/4: Installing git hooks...');
       try {
-        const { writeFileSync, existsSync, mkdirSync, chmodSync } = await import('node:fs');
+        const { writeFileSync, existsSync, mkdirSync, chmodSync, readFileSync } = await import('node:fs');
         const hooksDir = resolve(root, '.git', 'hooks');
         if (!existsSync(hooksDir)) {
           mkdirSync(hooksDir, { recursive: true });
+        }
+
+        const hookPath = resolve(hooksDir, 'pre-commit');
+        // Check for existing non-milens hook (e.g. Husky) before overwriting
+        if (existsSync(hookPath)) {
+          const existing = readFileSync(hookPath, 'utf-8');
+          if (!existing.includes('milens') && !existing.includes('Auto-installed by milens')) {
+            const isHusky = existing.includes('husky') || existing.includes('.husky');
+            if (isHusky) {
+              console.log('  ⚠ Skipped pre-commit hook — Husky hook already present (.husky/). Install manually with "milens hooks install".');
+            } else {
+              console.log('  ⚠ Skipped pre-commit hook — existing hook found. Install manually with "milens hooks install".');
+            }
+            return;
+          }
         }
 
         const preCommitContent = `#!/bin/bash
@@ -1424,6 +1439,21 @@ echo "Milens: Done."
         }
       }
     }
+
+    // Ensure .milens/ is gitignored
+    try {
+      const { existsSync, readFileSync, appendFileSync, writeFileSync } = await import('node:fs');
+      const gitignorePath = resolve(root, '.gitignore');
+      const entry = '\n# milens code intelligence index (local, machine-specific)\n.milens/\n';
+      if (existsSync(gitignorePath)) {
+        const content = readFileSync(gitignorePath, 'utf-8');
+        if (!content.includes('.milens')) {
+          appendFileSync(gitignorePath, entry);
+        }
+      } else {
+        writeFileSync(gitignorePath, entry.trimStart());
+      }
+    } catch { /* best-effort */ }
 
     console.log(`\n✓ Milens ${opts.profile} profile bootstrapped for ${root}`);
     console.log('Next steps:');

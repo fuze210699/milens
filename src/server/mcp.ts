@@ -1161,7 +1161,8 @@ export function createMcpServer(rootPath?: string): McpServer {
       }
 
       if (dead.length > 0) {
-        lines.push(`${dead.length} unreferenced exported symbols (code-level only — verify with grep before removing):\n`);
+        const cappedNote = dead.length >= limit ? ` (showing ${dead.length}, may be more — increase limit to see all)` : '';
+        lines.push(`${dead.length} unreferenced exported symbols (code-level only — verify with grep before removing)${cappedNote}:\n`);
         for (const sym of dead) {
           lines.push(fmtSymbol(sym));
         }
@@ -1348,7 +1349,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       // 5. Unresolved warning (only for internal)
       const unresolved = db.getUnresolvedStats();
       if (unresolved.imports > 0 || unresolved.calls > 0) {
-        sections.push(`⚠ index has ${unresolved.imports} unresolved internal imports, ${unresolved.calls} unresolved internal calls — callers list may be incomplete`);
+        sections.push(`⚠ this repo's index has ${unresolved.imports} unresolved internal imports, ${unresolved.calls} unresolved internal calls repo-wide — this symbol's callers list may be incomplete`);
       }
 
       // 6. Test coverage for this symbol
@@ -1467,7 +1468,7 @@ export function createMcpServer(rootPath?: string): McpServer {
       // Unresolved warning
       const unresolved = db.getUnresolvedStats();
       if (unresolved.imports > 0 || unresolved.calls > 0) {
-        sections.push(`⚠ index has ${unresolved.imports} unresolved internal imports, ${unresolved.calls} unresolved internal calls — callers list may be incomplete`);
+        sections.push(`⚠ this repo's index has ${unresolved.imports} unresolved internal imports, ${unresolved.calls} unresolved internal calls repo-wide — this symbol's callers list may be incomplete`);
       }
 
       return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
@@ -1544,7 +1545,7 @@ export function createMcpServer(rootPath?: string): McpServer {
     'Detect framework routes/endpoints and map them to handler symbols. Scans for Express, FastAPI, NestJS, Flask, Go HTTP, PHP, Rails patterns.',
     {
       repo: z.string().optional(),
-      framework: z.string().optional().describe('Filter by framework (express, fastapi, nestjs, flask, go, php, rails). Default: auto-detect all.'),
+      framework: z.string().optional().describe('Filter by framework (express, fastapi, nestjs, nestjs-gateway, flask, go, php, rails). Default: auto-detect all.'),
       limit: z.number().optional().default(200).describe('Max routes to display. Internal search always scans up to 500 matches per framework, so a low limit only affects display truncation, not detection accuracy.'),
     },
     async ({ repo, framework, limit }) => {
@@ -1559,6 +1560,7 @@ export function createMcpServer(rootPath?: string): McpServer {
         { name: 'fastapi', pattern: /@(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
         { name: 'flask', pattern: /@(?:app|bp|blueprint)\.route\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.py' },
         { name: 'nestjs', pattern: /@(Get|Post|Put|Patch|Delete)\s*\(\s*['"]?([^'")]*?)['"]?\s*\)/, fileGlob: '**/*.ts' },
+        { name: 'nestjs-gateway', pattern: /@SubscribeMessage\s*\(\s*['"]([^'"]+)['"]\s*\)/, fileGlob: '**/*.ts' },
         { name: 'go', pattern: /\b(?:mux|router|http)\.(HandleFunc|Handle|Get|Post|Put|Delete)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.go' },
         { name: 'php', pattern: /Route::(get|post|put|patch|delete|any)\s*\(\s*['"]([^'"]+)['"]/, fileGlob: '**/*.php' },
         { name: 'rails', pattern: /\b(get|post|put|patch|delete|resources?|root)\s+['"]([^'"]+)['"]/, fileGlob: '**/*.rb' },
@@ -1569,7 +1571,7 @@ export function createMcpServer(rootPath?: string): McpServer {
         : routePatterns;
 
       if (activePatterns.length === 0) {
-        return { content: [{ type: 'text' as const, text: `Unknown framework "${framework}". Available: express, fastapi, nestjs, flask, go, php, rails` }] };
+        return { content: [{ type: 'text' as const, text: `Unknown framework "${framework}". Available: express, fastapi, nestjs, nestjs-gateway, flask, go, php, rails` }] };
       }
 
       interface RouteMatch { framework: string; method: string; path: string; file: string; line: number; handler?: string }
@@ -1593,8 +1595,8 @@ export function createMcpServer(rootPath?: string): McpServer {
             } catch { /* can't read file — skip filtering */ }
           }
 
-          const method = match[1].toUpperCase();
-          const path = match[2] || '/';
+          const method = rp.name === 'nestjs-gateway' ? 'WS' : match[1].toUpperCase();
+          const path = rp.name === 'nestjs-gateway' ? match[1] : (match[2] || '/');
 
           // Try to find the handler symbol on this line or nearby
           const fileSymbols = db.getSymbolsByFile(m.file);

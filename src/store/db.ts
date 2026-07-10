@@ -307,13 +307,28 @@ export class Database {
   }
 
   findDeadCode(kind?: string, limit = 50): CodeSymbol[] {
-    const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE 'app/%/layout.%'
-      AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE 'app/layout.%'
-      AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE 'jest.config.%'
-      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE 'src/routes/+layout.%'
+    // Next.js/SvelteKit/api conventions are matched both at the repo root AND nested
+    // under a package subdirectory (e.g. monorepos with frontend/app/... instead of
+    // app/...) — a root-only 'app/%' pattern silently misses every monorepo layout.
+    const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE '%/app/%/page.%'
+      AND s.file_path NOT LIKE 'app/%/layout.%' AND s.file_path NOT LIKE '%/app/%/layout.%'
+      AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE '%/app/page.%'
+      AND s.file_path NOT LIKE 'app/layout.%' AND s.file_path NOT LIKE '%/app/layout.%'
+      AND s.file_path NOT LIKE 'app/%/loading.%' AND s.file_path NOT LIKE '%/app/%/loading.%'
+      AND s.file_path NOT LIKE 'app/%/error.%' AND s.file_path NOT LIKE '%/app/%/error.%'
+      AND s.file_path NOT LIKE 'app/%/not-found.%' AND s.file_path NOT LIKE '%/app/%/not-found.%'
+      AND s.file_path NOT LIKE 'app/%/template.%' AND s.file_path NOT LIKE '%/app/%/template.%'
+      AND s.file_path NOT LIKE 'app/%/global-error.%' AND s.file_path NOT LIKE '%/app/%/global-error.%'
+      AND s.file_path NOT LIKE 'app/%/default.%' AND s.file_path NOT LIKE '%/app/%/default.%'
+      AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE '%/app/api/%/route.%'
+      AND s.file_path NOT LIKE 'app/%/route.%' AND s.file_path NOT LIKE '%/app/%/route.%'
+      AND s.file_path NOT LIKE 'jest.config.%'
+      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE '%/src/routes/+page.%'
+      AND s.file_path NOT LIKE 'src/routes/+layout.%' AND s.file_path NOT LIKE '%/src/routes/+layout.%'
       AND s.file_path NOT LIKE '%/alembic/versions/%'
       AND s.file_path NOT LIKE '%/migrations/%'
-      AND s.file_path NOT LIKE 'api/%'`;
+      AND s.file_path NOT LIKE 'api/%' AND s.file_path NOT LIKE '%/api/%'
+      AND NOT ((s.file_path LIKE 'app/%' OR s.file_path LIKE '%/app/%') AND s.name IN ('generateStaticParams', 'metadata', 'generateMetadata', 'viewport', 'generateViewport', 'revalidate', 'dynamic', 'fetchCache', 'runtime', 'preferredRegion', 'maxDuration'))`;
     // Vue SFC root components imported via <Component/> template tags get their
     // import link on _top [module], not on the [class] root symbol. Treat the class
     // as referenced if its file's _top module has incoming links from other files.
@@ -349,13 +364,28 @@ export class Database {
    * findDeadCode (which requires zero incoming links of any kind).
    */
   findTestOnlyReferenced(limit = 50): CodeSymbol[] {
-    const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE 'app/%/layout.%'
-      AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE 'app/layout.%'
-      AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE 'jest.config.%'
-      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE 'src/routes/+layout.%'
+    // Next.js/SvelteKit/api conventions are matched both at the repo root AND nested
+    // under a package subdirectory (e.g. monorepos with frontend/app/... instead of
+    // app/...) — a root-only 'app/%' pattern silently misses every monorepo layout.
+    const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE '%/app/%/page.%'
+      AND s.file_path NOT LIKE 'app/%/layout.%' AND s.file_path NOT LIKE '%/app/%/layout.%'
+      AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE '%/app/page.%'
+      AND s.file_path NOT LIKE 'app/layout.%' AND s.file_path NOT LIKE '%/app/layout.%'
+      AND s.file_path NOT LIKE 'app/%/loading.%' AND s.file_path NOT LIKE '%/app/%/loading.%'
+      AND s.file_path NOT LIKE 'app/%/error.%' AND s.file_path NOT LIKE '%/app/%/error.%'
+      AND s.file_path NOT LIKE 'app/%/not-found.%' AND s.file_path NOT LIKE '%/app/%/not-found.%'
+      AND s.file_path NOT LIKE 'app/%/template.%' AND s.file_path NOT LIKE '%/app/%/template.%'
+      AND s.file_path NOT LIKE 'app/%/global-error.%' AND s.file_path NOT LIKE '%/app/%/global-error.%'
+      AND s.file_path NOT LIKE 'app/%/default.%' AND s.file_path NOT LIKE '%/app/%/default.%'
+      AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE '%/app/api/%/route.%'
+      AND s.file_path NOT LIKE 'app/%/route.%' AND s.file_path NOT LIKE '%/app/%/route.%'
+      AND s.file_path NOT LIKE 'jest.config.%'
+      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE '%/src/routes/+page.%'
+      AND s.file_path NOT LIKE 'src/routes/+layout.%' AND s.file_path NOT LIKE '%/src/routes/+layout.%'
       AND s.file_path NOT LIKE '%/alembic/versions/%'
       AND s.file_path NOT LIKE '%/migrations/%'
-      AND s.file_path NOT LIKE 'api/%'`;
+      AND s.file_path NOT LIKE 'api/%' AND s.file_path NOT LIKE '%/api/%'
+      AND NOT ((s.file_path LIKE 'app/%' OR s.file_path LIKE '%/app/%') AND s.name IN ('generateStaticParams', 'metadata', 'generateMetadata', 'viewport', 'generateViewport', 'revalidate', 'dynamic', 'fetchCache', 'runtime', 'preferredRegion', 'maxDuration'))`;
     // Get ALL exported symbols that HAVE at least one incoming link (not caught by findDeadCode).
     // No SQL LIMIT here: the JS post-filter below narrows this down to test-only-referenced
     // symbols, which can be a small minority of low-heat candidates — applying `limit` before
@@ -561,7 +591,15 @@ export class Database {
       if (incoming.length === 0) {
         // Reached an entrypoint — save this path
         // _top modules represent file-level entrypoints (e.g., top-level code execution)
-        if (sym?.exported || (sym?.kind === 'module' && sym?.name === '_top')) {
+        // Class methods: if the method is contained by an exported class, treat it as
+        // a de facto entrypoint (framework-invoked handlers like NestJS controllers).
+        const isExportedClassMember = !sym?.exported && sym?.kind === 'method' &&
+          this.getIncomingLinks(currentId).some(l => {
+            if (l.type !== 'contains') return false;
+            const containingClass = this.findSymbolById(l.fromId);
+            return containingClass?.exported === true;
+          });
+        if (sym?.exported || (sym?.kind === 'module' && sym?.name === '_top') || isExportedClassMember) {
           paths.push({ path: [...currentPath] });
         }
         visited.delete(currentId);

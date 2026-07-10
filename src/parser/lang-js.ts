@@ -9,6 +9,12 @@ const spec: LangSpec = {
   mroStrategy: 'first-wins',
   importSemantics: 'named',
   isExported: () => false, // handled by exports query (export keyword)
+  filterCallee(callee: string, defNodeType: string): boolean {
+    if ((defNodeType === 'jsx_self_closing_element' || defNodeType === 'jsx_opening_element') && /^[a-z]/.test(callee)) {
+      return false;
+    }
+    return true;
+  },
   queries: {
     functions: `[
       (function_declaration name: (identifier) @name) @def

@@ -45,6 +45,20 @@ function verifyLocation(root: string, f: Finding): { ok: true } | { ok: false; r
   return { ok: true };
 }
 
+/** Escape XML special chars in free-text content so raw tag-like substrings
+ *  (e.g. a finding describing `<button>` JSX elements) can't be mistaken for
+ *  real XML markup by a strict parser reading the <report>/<finding> shell.
+ *  Markdown renderers HTML-decode entities on display, so `` `<button>` ``
+ *  still shows correctly — this only protects the underlying structure. */
+function escapeXmlText(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Same as escapeXmlText but also escapes `"` for safe use inside a double-quoted attribute. */
+function escapeXmlAttr(s: string): string {
+  return escapeXmlText(s).replace(/"/g, '&quot;');
+}
+
 function slugify(title: string): string {
   return title
     .toLowerCase()
@@ -65,11 +79,11 @@ function renderReport(opts: {
   const { title, root, method, verified, rejected, notes, fixOrder } = opts;
   const lines: string[] = [];
 
-  lines.push(`<report title="${title}" repo="${root}" generated="${new Date().toISOString()}">`);
+  lines.push(`<report title="${escapeXmlAttr(title)}" repo="${escapeXmlAttr(root)}" generated="${new Date().toISOString()}">`);
   lines.push('');
   lines.push('## Summary');
   lines.push('');
-  if (method) lines.push(method.trim());
+  if (method) lines.push(escapeXmlText(method.trim()));
   lines.push('');
   if (verified.length > 0) {
     lines.push('| ID | Severity | Location | Status |');
@@ -83,23 +97,23 @@ function renderReport(opts: {
   lines.push('');
 
   for (const f of verified) {
-    lines.push(`<finding id="${f.id}" severity="${f.severity}" status="${f.status}" file="${f.file}" line="${f.line}">`);
+    lines.push(`<finding id="${escapeXmlAttr(f.id)}" severity="${f.severity}" status="${escapeXmlAttr(f.status)}" file="${escapeXmlAttr(f.file)}" line="${f.line}">`);
     lines.push('');
-    lines.push(`### ${f.title}`);
+    lines.push(`### ${escapeXmlText(f.title)}`);
     lines.push('');
     lines.push('**Root cause**');
-    lines.push(f.root_cause.trim());
+    lines.push(escapeXmlText(f.root_cause.trim()));
     lines.push('');
     lines.push('**Repro**');
-    lines.push(f.repro.trim());
+    lines.push(escapeXmlText(f.repro.trim()));
     lines.push('');
     if (f.impact) {
       lines.push('**Impact**');
-      lines.push(f.impact.trim());
+      lines.push(escapeXmlText(f.impact.trim()));
       lines.push('');
     }
     lines.push('**Fix**');
-    lines.push(f.fix.trim());
+    lines.push(escapeXmlText(f.fix.trim()));
     lines.push('');
     lines.push('</finding>');
     lines.push('');
@@ -111,7 +125,7 @@ function renderReport(opts: {
     lines.push('These findings were dropped from the report above because their `file:line` could not be verified against the repo. Fix the location and resubmit if they are real.');
     lines.push('');
     for (const r of rejected) {
-      lines.push(`- **${r.finding.id}** (${r.finding.title}) — claimed \`${r.finding.file}:${r.finding.line}\`: ${r.reason}`);
+      lines.push(`- **${escapeXmlText(r.finding.id)}** (${escapeXmlText(r.finding.title)}) — claimed \`${r.finding.file}:${r.finding.line}\`: ${escapeXmlText(r.reason)}`);
     }
     lines.push('');
   }
@@ -119,14 +133,14 @@ function renderReport(opts: {
   if (notes && notes.length > 0) {
     lines.push('## Notes');
     lines.push('');
-    for (const n of notes) lines.push(`- ${n}`);
+    for (const n of notes) lines.push(`- ${escapeXmlText(n)}`);
     lines.push('');
   }
 
   if (fixOrder) {
     lines.push('## Fix order');
     lines.push('');
-    lines.push(fixOrder.trim());
+    lines.push(escapeXmlText(fixOrder.trim()));
     lines.push('');
   }
 

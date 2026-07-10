@@ -71,6 +71,52 @@ describe('generate_findings_report tool', () => {
     expect(content).not.toContain('```json');
   });
 
+  it('escapes raw angle brackets and ampersands in free-text fields so the file stays well-formed XML', async () => {
+    const result = await handler({
+      repo: TEST_ROOT,
+      title: 'JSX <button> & <div> report',
+      findings: [{
+        id: 'BUG-5',
+        severity: 'critical',
+        title: 'Bug involving <button> and <Foo> tags',
+        file: 'src/foo.ts',
+        line: 1,
+        root_cause: 'Confuses <button> with <MessageBubble> because A & B collide.',
+        repro: 'Render <div> then check <a> output.',
+        fix: 'Escape <tags> properly.',
+        impact: 'Breaks <form> rendering & data flow.',
+      }],
+      notes: ['Watch out for <script> in notes too.'],
+      fix_order: 'Fix <button> handling first & then <div>.',
+    });
+
+    const reportPath = (result.content[0].text as string).match(/Report written: (.+)/)?.[1]!;
+    const content = readFileSync(reportPath, 'utf-8');
+
+    // No raw, unescaped tag-like or bare-ampersand text should appear anywhere —
+    // every literal `<`, `>`, `&` from a free-text field must be entity-escaped.
+    expect(content).not.toContain('<button>');
+    expect(content).not.toContain('<Foo>');
+    expect(content).not.toContain('<MessageBubble>');
+    expect(content).not.toContain('<div>');
+    expect(content).not.toContain('<a>');
+    expect(content).not.toContain('<form>');
+    expect(content).not.toContain('<script>');
+    expect(content).not.toContain(' A & B ');
+    expect(content).not.toContain('rendering & data');
+
+    // Real structural tags must remain untouched.
+    expect(content).toContain('<report title="JSX &lt;button&gt; &amp; &lt;div&gt; report"');
+    expect(content).toContain('<finding id="BUG-5"');
+    expect(content).toContain('</finding>');
+    expect(content).toContain('</report>');
+
+    // The escaped entities are present so the content is recoverable/renderable.
+    expect(content).toContain('&lt;button&gt;');
+    expect(content).toContain('&lt;Foo&gt;');
+    expect(content).toContain('A &amp; B');
+  });
+
   it('rejects a finding pointing at a nonexistent file', async () => {
     const result = await handler({
       repo: TEST_ROOT,

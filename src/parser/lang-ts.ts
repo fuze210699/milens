@@ -9,6 +9,12 @@ const spec: LangSpec = {
   mroStrategy: 'first-wins',
   importSemantics: 'named',
   isExported: () => false, // handled by exports query (export keyword)
+  filterCallee(callee: string, defNodeType: string): boolean {
+    if ((defNodeType === 'jsx_self_closing_element' || defNodeType === 'jsx_opening_element') && /^[a-z]/.test(callee)) {
+      return false;
+    }
+    return true;
+  },
   queries: {
     functions: `[
       (function_declaration name: (identifier) @name) @def
@@ -223,6 +229,24 @@ const spec: LangSpec = {
           value: (call_expression function: (member_expression object: (_) @receiver property: (property_identifier) @callee))
         )
       )
+    ]`,
+    // Names that can only ever be locally scoped — never a project symbol, import, or
+    // global — so a bare call to one of these should never be counted as "unresolved".
+    // Covers: any const/let/var declarator (including array/object destructuring, e.g.
+    // `const [x, setX] = useState()`, `const { onClose } = props`) and function/arrow
+    // parameters (plain or destructured), regardless of nesting depth.
+    localBindings: `[
+      (variable_declarator name: (identifier) @name)
+      (variable_declarator name: (array_pattern (identifier) @name))
+      (variable_declarator name: (object_pattern (shorthand_property_identifier_pattern) @name))
+      (variable_declarator name: (object_pattern (pair_pattern value: (identifier) @name)))
+      (required_parameter pattern: (identifier) @name)
+      (optional_parameter pattern: (identifier) @name)
+      (required_parameter pattern: (object_pattern (shorthand_property_identifier_pattern) @name))
+      (optional_parameter pattern: (object_pattern (shorthand_property_identifier_pattern) @name))
+      (required_parameter pattern: (object_pattern (pair_pattern value: (identifier) @name)))
+      (required_parameter pattern: (array_pattern (identifier) @name))
+      (catch_clause parameter: (identifier) @name)
     ]`,
   },
   resolveImport(raw, fromFile, root, aliases) {

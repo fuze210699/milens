@@ -134,9 +134,29 @@ function computeDomains(symbols: CodeSymbol[], links: SymbolLink[]): Map<string,
     else { parent.set(rb, ra); ufRank.set(ra, rankA + 1); }
   }
 
+  // Widely-shared "hub" files (e.g. a single http-client.ts imported by dozens of
+  // otherwise-unrelated feature modules) would otherwise bridge-merge every one of
+  // those unrelated modules into one giant cluster via transitive union-find, since
+  // each of them independently shares a strong edge with the hub. Detect such hubs
+  // by strong-edge degree (distinct files they're strongly linked to) and exclude
+  // them from acting as merge bridges — two files still cluster together if they
+  // link directly to each other, just not merely by both linking to the same hub.
+  const strongEdgesPerFile = new Map<string, Set<string>>();
+  for (const [key, weight] of edgeWeights) {
+    if (weight < 2) continue;
+    const [a, b] = key.split('::');
+    if (!strongEdgesPerFile.has(a)) strongEdgesPerFile.set(a, new Set());
+    if (!strongEdgesPerFile.has(b)) strongEdgesPerFile.set(b, new Set());
+    strongEdgesPerFile.get(a)!.add(b);
+    strongEdgesPerFile.get(b)!.add(a);
+  }
+  const HUB_DEGREE_THRESHOLD = 8;
+  const isHub = (f: string): boolean => (strongEdgesPerFile.get(f)?.size ?? 0) > HUB_DEGREE_THRESHOLD;
+
   for (const [key, weight] of edgeWeights) {
     if (weight >= 2) {
       const [a, b] = key.split('::');
+      if (isHub(a) || isHub(b)) continue;
       union(a, b);
     }
   }
@@ -150,9 +170,31 @@ function computeDomains(symbols: CodeSymbol[], links: SymbolLink[]): Map<string,
     clusters.set(root, arr);
   }
 
-  // Name each cluster by most common directory segment
+  // Name each cluster by most common directory segment.
+  // For generic leaf names (hooks, utils, etc.), prefer the parent segment when
+  // there's meaningful diversity — prevents collapsing unrelated feature modules.
+  const GENERIC_LEAVES = new Set(['hooks', 'utils', 'components', 'services', 'types', 'dto', 'models', 'controllers', 'gateways', 'routes', 'helpers', 'constants']);
+  // A cluster can still balloon to span most of the codebase via a long chain of
+  // pairwise-strong links through common infrastructure (shared guards, base
+  // modules, decorators) even when no single file is a high-degree hub — hub
+  // suppression alone doesn't catch chained over-merging. As a size-based safety
+  // net, refuse to treat an implausibly large cluster as one cohesive domain and
+  // fall back to naming each of its files independently by its own directory.
+  const MAX_CLUSTER_ABS = 40;
+  const MAX_CLUSTER_FRACTION = 0.15;
+  const oversizedThreshold = Math.max(MAX_CLUSTER_ABS, Math.floor(allFiles.size * MAX_CLUSTER_FRACTION));
   const zones = new Map<string, string>();
   for (const [, clusterFiles] of clusters) {
+    if (clusterFiles.length > oversizedThreshold) {
+      for (const f of clusterFiles) {
+        const dir = dirname(f).replace(/\\/g, '/');
+        const parts = dir.split('/').filter(Boolean);
+        const leaf = parts.length > 0 ? parts[parts.length - 1] : 'root';
+        const name = GENERIC_LEAVES.has(leaf) && parts.length >= 2 ? `${parts[parts.length - 2]}/${leaf}` : leaf;
+        zones.set(f, name);
+      }
+      continue;
+    }
     const dirCounts = new Map<string, number>();
     for (const f of clusterFiles) {
       const dir = dirname(f).replace(/\\/g, '/');
@@ -165,6 +207,27 @@ function computeDomains(symbols: CodeSymbol[], links: SymbolLink[]): Map<string,
     for (const [name, count] of dirCounts) {
       if (count > bestCount) { bestName = name; bestCount = count; }
     }
+
+    if (GENERIC_LEAVES.has(bestName) && clusterFiles.length > 1) {
+      const parentCounts = new Map<string, number>();
+      for (const f of clusterFiles) {
+        const dir = dirname(f).replace(/\\/g, '/');
+        const parts = dir.split('/').filter(Boolean);
+        if (parts.length >= 2 && parts[parts.length - 1] === bestName) {
+          const parentSeg = parts[parts.length - 2];
+          parentCounts.set(parentSeg, (parentCounts.get(parentSeg) ?? 0) + 1);
+        }
+      }
+      let bestParent = '';
+      let bestParentCount = 0;
+      for (const [p, c] of parentCounts) {
+        if (c > bestParentCount) { bestParent = p; bestParentCount = c; }
+      }
+      if (bestParent) {
+        bestName = `${bestParent}/${bestName}`;
+      }
+    }
+
     for (const f of clusterFiles) {
       zones.set(f, bestName);
     }

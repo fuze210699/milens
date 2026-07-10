@@ -73,9 +73,10 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
   server.tool(
     'session_start',
     'Start a new session. Returns a session ID to use with annotate, session_end, and handoff.',
-    { agent: z.string().describe('Agent name (e.g. vibe-coder, reviewer)') },
-    async ({ agent }) => {
-      const { db, root, dbPath } = getDb();
+    { agent: z.string().describe('Agent name (e.g. vibe-coder, reviewer)'),
+      repo: z.string().optional().describe('Repository root path (for multi-repo workspaces)') },
+    async ({ agent, repo }) => {
+      const { db, root, dbPath } = getDb(repo);
       const store = new AnnotationStore(db.connection);
       const sessionId = store.sessionStart(agent);
 

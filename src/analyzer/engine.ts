@@ -15,7 +15,7 @@ import { isTestFile } from '../utils.js';
 import { Database } from '../store/db.js';
 import { TfIdfProvider, EmbeddingStore, buildEmbeddingText } from '../store/vectors.js';
 import { ProgressPhase, type ProgressReporter } from '../ui/progress.js';
-import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, AnalysisStats } from '../types.js';
+import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, RawLocalBinding, AnalysisStats } from '../types.js';
 import type Parser from 'web-tree-sitter';
 import type { LangSpec } from '../parser/extract.js';
 
@@ -175,6 +175,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const allAssignmentBindings: RawAssignmentBinding[] = [];
   const allReturnTypes: RawReturnType[] = [];
   const allCallResultBindings: RawCallResultBinding[] = [];
+  const allLocalBindings: RawLocalBinding[] = [];
   const resolvedImportPaths = new Map<string, string>();
   const parsedFiles = new Set<string>();
   const importCache = new ImportResolveCache();
@@ -269,6 +270,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
           allAssignmentBindings.push(...result.assignmentBindings);
           allReturnTypes.push(...result.returnTypes);
           allCallResultBindings.push(...result.callResultBindings);
+          allLocalBindings.push(...result.localBindings);
 
           // Resolve import paths eagerly (cached)
           for (const imp of result.imports) {
@@ -342,6 +344,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     assignmentBindings: allAssignmentBindings,
     returnTypes: allReturnTypes,
     callResultBindings: allCallResultBindings,
+    localBindings: allLocalBindings,
     resolvedImportPaths,
     perFileImportSemantics,
     perFileMroStrategy,
@@ -399,6 +402,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   allAssignmentBindings.length = 0;
   allReturnTypes.length = 0;
   allCallResultBindings.length = 0;
+  allLocalBindings.length = 0;
   resolvedImportPaths.clear();
   importCache.clear();
 
@@ -548,7 +552,7 @@ async function parseFile(
   // HTML: extract inline <script> blocks, parse as JS, merge refs
   if (spec.id === 'html') {
     const result: ExtractionResult = {
-      symbols: [], imports: [], calls: [], heritage: [], exportedNames: new Set(), reExports: [], typeBindings: [], assignmentBindings: [], returnTypes: [], callResultBindings: [],
+      symbols: [], imports: [], calls: [], heritage: [], exportedNames: new Set(), reExports: [], typeBindings: [], assignmentBindings: [], returnTypes: [], callResultBindings: [], localBindings: [],
     };
 
     // Parse HTML with tree-sitter to get calls (class refs, etc.)
@@ -563,6 +567,7 @@ async function parseFile(
     result.assignmentBindings.push(...treeResult.assignmentBindings);
     result.returnTypes.push(...treeResult.returnTypes);
     result.callResultBindings.push(...treeResult.callResultBindings);
+    result.localBindings.push(...treeResult.localBindings);
     for (const n of treeResult.exportedNames) result.exportedNames.add(n);
 
     // Extract inline <script> blocks and parse as JS
@@ -592,6 +597,7 @@ async function parseFile(
       result.assignmentBindings.push(...extracted.assignmentBindings);
       result.returnTypes.push(...extracted.returnTypes);
       result.callResultBindings.push(...extracted.callResultBindings);
+      result.localBindings.push(...extracted.localBindings);
       for (const n of extracted.exportedNames) result.exportedNames.add(n);
     }
 

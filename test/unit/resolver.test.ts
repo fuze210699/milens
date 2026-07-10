@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveLinks, resolveLinksWithStats } from '../../src/analyzer/resolver.js';
-import type { CodeSymbol, RawImport, RawCall, RawHeritage, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding } from '../../src/types.js';
+import type { CodeSymbol, RawImport, RawCall, RawHeritage, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, RawLocalBinding } from '../../src/types.js';
 
 describe('Resolver', () => {
   const modelSymbols: CodeSymbol[] = [
@@ -820,10 +820,12 @@ describe('Resolver', () => {
     expect(result.unresolvedCalls).toBe(1);
   });
 
-  it('does not link a bare argument-position identifier to an unrelated globally-unique symbol', () => {
+  it('does not link a bare argument-position identifier to an unrelated globally-unique symbol, and does not count it as unresolved', () => {
     // Regression for `resolve(root, file)` / `pattern.exec(content)`-shaped false edges:
     // `root` here is a plain local variable passed as an argument, not a call — it must
     // not be linked just because it happens to be the only symbol named "root" in the repo.
+    // It also must not inflate `unresolvedCalls`: an isArgumentRef identifier was never a
+    // genuine callee reference, so declining to link it is correct, not a resolution failure.
     const unrelatedRootFile: CodeSymbol[] = [
       { id: 'scripts/update-docs.js#variable:root:14', name: 'root', kind: 'variable', filePath: 'scripts/update-docs.js', startLine: 14, endLine: 14, exported: true },
     ];
@@ -850,7 +852,7 @@ describe('Resolver', () => {
 
     const callLinks = result.links.filter(l => l.type === 'calls');
     expect(callLinks.length).toBe(0);
-    expect(result.unresolvedCalls).toBe(1);
+    expect(result.unresolvedCalls).toBe(0);
   });
 
   it('still links an argument-position identifier when it is imported into the caller file', () => {
@@ -1164,6 +1166,178 @@ describe('Resolver', () => {
       // And it must NOT have incorrectly linked to the unrelated same-named `has` function.
       const callLinks = result.links.filter(l => l.type === 'calls');
       expect(callLinks.some(l => l.toId === 'mcp.ts#function:has:2')).toBe(false);
+    });
+  });
+
+  describe('Receiver type from an external import (e.g. NestJS constructor-injected services)', () => {
+    it('classifies a receiver method call as external when the receiver\'s own declared type came from an external import, even when the method name collides with an unrelated project symbol', () => {
+      const callerSymbols: CodeSymbol[] = [
+        { id: 'auth.controller.ts#class:AuthController:1', name: 'AuthController', kind: 'class', filePath: 'auth.controller.ts', startLine: 1, endLine: 30, exported: true },
+        { id: 'auth.controller.ts#method:login:10', name: 'login', kind: 'method', filePath: 'auth.controller.ts', startLine: 10, endLine: 15, exported: false, parentId: 'auth.controller.ts#class:AuthController:1' },
+      ];
+      // An unrelated project-wide `get` function — proves classification depends on the
+      // *receiver's* import origin, not merely on whether the callee name is unique.
+      const unrelatedGet: CodeSymbol[] = [
+        { id: 'other.ts#function:get:1', name: 'get', kind: 'function', filePath: 'other.ts', startLine: 1, endLine: 3, exported: true },
+      ];
+
+      const imports: RawImport[] = [{
+        filePath: 'auth.controller.ts',
+        modulePath: '@nestjs/config',
+        names: [{ name: 'ConfigService' }],
+        isDefault: false,
+        isWildcard: false,
+        line: 1,
+      }];
+
+      const typeBindings: RawTypeBinding[] = [{
+        filePath: 'auth.controller.ts',
+        variableName: 'configService',
+        typeName: 'ConfigService',
+        line: 5,
+        scope: 'auth.controller.ts#class:AuthController:1',
+      }];
+
+      const calls: RawCall[] = [{
+        filePath: 'auth.controller.ts',
+        enclosingSymbolId: 'auth.controller.ts#method:login:10',
+        calleeName: 'get',
+        receiver: 'this.configService',
+        line: 12,
+      }];
+
+      const result = resolveLinksWithStats({
+        symbolsByFile: new Map([['auth.controller.ts', callerSymbols], ['other.ts', unrelatedGet]]),
+        allSymbols: [...callerSymbols, ...unrelatedGet],
+        imports,
+        calls,
+        heritage: [],
+        typeBindings,
+        resolvedImportPaths: new Map(), // external module — intentionally no resolved file path
+      });
+
+      const callLinks = result.links.filter(l => l.type === 'calls');
+      expect(callLinks.length).toBe(0);
+      expect(result.externalCalls).toBe(1);
+      expect(result.unresolvedCalls).toBe(0);
+    });
+  });
+
+  describe('Local declarations (params, destructuring, const/let) never count as unresolved', () => {
+    it('does not count a call to a locally-declared React useState setter as unresolved', () => {
+      // No project symbol named "setDraft" exists anywhere in the repo.
+      const callerSymbols: CodeSymbol[] = [
+        { id: 'message-input.tsx#function:MessageInput:1', name: 'MessageInput', kind: 'function', filePath: 'message-input.tsx', startLine: 1, endLine: 50, exported: true },
+      ];
+
+      const calls: RawCall[] = [{
+        filePath: 'message-input.tsx',
+        enclosingSymbolId: 'message-input.tsx#function:MessageInput:1',
+        calleeName: 'setDraft',
+        line: 20,
+      }];
+
+      // Emitted for `const [draft, setDraft] = useState('')` inside MessageInput.
+      const localBindings: RawLocalBinding[] = [{
+        filePath: 'message-input.tsx',
+        name: 'setDraft',
+        scope: 'message-input.tsx#function:MessageInput:1',
+        line: 5,
+      }];
+
+      const result = resolveLinksWithStats({
+        symbolsByFile: new Map([['message-input.tsx', callerSymbols]]),
+        allSymbols: callerSymbols,
+        imports: [],
+        calls,
+        heritage: [],
+        localBindings,
+        resolvedImportPaths: new Map(),
+      });
+
+      const callLinks = result.links.filter(l => l.type === 'calls');
+      expect(callLinks.length).toBe(0);
+      expect(result.unresolvedCalls).toBe(0);
+      expect(result.externalCalls).toBe(0);
+    });
+
+    it('does not link a locally-scoped call to an unrelated project symbol of the same name, and does not count it unresolved (i18n `t()` shadowing)', () => {
+      // Regression for the exact pattern found in a real Next.js repo: `const { t } =
+      // useTranslation(); t('some.key')` inside a page component, where an unrelated
+      // file elsewhere in the repo also happens to export a function literally named `t`.
+      const unrelatedT: CodeSymbol[] = [
+        { id: 'other/helpers.ts#function:t:1', name: 't', kind: 'function', filePath: 'other/helpers.ts', startLine: 1, endLine: 3, exported: true },
+      ];
+      const callerSymbols: CodeSymbol[] = [
+        { id: 'page.tsx#function:NotFoundPage:1', name: 'NotFoundPage', kind: 'function', filePath: 'page.tsx', startLine: 1, endLine: 10, exported: true },
+      ];
+
+      const calls: RawCall[] = [{
+        filePath: 'page.tsx',
+        enclosingSymbolId: 'page.tsx#function:NotFoundPage:1',
+        calleeName: 't',
+        line: 5,
+      }];
+
+      // Emitted for `const { t } = useTranslation();` inside NotFoundPage.
+      const localBindings: RawLocalBinding[] = [{
+        filePath: 'page.tsx',
+        name: 't',
+        scope: 'page.tsx#function:NotFoundPage:1',
+        line: 2,
+      }];
+
+      const result = resolveLinksWithStats({
+        symbolsByFile: new Map([['other/helpers.ts', unrelatedT], ['page.tsx', callerSymbols]]),
+        allSymbols: [...unrelatedT, ...callerSymbols],
+        imports: [],
+        calls,
+        heritage: [],
+        localBindings,
+        resolvedImportPaths: new Map(),
+      });
+
+      const callLinks = result.links.filter(l => l.type === 'calls');
+      expect(callLinks.length).toBe(0); // must NOT mis-link to the unrelated `t`
+      expect(result.unresolvedCalls).toBe(0); // and must not be counted as a resolution failure
+    });
+
+    it('still links a same-file call even when the callee name also appears as a local binding somewhere in the file (same-file match takes priority)', () => {
+      // Guards against over-broad local-binding capture (e.g. a module-level
+      // `const helper = () => {...}` is both a real project symbol AND captured as a
+      // local binding) accidentally suppressing legitimate same-file resolution.
+      const fileSymbols: CodeSymbol[] = [
+        { id: 'utils.ts#function:helper:1', name: 'helper', kind: 'function', filePath: 'utils.ts', startLine: 1, endLine: 3, exported: false },
+        { id: 'utils.ts#function:caller:5', name: 'caller', kind: 'function', filePath: 'utils.ts', startLine: 5, endLine: 8, exported: true },
+      ];
+
+      const calls: RawCall[] = [{
+        filePath: 'utils.ts',
+        enclosingSymbolId: 'utils.ts#function:caller:5',
+        calleeName: 'helper',
+        line: 6,
+      }];
+
+      const localBindings: RawLocalBinding[] = [{
+        filePath: 'utils.ts',
+        name: 'helper',
+        scope: 'utils.ts#module:_top:0',
+        line: 1,
+      }];
+
+      const result = resolveLinksWithStats({
+        symbolsByFile: new Map([['utils.ts', fileSymbols]]),
+        allSymbols: fileSymbols,
+        imports: [],
+        calls,
+        heritage: [],
+        localBindings,
+        resolvedImportPaths: new Map(),
+      });
+
+      const callLinks = result.links.filter(l => l.type === 'calls');
+      expect(callLinks.length).toBe(1);
+      expect(callLinks[0].toId).toBe('utils.ts#function:helper:1');
     });
   });
 });

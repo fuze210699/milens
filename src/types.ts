@@ -75,6 +75,7 @@ export interface ExtractionResult {
   assignmentBindings: RawAssignmentBinding[];
   returnTypes: RawReturnType[];
   callResultBindings: RawCallResultBinding[];
+  localBindings: RawLocalBinding[];
 }
 
 export interface RawReExport {
@@ -115,6 +116,20 @@ export interface RawCallResultBinding {
   receiver?: string;   // receiver for member calls (e.g., "service")
   line: number;
   scope?: string;      // enclosing symbol ID
+}
+
+/** A name declared purely locally within a function/method scope — a parameter,
+ *  a `const`/`let`/`var` declarator, or an array/object destructuring target
+ *  (e.g. `const [x, setX] = useState()`, `function f(onClose) {...}`). Such names
+ *  can never be project-wide symbols, imports, or globals by construction — the
+ *  resolver uses this to recognize a 4th, legitimate classification for bare calls
+ *  ("locally bound, not applicable to link") instead of miscounting them as
+ *  unresolved just because they match none of the other three known categories. */
+export interface RawLocalBinding {
+  filePath: string;
+  name: string;
+  scope: string;   // enclosing symbol ID
+  line: number;
 }
 
 export interface AnalysisStats {

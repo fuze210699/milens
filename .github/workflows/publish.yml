@@ -1,35 +1,54 @@
 name: Publish
 
+# Triggered by branch, not by tag — a git tag isn't scoped to any branch, so a
+# `push: tags: v*` trigger fires no matter which branch the tag was pushed
+# from. Listening on `push: branches: [develop]` instead means feature/fix
+# branches never touch this workflow at all: no run, no skip, nothing.
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [develop]
+    paths:
+      - 'package.json'
 
 jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+      # package.json can change on develop without a version bump (e.g. a
+      # dependency edit) — only actually publish when the version differs
+      # from what's already on npm.
+      - name: Compare package.json version against npm
+        id: check
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          PUBLISHED_VERSION=$(npm view milens version 2>/dev/null || echo "0.0.0")
+          echo "version=$PKG_VERSION" >> $GITHUB_OUTPUT
+          if [ "$PKG_VERSION" == "$PUBLISHED_VERSION" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "package.json version ($PKG_VERSION) already published — nothing to do."
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "New version detected: $PUBLISHED_VERSION -> $PKG_VERSION"
+          fi
+
   publish:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # Tags aren't scoped to a branch — `push: tags: v*` fires no matter which
-      # branch the tag was created on. Refuse to publish unless the tagged
-      # commit has actually landed on develop or main, so a tag pushed from a
-      # feature/fix branch (before it's merged) can't trigger a real release.
-      - name: Verify tag is on develop or main
-        run: |
-          git fetch origin develop main --quiet 2>/dev/null || true
-          if git merge-base --is-ancestor HEAD origin/develop 2>/dev/null; then
-            echo "OK: ${{ github.ref_name }} is on develop"
-          elif git merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
-            echo "OK: ${{ github.ref_name }} is on main"
-          else
-            echo "::error::${{ github.ref_name }} is not reachable from develop or main — refusing to publish from a feature/fix branch. Merge first, then tag from develop/main."
-            exit 1
-          fi
       - uses: actions/setup-node@v4
         with:
           node-version: '20.x'
@@ -64,3 +83,13 @@ jobs:
       - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # CI creates the tag itself now — guaranteed "v" prefix, no more manual
+      # `git push --tags` step to get wrong.
+      - name: Tag and create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="v${{ needs.check-version.outputs.version }}"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+          gh release create "$VERSION" --generate-notes --title "$VERSION"

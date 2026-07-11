@@ -28,6 +28,10 @@ export function loadAliases(rootPath: string): Record<string, string> {
   // ── Rust: Cargo.toml workspace members ──
   readCargoAliases(join(rootPath, 'Cargo.toml'), aliases);
 
+  // ── Vite: vite.config.js / vite.config.ts resolve.alias ──
+  readViteAliases(join(rootPath, 'vite.config.js'), rootPath, aliases);
+  readViteAliases(join(rootPath, 'vite.config.ts'), rootPath, aliases);
+
   // ── Monorepo: scan immediate subdirectories for tsconfig/jsconfig ──
   scanSubdirectoryConfigs(rootPath, aliases);
 
@@ -190,6 +194,32 @@ function readGoModAliases(goModPath: string, aliases: Record<string, string>): v
       aliases[moduleMatch[1]] = '.';
     }
   } catch { /* ignore */ }
+}
+
+function readViteAliases(configPath: string, rootPath: string, aliases: Record<string, string>): void {
+  if (!existsSync(configPath)) return;
+  try {
+    const content = readFileSync(configPath, 'utf-8');
+    // Extract resolve.alias entries from vite.config. The value expression varies widely:
+    //   '@': path.resolve(__dirname, './src')
+    //   '@': fileURLToPath(new URL('./src', import.meta.url))
+    //   '@': './src'
+    // Rather than special-casing each wrapper function, capture the whole value expression
+    // (up to end of line) and pull out the relative-path string literal from inside it —
+    // that literal is present in every common form above.
+    const entryRe = /(['"])(@[^'"]*)\1\s*:\s*([^\n]+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = entryRe.exec(content)) !== null) {
+      const aliasKey = m[2];
+      const valueExpr = m[3];
+      // Prefer a literal that looks like a relative path segment ('./src', '../shared', etc.);
+      // fall back to any quoted literal in the expression (covers a bare '@': 'src' with no dot).
+      const litMatch = valueExpr.match(/(['"])(\.[^'"]*)\1/) ?? valueExpr.match(/(['"])([^'"]+)\1/);
+      if (!litMatch) continue;
+      const target = litMatch[2].replace(/^\.\//, '').replace(/\/$/, '');
+      if (target) aliases[aliasKey] = target;
+    }
+  } catch { /* ignore parse errors */ }
 }
 
 function readCargoAliases(cargoPath: string, aliases: Record<string, string>): void {

@@ -108,7 +108,7 @@ describe('CSS extractor', () => {
     expect(importPaths.some(p => p.includes('reset.css'))).toBe(true);
   });
 
-  it('extracts CSS custom properties as variables', async () => {
+  it('captures CSS custom properties but not standard property names', async () => {
     const source = readFileSync(join(FIXTURES, 'html-project', 'css', 'main.css'), 'utf-8');
     const parser = await getParser(cssSpec.wasmName);
     const lang = await loadLanguage(cssSpec.wasmName);
@@ -116,8 +116,30 @@ describe('CSS extractor', () => {
     const result = extractFromTree(tree, lang, cssSpec, 'css/main.css');
 
     const varNames = result.symbols.filter(s => s.kind === 'variable').map(s => s.name);
+    // Standard property names should NOT be emitted
+    expect(varNames).not.toContain('color');
+    expect(varNames).not.toContain('font-size');
+    // CSS custom properties (--*) should be captured
     expect(varNames).toContain('--primary-color');
     expect(varNames).toContain('--font-size-base');
+    // Class and ID selectors should still be captured
+    expect(varNames).toContain('item-card');
+    expect(varNames).toContain('app');
+  });
+
+  it('captures var(--custom-property) usage as a call reference to the property', async () => {
+    const source = readFileSync(join(FIXTURES, 'html-project', 'css', 'main.css'), 'utf-8');
+    const parser = await getParser(cssSpec.wasmName);
+    const lang = await loadLanguage(cssSpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, cssSpec, 'css/main.css');
+
+    const calleeNames = result.calls.map(c => c.calleeName);
+    expect(calleeNames).toContain('--primary-color');
+    expect(calleeNames).toContain('--font-size-base');
+    // A plain function call like var(...) is not itself invoking a project symbol
+    // by identifier — only the argument (the custom property name) should be captured.
+    expect(calleeNames).not.toContain('var');
   });
 
   it('resolves relative CSS imports', () => {

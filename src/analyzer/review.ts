@@ -35,7 +35,12 @@ function isFixtureOrTest(file: string): boolean {
 }
 
 function isNonSourceFile(file: string): boolean {
-  if (!file.startsWith('src/')) return true;
+  // Match "src/" as a path segment anywhere, not just a literal prefix —
+  // monorepos commonly nest it under a package dir (backend/src/, frontend/src/,
+  // packages/foo/src/), and a strict prefix check silently excluded every
+  // changed file in those layouts, making reviewPr report "no changes" even
+  // when real source files were modified.
+  if (!/(^|\/)src\//.test(file)) return true;
   return /\.(md|json|lock|yml|yaml|toml)$/.test(file) ||
     /\/\.milens\//.test(file) ||
     /\/node_modules\//.test(file);
@@ -85,6 +90,18 @@ function getChangedLineRanges(root: string, file: string, ref: string, base?: st
     return ranges;
   } catch {
     return [];
+  }
+}
+
+function isBinaryDiff(root: string, file: string, ref: string, base?: string): boolean {
+  try {
+    const diffTarget = base ? `${base}...${ref}` : ref;
+    const output = execFileSync('git', ['diff', '--numstat', diffTarget, '--', file], {
+      cwd: root, encoding: 'utf-8', maxBuffer: 1024 * 1024,
+    }).trim();
+    return output.startsWith('-\t-');
+  } catch {
+    return false;
   }
 }
 
@@ -258,6 +275,7 @@ export function reviewPr(db: Database, root: string, ref = 'HEAD', base?: string
   }
 
   const symbolRisks: SymbolRisk[] = [];
+  const reviewedBinaryFiles: string[] = [];
   let untestedChanges = 0;
 
   for (const file of changedFiles) {
@@ -280,7 +298,10 @@ export function reviewPr(db: Database, root: string, ref = 'HEAD', base?: string
         // getAll symbols — fallback: regex couldn't extract names, include all
         changedNames = null;
       }
-    } else {
+    }
+
+    let fileIsBinaryDiff = false;
+    if (!isHistorical) {
       // Fix 1: Working tree mode — line overlap filter
       const changedRanges = getChangedLineRanges(root, file, ref);
       if (changedRanges.length > 0) {
@@ -291,6 +312,12 @@ export function reviewPr(db: Database, root: string, ref = 'HEAD', base?: string
         );
       }
       // If no ranges, changedNames stays null → include all symbols (conservative fallback)
+      // Only tag the fallback as "binary" when git actually reports the diff as binary —
+      // other causes of an empty range (e.g. a git error) should not be mislabeled.
+      if (changedNames === null && isBinaryDiff(root, file, ref)) {
+        fileIsBinaryDiff = true;
+        reviewedBinaryFiles.push(file);
+      }
     }
 
     for (const sym of syms) {
@@ -304,6 +331,9 @@ export function reviewPr(db: Database, root: string, ref = 'HEAD', base?: string
       if (!tested && sym.exported) untestedChanges++;
 
       const { score, reasons } = scoreSymbolRisk(sym, dependents, tested);
+      if (fileIsBinaryDiff) {
+        reasons.push('binary/undiffable file — line-level precision unavailable, whole file flagged conservatively');
+      }
       const riskLevel = classifyRisk(score, !tested && sym.exported, sym.role === 'hub' && !tested && dependents > 10);
 
       symbolRisks.push({ symbol: sym, dependents, tested, riskScore: score, riskLevel, reasons });
@@ -346,6 +376,7 @@ export function reviewPr(db: Database, root: string, ref = 'HEAD', base?: string
   ];
   if (hotspots.length > 0) summaryParts.push(`${hotspots.length} hotspots`);
   if (untestedChanges > 0) summaryParts.push(`${untestedChanges} untested`);
+  if (reviewedBinaryFiles.length > 0) summaryParts.push(`${reviewedBinaryFiles.length} file(s) diffed as binary — risk scores are file-level, not line-level`);
   summaryParts.push(`overall risk: ${overallRisk} (score: ${totalScore})`);
 
   return { risk: overallRisk, score: totalScore, changedFiles, symbols: symbolRisks,

@@ -151,6 +151,9 @@ export class Database {
       if (!annNames.has('updated_at')) {
         this.db.exec(`ALTER TABLE annotations ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`);
       }
+      if (!annNames.has('symbol_hash')) {
+        this.db.exec(`ALTER TABLE annotations ADD COLUMN symbol_hash TEXT`);
+      }
       // Rebuild index if column was renamed
       if (annNames.has('symbol_id')) {
         this.db.exec(`DROP INDEX IF EXISTS idx_annotations_symbol`);
@@ -304,20 +307,49 @@ export class Database {
   }
 
   findDeadCode(kind?: string, limit = 50): CodeSymbol[] {
-    const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE 'app/%/layout.%'
-      AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE 'app/layout.%'
-      AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE 'jest.config.%'
-      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE 'src/routes/+layout.%'`;
+    // Next.js/SvelteKit/api conventions are matched both at the repo root AND nested
+    // under a package subdirectory (e.g. monorepos with frontend/app/... instead of
+    // app/...) — a root-only 'app/%' pattern silently misses every monorepo layout.
+    const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE '%/app/%/page.%'
+      AND s.file_path NOT LIKE 'app/%/layout.%' AND s.file_path NOT LIKE '%/app/%/layout.%'
+      AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE '%/app/page.%'
+      AND s.file_path NOT LIKE 'app/layout.%' AND s.file_path NOT LIKE '%/app/layout.%'
+      AND s.file_path NOT LIKE 'app/%/loading.%' AND s.file_path NOT LIKE '%/app/%/loading.%'
+      AND s.file_path NOT LIKE 'app/%/error.%' AND s.file_path NOT LIKE '%/app/%/error.%'
+      AND s.file_path NOT LIKE 'app/%/not-found.%' AND s.file_path NOT LIKE '%/app/%/not-found.%'
+      AND s.file_path NOT LIKE 'app/%/template.%' AND s.file_path NOT LIKE '%/app/%/template.%'
+      AND s.file_path NOT LIKE 'app/%/global-error.%' AND s.file_path NOT LIKE '%/app/%/global-error.%'
+      AND s.file_path NOT LIKE 'app/%/default.%' AND s.file_path NOT LIKE '%/app/%/default.%'
+      AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE '%/app/api/%/route.%'
+      AND s.file_path NOT LIKE 'app/%/route.%' AND s.file_path NOT LIKE '%/app/%/route.%'
+      AND s.file_path NOT LIKE 'jest.config.%'
+      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE '%/src/routes/+page.%'
+      AND s.file_path NOT LIKE 'src/routes/+layout.%' AND s.file_path NOT LIKE '%/src/routes/+layout.%'
+      AND s.file_path NOT LIKE '%/alembic/versions/%'
+      AND s.file_path NOT LIKE '%/migrations/%'
+      AND s.file_path NOT LIKE 'api/%' AND s.file_path NOT LIKE '%/api/%'
+      AND NOT ((s.file_path LIKE 'app/%' OR s.file_path LIKE '%/app/%') AND s.name IN ('generateStaticParams', 'metadata', 'generateMetadata', 'viewport', 'generateViewport', 'revalidate', 'dynamic', 'fetchCache', 'runtime', 'preferredRegion', 'maxDuration'))`;
+    // Vue SFC root components imported via <Component/> template tags get their
+    // import link on _top [module], not on the [class] root symbol. Treat the class
+    // as referenced if its file's _top module has incoming links from other files.
+    const vueRootGuard = `AND NOT (s.file_path LIKE '%.vue' AND s.kind = 'class' AND EXISTS (
+      SELECT 1 FROM symbols s2
+      JOIN links l2 ON l2.to_id = s2.id AND l2.type != 'contains'
+      WHERE s2.file_path = s.file_path AND s2.kind = 'module' AND s2.name = '_top'
+      AND EXISTS (SELECT 1 FROM links l3 WHERE l3.to_id = s2.id AND l3.type = 'imports')
+    ))`;
     const sql = kind
       ? `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
          WHERE s.exported = 1 AND s.kind = ? AND s.kind != 'section' AND l.id IS NULL
          ${frameworkExclude}
+         ${vueRootGuard}
          LIMIT ?`
       : `SELECT s.* FROM symbols s
          LEFT JOIN links l ON l.to_id = s.id AND l.type != 'contains'
          WHERE s.exported = 1 AND s.kind != 'section' AND l.id IS NULL
          ${frameworkExclude}
+         ${vueRootGuard}
          LIMIT ?`;
     const rows = kind
       ? this.db.prepare(sql).all(kind, limit) as any[]
@@ -332,10 +364,28 @@ export class Database {
    * findDeadCode (which requires zero incoming links of any kind).
    */
   findTestOnlyReferenced(limit = 50): CodeSymbol[] {
-    const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE 'app/%/layout.%'
-      AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE 'app/layout.%'
-      AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE 'jest.config.%'
-      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE 'src/routes/+layout.%'`;
+    // Next.js/SvelteKit/api conventions are matched both at the repo root AND nested
+    // under a package subdirectory (e.g. monorepos with frontend/app/... instead of
+    // app/...) — a root-only 'app/%' pattern silently misses every monorepo layout.
+    const frameworkExclude = `AND s.file_path NOT LIKE 'app/%/page.%' AND s.file_path NOT LIKE '%/app/%/page.%'
+      AND s.file_path NOT LIKE 'app/%/layout.%' AND s.file_path NOT LIKE '%/app/%/layout.%'
+      AND s.file_path NOT LIKE 'app/page.%' AND s.file_path NOT LIKE '%/app/page.%'
+      AND s.file_path NOT LIKE 'app/layout.%' AND s.file_path NOT LIKE '%/app/layout.%'
+      AND s.file_path NOT LIKE 'app/%/loading.%' AND s.file_path NOT LIKE '%/app/%/loading.%'
+      AND s.file_path NOT LIKE 'app/%/error.%' AND s.file_path NOT LIKE '%/app/%/error.%'
+      AND s.file_path NOT LIKE 'app/%/not-found.%' AND s.file_path NOT LIKE '%/app/%/not-found.%'
+      AND s.file_path NOT LIKE 'app/%/template.%' AND s.file_path NOT LIKE '%/app/%/template.%'
+      AND s.file_path NOT LIKE 'app/%/global-error.%' AND s.file_path NOT LIKE '%/app/%/global-error.%'
+      AND s.file_path NOT LIKE 'app/%/default.%' AND s.file_path NOT LIKE '%/app/%/default.%'
+      AND s.file_path NOT LIKE 'app/api/%/route.%' AND s.file_path NOT LIKE '%/app/api/%/route.%'
+      AND s.file_path NOT LIKE 'app/%/route.%' AND s.file_path NOT LIKE '%/app/%/route.%'
+      AND s.file_path NOT LIKE 'jest.config.%'
+      AND s.file_path NOT LIKE 'src/routes/+page.%' AND s.file_path NOT LIKE '%/src/routes/+page.%'
+      AND s.file_path NOT LIKE 'src/routes/+layout.%' AND s.file_path NOT LIKE '%/src/routes/+layout.%'
+      AND s.file_path NOT LIKE '%/alembic/versions/%'
+      AND s.file_path NOT LIKE '%/migrations/%'
+      AND s.file_path NOT LIKE 'api/%' AND s.file_path NOT LIKE '%/api/%'
+      AND NOT ((s.file_path LIKE 'app/%' OR s.file_path LIKE '%/app/%') AND s.name IN ('generateStaticParams', 'metadata', 'generateMetadata', 'viewport', 'generateViewport', 'revalidate', 'dynamic', 'fetchCache', 'runtime', 'preferredRegion', 'maxDuration'))`;
     // Get ALL exported symbols that HAVE at least one incoming link (not caught by findDeadCode).
     // No SQL LIMIT here: the JS post-filter below narrows this down to test-only-referenced
     // symbols, which can be a small minority of low-heat candidates — applying `limit` before
@@ -399,26 +449,56 @@ export class Database {
     const fromSyms = this.findSymbolByName(fromName);
     const toSyms = this.findSymbolByName(toName);
     if (fromSyms.length === 0 || toSyms.length === 0) return null;
+    return this.findPathFromId(fromSyms[0].id, toSyms.map(s => s.id), maxDepth);
+  }
 
-    const fromId = fromSyms[0].id;
-    const toId = toSyms[0].id;
-    const toIds = new Set(toSyms.map(s => s.id));
+  /**
+   * Same as findPath, but takes an already-resolved source symbol id instead
+   * of re-resolving by name. Needed when the caller has disambiguated among
+   * several same-named symbols (e.g. picking the right file-scoped `_top`
+   * module out of many) — passing the name back through findPath() would
+   * silently re-resolve to an arbitrary same-named symbol and discard that
+   * disambiguation.
+   */
+  findPathFromId(fromId: string, toNameOrIds: string | string[], maxDepth = 5): Array<{ symbol: CodeSymbol; depth: number; via: string }> | null {
+    const toIds = Array.isArray(toNameOrIds)
+      ? new Set(toNameOrIds)
+      : new Set(this.findSymbolByName(toNameOrIds).map(s => s.id));
+    if (toIds.size === 0) return null;
 
     // Use path-accumulating CTE to track the actual predecessor chain
     interface PathRow { node_id: string; depth: number; via: string; path_ids: string; }
 
+    // Anchor branch 2 seeds the search by descending ONE 'contains' hop from the exact
+    // origin symbol into its own contained methods, then taking one real edge from there.
+    // This only ever applies to the literal starting symbol (later branches never re-descend
+    // into contains children mid-path) — a class/struct/trait passed as `fromId` typically
+    // has zero direct calls/imports edges of its own (its real behavior lives in its
+    // methods), so without this seed the search dead-ends immediately at depth 0 for any
+    // class-to-X query. Safe: it can't produce a false "relationship" between unrelated
+    // sibling methods, since it's scoped to fromId's own children only, never applied again
+    // to a class reached later in the chain.
     const rows = this.db.prepare(`
       WITH RECURSIVE chain(node_id, depth, via, path_ids) AS (
         SELECT l.to_id, 1, l.type, ',' || l.from_id || ',' || l.to_id || ','
         FROM links l WHERE l.from_id = ? AND l.type != 'contains'
         UNION ALL
+        SELECT l2.to_id, 2, l2.type, ',' || l.from_id || ',' || l.to_id || ',' || l2.to_id || ','
+        FROM links l JOIN links l2 ON l2.from_id = l.to_id
+        WHERE l.from_id = ? AND l.type = 'contains' AND l2.type != 'contains'
+        UNION ALL
         SELECT l.to_id, c.depth + 1, l.type, c.path_ids || l.to_id || ','
         FROM links l JOIN chain c ON l.from_id = c.node_id
         WHERE l.type != 'contains' AND c.depth < ?
           AND c.path_ids NOT LIKE '%,' || l.to_id || ',%'
+        UNION ALL
+        SELECT l.from_id, c.depth + 1, l.type, c.path_ids || l.from_id || ','
+        FROM links l JOIN chain c ON l.to_id = c.node_id
+        WHERE l.type = 'contains' AND c.depth < ?
+          AND c.path_ids NOT LIKE '%,' || l.from_id || ',%'
       )
       SELECT node_id, depth, via, path_ids FROM chain ORDER BY depth
-    `).all(fromId, maxDepth) as PathRow[];
+    `).all(fromId, fromId, maxDepth, maxDepth) as PathRow[];
 
     // Find the first (shortest-depth) row matching the target
     const targetRow = rows.find(r => toIds.has(r.node_id));
@@ -431,13 +511,23 @@ export class Database {
     for (let i = 0; i < idChain.length; i++) {
       const sym = this.findSymbolById(idChain[i]);
       if (!sym) continue;
-      // Determine via for this hop: lookup link from idChain[i] → idChain[i+1]
+      // Determine via for this hop: lookup link from idChain[i] → idChain[i+1]. Prefer a
+      // real calls/imports/etc. edge when one exists between the two nodes; only report
+      // 'contains' (in either direction — the traversal now allows both a class-to-method
+      // seed step and a method-to-class arrival step) when that's the only relationship.
       let via = 'calls';
       if (i < idChain.length - 1) {
         const linkRow = this.db.prepare(
           'SELECT type FROM links WHERE from_id = ? AND to_id = ? AND type != ? LIMIT 1'
         ).get(idChain[i], idChain[i + 1], 'contains') as any;
-        if (linkRow) via = linkRow.type;
+        if (linkRow) {
+          via = linkRow.type;
+        } else {
+          const containsRow = this.db.prepare(
+            'SELECT type FROM links WHERE ((from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)) AND type = ? LIMIT 1'
+          ).get(idChain[i], idChain[i + 1], idChain[i + 1], idChain[i], 'contains') as any;
+          if (containsRow) via = containsRow.type;
+        }
       }
       result.push({ symbol: sym, depth: i, via });
     }
@@ -529,7 +619,15 @@ export class Database {
       if (incoming.length === 0) {
         // Reached an entrypoint — save this path
         // _top modules represent file-level entrypoints (e.g., top-level code execution)
-        if (sym?.exported || (sym?.kind === 'module' && sym?.name === '_top')) {
+        // Class methods: if the method is contained by an exported class, treat it as
+        // a de facto entrypoint (framework-invoked handlers like NestJS controllers).
+        const isExportedClassMember = !sym?.exported && sym?.kind === 'method' &&
+          this.getIncomingLinks(currentId).some(l => {
+            if (l.type !== 'contains') return false;
+            const containingClass = this.findSymbolById(l.fromId);
+            return containingClass?.exported === true;
+          });
+        if (sym?.exported || (sym?.kind === 'module' && sym?.name === '_top') || isExportedClassMember) {
           paths.push({ path: [...currentPath] });
         }
         visited.delete(currentId);
@@ -727,7 +825,9 @@ export class Database {
   // ── Test file detection ──
 
   private isTestFile(filePath: string): boolean {
-    return /[/\\]test[/\\]/.test(filePath) || /\.(test|spec)\./.test(filePath);
+    const codeExt = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rb|java|php|rs)$/i;
+    if (!codeExt.test(filePath)) return false;
+    return /[/\\]tests?[/\\]/.test(filePath) || /\.(test|spec)\./i.test(filePath);
   }
 
   // ── Heat / hubs ──
@@ -863,30 +963,41 @@ export class Database {
     const target = this.findSymbolById(symbolId);
     if (!target) return [];
 
-    const incoming = this.getIncomingLinks(symbolId).filter(l => l.type !== 'contains');
-    const outgoing = this.getOutgoingLinks(symbolId).filter(l => l.type !== 'contains');
+    const CONTAINER_KINDS = new Set(['class', 'struct', 'trait']);
 
-    const targetLinks = new Set<string>();
-    for (const link of incoming) targetLinks.add(link.fromId);
-    for (const link of outgoing) targetLinks.add(link.toId);
+    const buildSig = (id: string): Set<string> => {
+      const sig = new Set<string>();
+      const sym = this.findSymbolById(id);
+      const incoming = this.getIncomingLinks(id).filter(l => l.type !== 'contains');
+      const outgoing = this.getOutgoingLinks(id).filter(l => l.type !== 'contains');
+      for (const link of incoming) sig.add(link.fromId);
+      for (const link of outgoing) sig.add(link.toId);
+      if (sym && CONTAINER_KINDS.has(sym.kind)) {
+        const contained = this.getOutgoingLinks(id).filter(l => l.type === 'contains');
+        for (const cl of contained) {
+          const mIn = this.getIncomingLinks(cl.toId).filter(l => l.type !== 'contains');
+          const mOut = this.getOutgoingLinks(cl.toId).filter(l => l.type !== 'contains');
+          for (const link of mIn) sig.add(link.fromId);
+          for (const link of mOut) sig.add(link.toId);
+        }
+      }
+      return sig;
+    };
+
+    const targetSig = buildSig(symbolId);
 
     // Search across all exported symbols, not just same-file siblings
     const allSymbols = this.getAllSymbols().filter(s => s.id !== symbolId && s.exported);
 
     const results: Array<{ symbol: CodeSymbol; similarity: number }> = [];
     for (const candidate of allSymbols) {
-      const candIncoming = this.getIncomingLinks(candidate.id).filter(l => l.type !== 'contains');
-      const candOutgoing = this.getOutgoingLinks(candidate.id).filter(l => l.type !== 'contains');
-
-      const candidateLinks = new Set<string>();
-      for (const link of candIncoming) candidateLinks.add(link.fromId);
-      for (const link of candOutgoing) candidateLinks.add(link.toId);
+      const candidateSig = buildSig(candidate.id);
 
       let intersection = 0;
-      for (const id of targetLinks) {
-        if (candidateLinks.has(id)) intersection++;
+      for (const id of targetSig) {
+        if (candidateSig.has(id)) intersection++;
       }
-      const union = new Set([...targetLinks, ...candidateLinks]).size;
+      const union = new Set([...targetSig, ...candidateSig]).size;
       const similarity = union > 0 ? intersection / union : 0;
 
       if (similarity >= 0.15) {

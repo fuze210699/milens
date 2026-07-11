@@ -4,7 +4,7 @@
 
 ## What is milens?
 
-milens indexes source code into a SQLite knowledge graph containing symbols (functions, classes, methods, interfaces, etc.) and their relationships (calls, imports, extends, implements, contains). It exposes this graph through 32 MCP tools for AI agent consumption.
+milens indexes source code into a SQLite knowledge graph containing symbols (functions, classes, methods, interfaces, etc.) and their relationships (calls, imports, extends, implements, contains). It exposes this graph through 40+ MCP tools for AI agent consumption.
 
 ## MCP Tools
 
@@ -18,13 +18,15 @@ milens indexes source code into a SQLite knowledge graph containing symbols (fun
 ### Impact & Safety
 - `impact({target, direction?, depth?})` — Recursive graph traversal showing blast radius
 - `edit_check({name})` — Pre-edit safety: callers + exports + re-export chains + test coverage + warnings
+- `guard_edit_check({name, session_id})` — HARD pre-edit gate: blocks if dependents > 5, tracks checks for session audit
 - `detect_changes({ref?})` — Git diff → affected symbols and their direct dependents
+- `compare_impact({name, action})` — Before/after impact graph diff — snapshot then compare
 - `find_dead_code({kind?, limit?})` — Exported symbols with zero incoming references
 
 ### Understanding
 - `smart_context({name, intent})` — Intent-aware context: understand/edit/debug/test
 - `trace({to?, from?})` — Execution flow: call chains to/from entrypoints
-- `routes({framework?})` — Detect framework routes/endpoints (11 frameworks)
+- `routes({framework?})` — Detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Go, PHP, Rails)
 - `explain_relationship({from, to})` — Shortest path between two symbols
 - `overview({name})` — Combined context + impact + grep in one call
 
@@ -37,9 +39,16 @@ milens indexes source code into a SQLite knowledge graph containing symbols (fun
 ### Review & Risk Assessment
 - `review_pr({})` — PR risk assessment: scores changed symbols by blast radius + test coverage
 - `review_symbol({name})` — Single symbol risk: role, heat, dependents, test status
+- `pre_commit_check({})` — Pre-commit risk analysis: detect_changes + review_pr + dead code + coverage gaps
+- `orchestrate({})` — Full orchestration cycle: detect_changes → review_pr → impact → coverage gaps → dead code
+
+### Security
+- `security_scan({scope?, severity?})` — Scan codebase for vulnerabilities using 190+ built-in rules
+- `fix_apply({ruleId, file, line})` — Apply a security fix suggestion to a file with backup
 
 ### Testing
 - `test_plan({name})` — Dependency-aware test plan: mocks, strategies, suggested tests
+- `test_generate({symbol})` — Generate a test file using its test plan, following project conventions
 - `test_coverage_gaps({})` — Untested exported symbols sorted by risk
 - `test_impact({})` — Maps git changes → test files to run
 
@@ -51,19 +60,26 @@ milens indexes source code into a SQLite knowledge graph containing symbols (fun
 - `annotate({symbol, key, value})` — Store observation/note about a symbol (persists across sessions)
 - `recall({symbol?, key?, agent?})` — Retrieve annotations
 - `session_start({agent})` — Register agent session for multi-agent coordination
-- `session_context({})` — Get session metadata + annotations
-- `handoff({from_session, to_session})` — Transfer context between agent sessions
+- `session_context({session_id})` — Get session metadata + annotations
+- `session_end({session_id, status?})` — End a session, record stats and audit trail
+- `handoff({from_session, to_agent, context})` — Transfer context between agent sessions
+- `generate_findings_report({repo, title, findings})` — Render investigated findings into a Markdown+XML report
+
+### Hooks
+- `hook_onFileChange({files})` — Trigger onFileChange hook for impact summary after file modifications
+- `hook_preCompact({})` — Save metrics snapshot before context window compaction
+- `hook_postCompact({})` — Recall annotations to restore context after compaction
 
 ### Search & Similarity
 - `semantic_search({query})` — Hybrid FTS5 + vector cosine similarity search (requires --embeddings)
-- `find_similar({name})` — Find symbols similar by embedding proximity (requires --embeddings)
+- `find_similar({name})` — Find symbols with structurally similar dependency graphs (Jaccard similarity over shared callers/callees)
 
 ## Architecture
 
 - **Parser**: Declarative `LangSpec` configs with tree-sitter query strings. One universal `extractFromTree()` function handles all 12 languages.
 - **Analyzer**: Pipeline — scan files → group by language → parse/extract → resolve cross-file links → enrich (roles, heat, domains) → persist to SQLite.
 - **Storage**: SQLite with FTS5 search, recursive CTEs for transitive dependency traversal, WAL mode.
-- **Server**: MCP server with stdio and StreamableHTTP transports. 4 Resources + 3 Guided Prompts.
+- **Server**: MCP server with stdio and StreamableHTTP transports. 4 Resources + 13 guided workflow prompts.
 
 ## Supported Languages
 
@@ -75,6 +91,10 @@ TypeScript, JavaScript, Python, Java, Go, Rust, PHP, Ruby, Vue, HTML, CSS, Markd
 milens analyze -p <path>           # Index a repo
 milens analyze -p . --force        # Force full re-index
 milens analyze -p . --skills       # Index + generate skill files
+milens init -p <path>              # One-command bootstrap: index + AGENTS.md + skills + hooks
+milens init -p <path> --profile full  # Full profile with all tools enabled
+milens uninstall -p <path>         # Safe removal: dry-run first, confirm before deleting
+milens uninstall -p <path> --dry-run  # Preview what would be removed
 milens search <query>              # Search symbols
 milens inspect <symbol>            # 360° symbol view
 milens impact <symbol>             # Blast radius
@@ -84,16 +104,26 @@ milens status                      # Index stats
 milens list                        # List all indexed repos
 milens clean -p <path>             # Remove index
 milens dashboard                   # Usage analytics dashboard
+milens upgrade                     # Upgrade milens to latest version
+milens hooks <action>              # Manage hooks (install, list, status, guard-set-mode)
+milens workflow <action>           # Run workflows (review, plan, tdd, refactor, security, debug)
+milens security scan -p <path>     # Run security scan
+milens orchestrate                 # Full orchestration cycle
+milens metrics                     # Code quality metrics (CQI, DCER, coverage)
 ```
 
 ## Setup
 
 ```bash
+# Quick start (recommended): one-command bootstrap
+npx milens init -p <path>
+
+# Or manual steps:
 npm install
 npm run build
-npx tsx src/cli.ts analyze -p <path>
+npx milens analyze -p <path>
 ```
 
 ## License
 
-PolyForm Noncommercial 1.0.0
+MIT — see LICENSE

@@ -93,4 +93,30 @@ describe('Incremental analyze does not corrupt repo-wide meta', () => {
     expect(coverageAfter.exportedProductionSymbols).toBe(coverageBefore.exportedProductionSymbols);
     expect(domainsAfter.length).toBe(domainsBefore.length);
   });
+
+  it('re-running analyze with force:false and no --files when nothing changed does not zero out repo-wide meta', async () => {
+    // Regression test: a plain `milens analyze` (no -f, no --files) on an
+    // already-up-to-date repo used to skip every file (isFileUpToDate),
+    // leaving allImports/allCalls empty for this run. isFullScan was
+    // previously computed as `!opts.files || opts.files.length === 0`,
+    // which is true here even though nothing was actually re-parsed —
+    // silently overwriting test coverage / unresolved-call meta with
+    // near-zero values.
+    const dbBefore = new Database(dbPath);
+    const coverageBefore = dbBefore.getTestCoverage();
+    dbBefore.close();
+
+    expect(coverageBefore.exportedProductionSymbols).toBeGreaterThan(0);
+    expect(coverageBefore.testFiles).toBeGreaterThan(0);
+
+    await analyze({ rootPath: tmpDir, dbPath, force: false });
+
+    const dbAfter = new Database(dbPath);
+    const coverageAfter = dbAfter.getTestCoverage();
+    dbAfter.close();
+
+    expect(coverageAfter.exportedProductionSymbols).toBe(coverageBefore.exportedProductionSymbols);
+    expect(coverageAfter.testFiles).toBe(coverageBefore.testFiles);
+    expect(coverageAfter.testedSymbols).toBe(coverageBefore.testedSymbols);
+  });
 });

@@ -9,6 +9,12 @@ const spec: LangSpec = {
   mroStrategy: 'first-wins',
   importSemantics: 'named',
   isExported: () => false, // handled by exports query (export keyword)
+  filterCallee(callee: string, defNodeType: string): boolean {
+    if ((defNodeType === 'jsx_self_closing_element' || defNodeType === 'jsx_opening_element') && /^[a-z]/.test(callee)) {
+      return false;
+    }
+    return true;
+  },
   queries: {
     functions: `[
       (function_declaration name: (identifier) @name) @def
@@ -145,12 +151,16 @@ const spec: LangSpec = {
     const dir = aliased ? root : dirname(join(root, fromFile));
     const rawBase = join(dir, raw);
 
-    // Strip .js/.jsx/.mjs/.cjs extension for cross-extension resolution
-    const JS_EXT = /\.(js|jsx|mjs|cjs)$/;
-    const base = JS_EXT.test(rawBase) ? rawBase.replace(JS_EXT, '') : rawBase;
+    // Strip .js/.jsx/.mjs/.cjs extension for cross-extension resolution. Also strip an
+    // explicit .vue extension if present, so a candidate isn't built by appending another
+    // extension on top of one the import specifier already has (e.g. `import './Foo.vue'`
+    // must resolve against `Foo.vue`, not `Foo.vue.js`).
+    const KNOWN_EXT = /\.(js|jsx|mjs|cjs|vue)$/;
+    const base = KNOWN_EXT.test(rawBase) ? rawBase.replace(KNOWN_EXT, '') : rawBase;
 
     const candidates = [
       base + '.js', base + '.jsx', base + '.mjs',
+      base + '.vue',
       join(base, 'index.js'), join(base, 'index.mjs'),
     ];
     for (const p of candidates) {
@@ -162,9 +172,10 @@ const spec: LangSpec = {
       const originalRaw = raw.replace(aliasTargets[0], '');
       for (let i = 1; i < aliasTargets.length; i++) {
         const altBase = join(root, aliasTargets[i] + originalRaw);
-        const altStripped = JS_EXT.test(altBase) ? altBase.replace(JS_EXT, '') : altBase;
+        const altStripped = KNOWN_EXT.test(altBase) ? altBase.replace(KNOWN_EXT, '') : altBase;
         const altCandidates = [
           altStripped + '.js', altStripped + '.jsx', altStripped + '.mjs',
+          altStripped + '.vue',
           join(altStripped, 'index.js'), join(altStripped, 'index.mjs'),
         ];
         for (const p of altCandidates) {

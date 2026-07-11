@@ -9,6 +9,12 @@ const spec: LangSpec = {
   mroStrategy: 'first-wins',
   importSemantics: 'named',
   isExported: () => false, // handled by exports query (export keyword)
+  filterCallee(callee: string, defNodeType: string): boolean {
+    if ((defNodeType === 'jsx_self_closing_element' || defNodeType === 'jsx_opening_element') && /^[a-z]/.test(callee)) {
+      return false;
+    }
+    return true;
+  },
   queries: {
     functions: `[
       (function_declaration name: (identifier) @name) @def
@@ -25,8 +31,15 @@ const spec: LangSpec = {
     interfaces: `(interface_declaration name: (type_identifier) @name) @def`,
     enums: `(enum_declaration name: (identifier) @name) @def`,
     types: `(type_alias_declaration name: (type_identifier) @name) @def`,
-    variables: `(program (lexical_declaration
-      (variable_declarator name: (identifier) @name)) @def)`,
+    variables: `[
+      (program (lexical_declaration
+        (variable_declarator name: (identifier) @name))
+      ) @def
+      (export_statement
+        (lexical_declaration
+          (variable_declarator name: (identifier) @name))
+      ) @def
+    ]`,
     imports: `[
       (import_statement
         source: (string (string_fragment) @source)
@@ -217,6 +230,24 @@ const spec: LangSpec = {
         )
       )
     ]`,
+    // Names that can only ever be locally scoped — never a project symbol, import, or
+    // global — so a bare call to one of these should never be counted as "unresolved".
+    // Covers: any const/let/var declarator (including array/object destructuring, e.g.
+    // `const [x, setX] = useState()`, `const { onClose } = props`) and function/arrow
+    // parameters (plain or destructured), regardless of nesting depth.
+    localBindings: `[
+      (variable_declarator name: (identifier) @name)
+      (variable_declarator name: (array_pattern (identifier) @name))
+      (variable_declarator name: (object_pattern (shorthand_property_identifier_pattern) @name))
+      (variable_declarator name: (object_pattern (pair_pattern value: (identifier) @name)))
+      (required_parameter pattern: (identifier) @name)
+      (optional_parameter pattern: (identifier) @name)
+      (required_parameter pattern: (object_pattern (shorthand_property_identifier_pattern) @name))
+      (optional_parameter pattern: (object_pattern (shorthand_property_identifier_pattern) @name))
+      (required_parameter pattern: (object_pattern (pair_pattern value: (identifier) @name)))
+      (required_parameter pattern: (array_pattern (identifier) @name))
+      (catch_clause parameter: (identifier) @name)
+    ]`,
   },
   resolveImport(raw, fromFile, root, aliases) {
     // Check aliases first (e.g. @ → src)
@@ -239,9 +270,12 @@ const spec: LangSpec = {
     const dir = aliased ? root : dirname(join(root, fromFile));
     const rawBase = join(dir, raw);
 
-    // Strip .js/.jsx/.mjs/.cjs extension — TS convention: `import './foo.js'` → file is `foo.ts`
-    const JS_EXT = /\.(js|jsx|mjs|cjs)$/;
-    const base = JS_EXT.test(rawBase) ? rawBase.replace(JS_EXT, '') : rawBase;
+    // Strip .js/.jsx/.mjs/.cjs extension — TS convention: `import './foo.js'` → file is `foo.ts`.
+    // Also strip an explicit .vue/.ts/.tsx extension if present, so a candidate path isn't built
+    // by appending another extension on top of one the import specifier already has
+    // (e.g. `import './Foo.vue'` must resolve against `Foo.vue`, not `Foo.vue.ts`/`Foo.vue.vue`).
+    const KNOWN_EXT = /\.(js|jsx|mjs|cjs|ts|tsx|vue)$/;
+    const base = KNOWN_EXT.test(rawBase) ? rawBase.replace(KNOWN_EXT, '') : rawBase;
 
     const candidates = [
       base + '.ts', base + '.tsx',
@@ -260,7 +294,7 @@ const spec: LangSpec = {
       const originalRaw = raw.replace(aliasTargets[0], '');
       for (let i = 1; i < aliasTargets.length; i++) {
         const altBase = join(root, aliasTargets[i] + originalRaw);
-        const altStripped = JS_EXT.test(altBase) ? altBase.replace(JS_EXT, '') : altBase;
+        const altStripped = KNOWN_EXT.test(altBase) ? altBase.replace(KNOWN_EXT, '') : altBase;
         const altCandidates = [
           altStripped + '.ts', altStripped + '.tsx',
           altStripped + '.js', altStripped + '.jsx',

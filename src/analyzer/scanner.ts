@@ -39,6 +39,7 @@ export function scanFiles(rootPath: string, verbose = false): ScannedFile[] {
       } else if (stat.isFile()) {
         const ext = '.' + entry.split('.').pop()?.toLowerCase();
         if (exts.has(ext)) {
+          if (MINIFIED_RE.test(entry)) continue;
           results.push({ relativePath: rel, absolutePath: abs });
         } else if (verbose) {
           // Skip non-supported files silently
@@ -65,6 +66,8 @@ function loadIgnoreRules(rootPath: string): ReturnType<typeof ignore> {
 
   return ig;
 }
+
+const MINIFIED_RE = /\.min\.[a-z0-9]+$/i;
 
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', 'out',

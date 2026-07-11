@@ -3,8 +3,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { RepoEntry } from '../types.js';
 
-const MILENS_HOME = join(homedir(), '.milens');
-const REGISTRY_FILE = join(MILENS_HOME, 'registry.json');
+/** Resolved lazily (not at module load) so MILENS_HOME can be overridden — e.g. by tests wanting an isolated registry instead of the real user's ~/.milens. */
+function getMilensHome(): string {
+  return process.env.MILENS_HOME || join(homedir(), '.milens');
+}
+
+function getRegistryFile(): string {
+  return join(getMilensHome(), 'registry.json');
+}
 
 /** Normalize path: resolve to absolute + uppercase drive letter on Windows. */
 function normalizePath(p: string): string {
@@ -24,8 +30,9 @@ export class RepoRegistry {
 
   private load(): void {
     try {
-      if (existsSync(REGISTRY_FILE)) {
-        const data = JSON.parse(readFileSync(REGISTRY_FILE, 'utf-8'));
+      const registryFile = getRegistryFile();
+      if (existsSync(registryFile)) {
+        const data = JSON.parse(readFileSync(registryFile, 'utf-8'));
         this.entries = Array.isArray(data) ? data : [];
       }
     } catch {
@@ -34,8 +41,8 @@ export class RepoRegistry {
   }
 
   private save(): void {
-    mkdirSync(MILENS_HOME, { recursive: true });
-    writeFileSync(REGISTRY_FILE, JSON.stringify(this.entries, null, 2));
+    mkdirSync(getMilensHome(), { recursive: true });
+    writeFileSync(getRegistryFile(), JSON.stringify(this.entries, null, 2));
   }
 
   register(rootPath: string, dbPath: string, hash: string): void {
@@ -55,7 +62,12 @@ export class RepoRegistry {
     this.save();
   }
 
+  private reloadIfStale(): void {
+    this.load();
+  }
+
   findByRoot(rootPath: string): RepoEntry | undefined {
+    this.reloadIfStale();
     const absolute = normalizePath(rootPath);
     return this.entries.find(e => e.rootPath === absolute);
   }
@@ -68,6 +80,7 @@ export class RepoRegistry {
   }
 
   listAll(): RepoEntry[] {
+    this.reloadIfStale();
     return [...this.entries];
   }
 

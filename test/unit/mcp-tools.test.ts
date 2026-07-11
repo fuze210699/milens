@@ -160,6 +160,7 @@ const EXPECTED_TOOLS = [
   'session_end', 'handoff', 'pre_commit_check', 'hook_onFileChange',
   'hook_preCompact', 'hook_postCompact', 'semantic_search', 'find_similar',
   'compare_impact', 'orchestrate', 'fix_apply', 'test_generate', 'security_scan',
+  'generate_findings_report',
 ];
 
 describe('createMcpServer', () => {
@@ -455,6 +456,48 @@ describe('createMcpServer', () => {
       const result = await handler({ name: 'NonExistent', repo: TEST_ROOT, depth: 2, detail: 'L1' });
 
       expect(result.content[0].text).toContain('[grep]');
+    });
+  });
+
+  // ── grep tool ──
+  // Regression: grepFiles() used to unconditionally skip every directory
+  // entry starting with '.', so config/doc directories that milens itself
+  // generates (.claude/rules, .claude/skills/generated, .github/instructions,
+  // .cursor/rules, .agents/skills) were silently invisible to grep — directly
+  // contradicting the tool's own advertised claim of searching "templates,
+  // configs, docs". Only real noise dirs (.git, .idea, etc.) should be skipped.
+
+  describe('grep tool', () => {
+    const dotDirsRoot = join(TEST_ROOT, 'dotdir-grep-fixture');
+
+    beforeAll(() => {
+      mkdirSync(join(dotDirsRoot, '.claude', 'rules'), { recursive: true });
+      mkdirSync(join(dotDirsRoot, '.github', 'instructions'), { recursive: true });
+      mkdirSync(join(dotDirsRoot, '.git'), { recursive: true });
+      writeFileSync(join(dotDirsRoot, '.claude', 'rules', 'server.md'), 'UNIQUE_DOTDIR_MARKER_TOKEN in claude rules\n');
+      writeFileSync(join(dotDirsRoot, '.github', 'instructions', 'server.md'), 'UNIQUE_DOTDIR_MARKER_TOKEN in github instructions\n');
+      writeFileSync(join(dotDirsRoot, '.git', 'HEAD'), 'UNIQUE_DOTDIR_MARKER_TOKEN should never be found (real .git noise)\n');
+    });
+
+    afterAll(() => {
+      rmSync(dotDirsRoot, { recursive: true, force: true });
+    });
+
+    it('finds text inside .claude/rules (generated docs), not just plain directories', async () => {
+      const registry2 = new RepoRegistry();
+      registry2.register(dotDirsRoot, DB_PATH, 'test-hash-dotdir');
+      const server = createMcpServer(dotDirsRoot);
+      try {
+        const handler = getToolHandler(server, 'grep');
+        const result = await handler({ pattern: 'UNIQUE_DOTDIR_MARKER_TOKEN', repo: dotDirsRoot, limit: 50, scope: 'all' });
+        const text = result.content[0].text as string;
+
+        expect(text).toContain('.claude/rules/server.md');
+        expect(text).toContain('.github/instructions/server.md');
+        expect(text).not.toContain('.git/HEAD');
+      } finally {
+        registry2.remove(dotDirsRoot);
+      }
     });
   });
 
@@ -804,6 +847,23 @@ describe('createMcpServer', () => {
       expect(typeof parsed.summary.totalScanned).toBe('number');
       expect(typeof parsed.summary.score).toBe('number');
       expect(Array.isArray(parsed.findings)).toBe(true);
+    });
+
+    it('caps context length for findings in minified/bundled files with huge single lines', async () => {
+      const hugeLine = `PASSWORD="hunter2xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" ${'x'.repeat(200_000)}`;
+      const bundlePath = resolve(TEST_ROOT, 'huge-bundle.yml');
+      writeFileSync(bundlePath, hugeLine, 'utf-8');
+      try {
+        const server = createMcpServer(TEST_ROOT);
+        const handler = getToolHandler(server, 'security_scan');
+        const result = await handler({ scope: 'secrets', repo: TEST_ROOT, limit: 50 });
+        const parsed = JSON.parse(result.content[0].text);
+        const finding = parsed.findings.find((f: any) => f.file === 'huge-bundle.yml');
+        expect(finding).toBeDefined();
+        expect(finding.context.length).toBeLessThan(1000);
+      } finally {
+        rmSync(bundlePath, { force: true });
+      }
     });
 
     it('fix_apply rejects a file path that escapes the repo root (path traversal)', async () => {

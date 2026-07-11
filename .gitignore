@@ -10,3 +10,5 @@ test/tmp/
 src/build-info.ts
 .env
 .DS_Store
+.milens-cross-ref.json
+release-stats.json

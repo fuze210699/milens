@@ -15,7 +15,7 @@ import { isTestFile } from '../utils.js';
 import { Database } from '../store/db.js';
 import { TfIdfProvider, EmbeddingStore, buildEmbeddingText } from '../store/vectors.js';
 import { ProgressPhase, type ProgressReporter } from '../ui/progress.js';
-import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, AnalysisStats } from '../types.js';
+import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, RawLocalBinding, AnalysisStats } from '../types.js';
 import type Parser from 'web-tree-sitter';
 import type { LangSpec } from '../parser/extract.js';
 
@@ -175,6 +175,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const allAssignmentBindings: RawAssignmentBinding[] = [];
   const allReturnTypes: RawReturnType[] = [];
   const allCallResultBindings: RawCallResultBinding[] = [];
+  const allLocalBindings: RawLocalBinding[] = [];
   const resolvedImportPaths = new Map<string, string>();
   const parsedFiles = new Set<string>();
   const importCache = new ImportResolveCache();
@@ -269,6 +270,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
           allAssignmentBindings.push(...result.assignmentBindings);
           allReturnTypes.push(...result.returnTypes);
           allCallResultBindings.push(...result.callResultBindings);
+          allLocalBindings.push(...result.localBindings);
 
           // Resolve import paths eagerly (cached)
           for (const imp of result.imports) {
@@ -342,11 +344,21 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     assignmentBindings: allAssignmentBindings,
     returnTypes: allReturnTypes,
     callResultBindings: allCallResultBindings,
+    localBindings: allLocalBindings,
     resolvedImportPaths,
     perFileImportSemantics,
     perFileMroStrategy,
   });
   const links = resolution.links;
+  if (resolution.externalSymbols.length > 0) {
+    const seenExternal = new Set<string>();
+    for (const es of resolution.externalSymbols) {
+      if (!seenExternal.has(es.id)) {
+        seenExternal.add(es.id);
+        allSymbols.push(es);
+      }
+    }
+  }
   if (opts.verbose) {
     console.error(`[link] Resolved ${links.length} relationships`);
     if (resolution.unresolvedImports > 0 || resolution.unresolvedCalls > 0) {
@@ -399,6 +411,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   allAssignmentBindings.length = 0;
   allReturnTypes.length = 0;
   allCallResultBindings.length = 0;
+  allLocalBindings.length = 0;
   resolvedImportPaths.clear();
   importCache.clear();
 
@@ -431,7 +444,16 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
 
   // Phase 7: Persist to database in single transaction
   reporter?.startPhase(ProgressPhase.PERSIST, 1);
-  const isFullScan = !opts.files || opts.files.length === 0;
+  // "Full scan" gates whether we overwrite the persisted aggregate meta stats
+  // (test coverage, unresolved import/call counts). It must require that this
+  // run actually re-parsed every scanned file — not just "no --files filter" —
+  // otherwise a no-op incremental run (opts.force=false, nothing changed) has
+  // empty allImports/allCalls (skipped files are never re-parsed), producing a
+  // near-empty `links` array in Phase 6.5 that would silently clobber correct
+  // historical stats with near-zero numbers. --files-targeted runs are never
+  // full scans regardless, since they only cover an explicit file subset.
+  const isFullScan = (!opts.files || opts.files.length === 0) &&
+    (opts.force === true || (totalToParse > 0 && parsedFiles.size === totalToParse));
   db.transaction(() => {
     if (opts.force) {
       if (opts.files && opts.files.length > 0) {
@@ -539,7 +561,7 @@ async function parseFile(
   // HTML: extract inline <script> blocks, parse as JS, merge refs
   if (spec.id === 'html') {
     const result: ExtractionResult = {
-      symbols: [], imports: [], calls: [], heritage: [], exportedNames: new Set(), reExports: [], typeBindings: [], assignmentBindings: [], returnTypes: [], callResultBindings: [],
+      symbols: [], imports: [], calls: [], heritage: [], exportedNames: new Set(), reExports: [], typeBindings: [], assignmentBindings: [], returnTypes: [], callResultBindings: [], localBindings: [],
     };
 
     // Parse HTML with tree-sitter to get calls (class refs, etc.)
@@ -554,6 +576,7 @@ async function parseFile(
     result.assignmentBindings.push(...treeResult.assignmentBindings);
     result.returnTypes.push(...treeResult.returnTypes);
     result.callResultBindings.push(...treeResult.callResultBindings);
+    result.localBindings.push(...treeResult.localBindings);
     for (const n of treeResult.exportedNames) result.exportedNames.add(n);
 
     // Extract inline <script> blocks and parse as JS
@@ -583,6 +606,7 @@ async function parseFile(
       result.assignmentBindings.push(...extracted.assignmentBindings);
       result.returnTypes.push(...extracted.returnTypes);
       result.callResultBindings.push(...extracted.callResultBindings);
+      result.localBindings.push(...extracted.localBindings);
       for (const n of extracted.exportedNames) result.exportedNames.add(n);
     }
 

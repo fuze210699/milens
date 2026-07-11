@@ -36,7 +36,8 @@ describe('Confidence', () => {
         confidence REAL DEFAULT 0.5,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        expires_at TEXT
+        expires_at TEXT,
+        symbol_hash TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_annotations_symbol ON annotations(symbol, key);
       CREATE INDEX IF NOT EXISTS idx_annotations_session ON annotations(session_id);

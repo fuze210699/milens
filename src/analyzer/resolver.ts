@@ -1,9 +1,23 @@
 import { dirname } from 'node:path';
-import type { CodeSymbol, SymbolLink, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, LinkType } from '../types.js';
+import type { CodeSymbol, SymbolLink, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, RawLocalBinding, LinkType } from '../types.js';
 
 // Minimum confidence to create a link — below this, classify as unresolved
 // "No link is better than a wrong link"
 const MIN_LINK_CONFIDENCE = 0.5;
+
+// Common JS/TS built-in types and globals — extend/implements these means external heritage
+const BUILTIN_TYPES = new Set([
+  'Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError',
+  'Array', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Promise', 'Date', 'RegExp',
+  'String', 'Number', 'Boolean', 'Object', 'Function', 'Symbol', 'BigInt',
+  'ArrayBuffer', 'DataView', 'Int8Array', 'Uint8Array', 'Uint8ClampedArray',
+  'Int16Array', 'Uint16Array', 'Int32Array', 'Uint32Array', 'Float32Array',
+  'Float64Array', 'BigInt64Array', 'BigUint64Array',
+  'EventTarget', 'AbortController', 'AbortSignal',
+  'URL', 'URLSearchParams', 'FormData', 'Blob', 'File', 'Response', 'Request',
+  'Headers', 'ReadableStream', 'WritableStream', 'TransformStream',
+  'TextEncoder', 'TextDecoder', 'EventEmitter',
+]);
 
 interface ResolutionInput {
   symbolsByFile: Map<string, CodeSymbol[]>;
@@ -16,6 +30,7 @@ interface ResolutionInput {
   assignmentBindings?: RawAssignmentBinding[];
   returnTypes?: RawReturnType[];
   callResultBindings?: RawCallResultBinding[];
+  localBindings?: RawLocalBinding[];
   resolvedImportPaths: Map<string, string>; // raw module path → resolved file path
   perFileImportSemantics?: Map<string, 'named' | 'wildcard-leaf' | 'wildcard-transitive' | 'namespace'>; // per-file import semantics
   perFileMroStrategy?: Map<string, 'first-wins' | 'c3' | 'ruby-mixin' | 'none'>; // per-file MRO strategy
@@ -27,6 +42,8 @@ export interface ResolutionResult {
   unresolvedCalls: number;
   externalImports: number;
   externalCalls: number;
+  /** External heritage parents (symbols not defined in project, e.g. `Error`, `CanActivate`) */
+  externalSymbols: CodeSymbol[];
 }
 
 export function resolveLinks(input: ResolutionInput): SymbolLink[] {
@@ -36,6 +53,7 @@ export function resolveLinks(input: ResolutionInput): SymbolLink[] {
 
 export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult {
   const links: SymbolLink[] = [];
+  const externalSymbols: CodeSymbol[] = [];
   const symbolByName = buildNameIndex(input.allSymbols);
   const symbolById = buildIdIndex(input.allSymbols);
   let unresolvedImports = 0;
@@ -45,6 +63,18 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
 
   // Track names imported from external (non-local) modules per file
   const externalNamesPerFile = new Map<string, Set<string>>();
+
+  // Names declared purely locally (params, const/let/var, destructuring) per enclosing
+  // scope — these can never be project symbols/imports/globals, so a bare call to one
+  // is neither a real link target nor a resolution failure; see RawLocalBinding.
+  const localNamesPerScope = new Map<string, Set<string>>();
+  for (const lb of input.localBindings ?? []) {
+    let names = localNamesPerScope.get(lb.scope);
+    if (!names) { names = new Set(); localNamesPerScope.set(lb.scope, names); }
+    names.add(lb.name);
+  }
+  const isKnownLocal = (call: RawCall): boolean =>
+    localNamesPerScope.get(call.enclosingSymbolId)?.has(call.calleeName) ?? false;
 
   // Build re-export map: file → (name → sourceFile)
   const reExportMap = buildReExportMap(input.reExports ?? [], input.resolvedImportPaths);
@@ -296,32 +326,53 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
       const extNames = externalNamesPerFile.get(call.filePath);
       if (call.receiver ||
           BUILTIN_GLOBALS.has(call.calleeName) ||
+          TEST_FRAMEWORK_GLOBALS.has(call.calleeName) ||
+          WEB_DOM_GLOBALS.has(call.calleeName) ||
           extNames?.has(call.calleeName)) {
         externalCalls++;
-      } else {
+      } else if (!call.isArgumentRef && !isKnownLocal(call)) {
+        // isArgumentRef identifiers with zero project-symbol candidates are almost
+        // always plain data values passed as arguments (e.g. `getChannel(workspaceId)`),
+        // not genuine callee references — the extraction query captures argument-position
+        // identifiers broadly to catch real callback refs (`onMounted(handler)`), but when
+        // no project symbol shares the name, there's nothing that "should have" resolved.
+        // Likewise, a bare call to a name that's a known local declaration in this exact
+        // scope (a useState setter, a destructured callback prop) can never be a project
+        // symbol by construction — see RawLocalBinding.
         unresolvedCalls++;
       }
+      tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links);
       continue;
     }
 
     // Fast path: unique name globally.
     // Skip this shortcut when:
+    // - the call has a receiver AND the only candidate is a standalone
+    //   function (not a method) AND the caller file is a dynamically-typed
+    //   language (Python, PHP, Ruby) — this prevents linking
+    //   `self.x.func()` to an unrelated top-level `def func()` that
+    //   happens to share the same name, when the receiver's type cannot
+    //   be statically determined.
     // - the call has a receiver AND the name is a common built-in prototype method
     //   (`pattern.exec()`, `fileSet.add()`) — those must go through receiver-aware
     //   narrowing below instead of being linked by bare name to an unrelated project
-    //   symbol that merely happens to share the name. Receiver calls to any other
-    //   (non-built-in) method name still take the fast path, since that's what
-    //   correctly resolves single-candidate methods like `self.save()` in
-    //   Python/Go/Rust fixtures — narrowing isn't reliable for those receiver types.
+    //   symbol that merely happens to share the name.
     // - the identifier was captured from an argument position, not an actual
     //   invocation (`onMounted(handler)`, decorator args) — it may just be a plain
     //   local variable (e.g. `resolve(root, file)`), not a function reference. Let it
     //   fall through to same-file/imported/proximity-scored matching below instead of
     //   blindly linking to a same-named symbol anywhere in the repo.
+    // - the call has no receiver AND the name is a known local declaration in this
+    //   scope (e.g. `const { t } = useTranslation(); t('key')`) — even a *globally
+    //   unique* same-named project symbol must lose to a local binding, by real
+    //   lexical scoping rules. Let it fall through to the same-file/imported/local
+    //   chain below, which checks local-binding shadowing before any cross-file guess.
     if (
       candidates.length === 1 &&
       !(call.receiver && BUILTIN_METHOD_NAMES.has(call.calleeName)) &&
-      !call.isArgumentRef
+      !(call.receiver && candidates[0].kind === 'function' && isDynamicLang(call.filePath)) &&
+      !call.isArgumentRef &&
+      !(!call.receiver && isKnownLocal(call))
     ) {
       // Check if the caller imported this name from an external module, or it's a builtin global
       const fileExtNames = externalNamesPerFile.get(call.filePath);
@@ -336,26 +387,45 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     // ── Receiver-aware narrowing (highest priority for member calls) ──
     if (call.receiver) {
       const narrowed = narrowByReceiver(call, candidates, symbolById, symbolByName, importedNamesPerFile, input.symbolsByFile, typeBindingsPerFile, heritageAncestors);
+      // Was this receiver's OWN declared type imported from an external module
+      // (e.g. `this.configService: ConfigService` where ConfigService comes from
+      // '@nestjs/config')? Existing classification below only checked the callee
+      // method NAME against external names — never the receiver's type origin —
+      // so calls like `configService.get(...)` were misclassified as unresolved
+      // even though the receiver is provably external. Checking method-name
+      // candidates first (via narrowByReceiver above) still takes priority, since
+      // a receiver's declared type can be narrower than its runtime type.
+      const receiverIsExternallyTyped = isReceiverExternallyTyped(call, typeBindingsPerFile, symbolById, externalNamesPerFile);
       if (narrowed) {
         if (narrowed.confidence >= MIN_LINK_CONFIDENCE) {
           links.push(makeLink(call.enclosingSymbolId, narrowed.symbol.id, 'calls', narrowed.confidence, call.line));
+        } else if (receiverIsExternallyTyped) {
+          externalCalls++;
+          tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links);
         } else {
           unresolvedCalls++;
+          tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links);
         }
         continue;
       }
       // Receiver didn't resolve to a known type — treat as external call
       // Don't fall through to name-only matching which would link to unrelated symbols
       const extNames = externalNamesPerFile.get(call.filePath);
-      if (BUILTIN_GLOBALS.has(call.calleeName) || extNames?.has(call.calleeName)) {
+      if (BUILTIN_GLOBALS.has(call.calleeName) || extNames?.has(call.calleeName) || receiverIsExternallyTyped) {
         externalCalls++;
       } else {
         unresolvedCalls++;
       }
+      tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links);
       continue;
     }
 
     // ── Same file match ──
+    // Takes priority over the local-binding check below: the local-declaration extraction
+    // captures ANY variable_declarator regardless of nesting (including module-level ones
+    // that ARE real project symbols), so a name appearing in localNamesPerScope does not
+    // by itself rule out a legitimate same-file target — only cross-file candidates are at
+    // real risk of the "t() shadows an unrelated file's symbol" mis-link this guards against.
     const sameFile = candidates.filter(s => s.filePath === call.filePath);
     if (sameFile.length > 0) {
       links.push(makeLink(call.enclosingSymbolId, sameFile[0].id, 'calls', 0.9, call.line));
@@ -373,12 +443,29 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
       }
     }
 
+    // ── Local declaration shadowing ──
+    // No same-file or imported candidate — the only remaining option is cross-file
+    // proximity scoring, which is exactly the risky case: a bare call whose name is a
+    // known local declaration in this scope (e.g. `const { t } = useTranslation(); t('key')`
+    // where some unrelated file also happens to export a project symbol literally named
+    // `t`) should never be linked to that unrelated symbol, by real lexical scoping rules
+    // (the local binding always wins). Short-circuiting here — instead of letting proximity
+    // scoring possibly cross the confidence threshold — prevents that wrong link and avoids
+    // counting it as unresolved; it was never truly ambiguous, milens just didn't know the
+    // name was locally bound.
+    if (isKnownLocal(call)) {
+      continue;
+    }
+
     // ── Proximity scoring fallback (replaces blind candidates[0]) ──
     const best = scoreCandidates(call, candidates, directImportsPerFile);
     if (best.confidence >= MIN_LINK_CONFIDENCE) {
       links.push(makeLink(call.enclosingSymbolId, best.symbol.id, 'calls', best.confidence, call.line));
-    } else {
-      // Below threshold — "no link is better than a wrong link"
+    } else if (!call.isArgumentRef) {
+      // Below threshold — "no link is better than a wrong link". For isArgumentRef
+      // identifiers this is frequently a plain local value that only coincidentally
+      // shares a name with unrelated project symbols (see the no-candidates branch
+      // above for the full rationale) — declining to link is correct, not a failure.
       unresolvedCalls++;
     }
   }
@@ -434,18 +521,40 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
   for (const h of input.heritage) {
     const children = symbolByName.get(h.childName);
     const parents = symbolByName.get(h.parentName);
-    if (!children || !parents) continue;
+
+    if (!children) continue;
 
     const child = children.find(s => s.filePath === h.filePath) ?? children[0];
+    if (!child) continue;
 
-    // Prefer imported parent > same-file parent > first match
-    const importedFile = importedNamesPerFile.get(h.filePath)?.get(h.parentName);
-    const parent = (importedFile ? parents.find(s => s.filePath === importedFile) : undefined)
-      ?? parents.find(s => s.filePath === h.filePath)
-      ?? parents[0];
+    if (parents && parents.length > 0) {
+      // Prefer imported parent > same-file parent > first match
+      const importedFile = importedNamesPerFile.get(h.filePath)?.get(h.parentName);
+      const parent = (importedFile ? parents.find(s => s.filePath === importedFile) : undefined)
+        ?? parents.find(s => s.filePath === h.filePath)
+        ?? parents[0];
 
-    if (child && parent) {
-      links.push(makeLink(child.id, parent.id, h.type, 0.95, h.line));
+      if (parent) {
+        links.push(makeLink(child.id, parent.id, h.type, 0.95, h.line));
+      }
+    } else {
+      // Parent not found in project symbols — check if it comes from an external import
+      const extNames = externalNamesPerFile.get(h.filePath);
+      const isExternal = extNames?.has(h.parentName) || BUILTIN_TYPES.has(h.parentName);
+      if (isExternal) {
+        const extId = `#external:${h.parentName}`;
+        const parentKind = h.type === 'implements' ? 'interface' : 'class';
+        externalSymbols.push({
+          id: extId,
+          name: h.parentName,
+          kind: parentKind,
+          filePath: '(external)',
+          startLine: 0,
+          endLine: 0,
+          exported: true,
+        });
+        links.push(makeLink(child.id, extId, h.type, 0.7, h.line));
+      }
     }
   }
 
@@ -487,7 +596,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     }
   }
 
-  return { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls, externalImports, externalCalls };
+  return { links: deduplicateLinks(links), unresolvedImports, unresolvedCalls, externalImports, externalCalls, externalSymbols };
 }
 
 // ── Receiver-aware call narrowing ──
@@ -568,6 +677,64 @@ function narrowByReceiver(
 
 // ── Type binding lookup: variable → type → method candidate (scope-aware) ──
 
+/** Resolve the declared type name of a variable from extracted type bindings,
+ *  preferring a binding scoped to the call site (or its parent scope) over a
+ *  module-level/first-seen fallback. Shared by narrowByTypeBinding (method
+ *  resolution) and the receiver-external-type classification check below —
+ *  both need "what type is this receiver bound to," just for different purposes. */
+function resolveTypeNameForVar(
+  varName: string,
+  filePath: string,
+  typeBindingsPerFile: Map<string, Map<string, Array<{ typeName: string; scope?: string; line: number }>>>,
+  symbolById: Map<string, CodeSymbol>,
+  callEnclosingId?: string,
+): string | undefined {
+  const fileBindings = typeBindingsPerFile.get(filePath);
+  if (!fileBindings) return undefined;
+
+  const entries = fileBindings.get(varName);
+  if (!entries || entries.length === 0) return undefined;
+
+  // Scope-aware: prefer binding from same enclosing scope as the call
+  if (callEnclosingId && entries.length > 1) {
+    // First try exact scope match
+    const scopedEntry = entries.find(e => e.scope === callEnclosingId);
+    if (scopedEntry) return scopedEntry.typeName;
+    // Try parent scope (e.g., call is in method, binding in class)
+    const enclosing = symbolById.get(callEnclosingId);
+    if (enclosing?.parentId) {
+      const parentEntry = entries.find(e => e.scope === enclosing.parentId);
+      if (parentEntry) return parentEntry.typeName;
+    }
+  }
+
+  // Fallback: if only one entry or no scope match, use first (module-level or single)
+  // Prefer module-level binding (scope undefined) when no scope match
+  const moduleLevelEntry = entries.find(e => !e.scope);
+  return moduleLevelEntry?.typeName ?? entries[0].typeName;
+}
+
+/** True when a receiver method call's receiver is itself declared with a type that
+ *  came from an external (non-project) import — e.g. `this.configService: ConfigService`
+ *  where `ConfigService` is imported from '@nestjs/config'. In that case any method
+ *  called on the receiver is necessarily external too, regardless of whether the
+ *  specific method name happens to also be used somewhere in the project. */
+function isReceiverExternallyTyped(
+  call: RawCall,
+  typeBindingsPerFile: Map<string, Map<string, Array<{ typeName: string; scope?: string; line: number }>>>,
+  symbolById: Map<string, CodeSymbol>,
+  externalNamesPerFile: Map<string, Set<string>>,
+): boolean {
+  const receiver = call.receiver;
+  if (!receiver || receiver === 'this' || receiver === 'self') return false;
+  const varName = (receiver.startsWith('this.') || receiver.startsWith('self.'))
+    ? receiver.slice(receiver.indexOf('.') + 1)
+    : receiver;
+  const typeName = resolveTypeNameForVar(varName, call.filePath, typeBindingsPerFile, symbolById, call.enclosingSymbolId);
+  if (!typeName) return false;
+  return externalNamesPerFile.get(call.filePath)?.has(typeName) ?? false;
+}
+
 function narrowByTypeBinding(
   varName: string,
   filePath: string,
@@ -577,35 +744,8 @@ function narrowByTypeBinding(
   callEnclosingId?: string,
   heritageAncestors?: Map<string, string[]>,
 ): { symbol: CodeSymbol; confidence: number } | null {
-  const fileBindings = typeBindingsPerFile.get(filePath);
-  if (!fileBindings) return null;
-
-  const entries = fileBindings.get(varName);
-  if (!entries || entries.length === 0) return null;
-
-  // Scope-aware: prefer binding from same enclosing scope as the call
-  let typeName: string | undefined;
-  if (callEnclosingId && entries.length > 1) {
-    // First try exact scope match
-    const scopedEntry = entries.find(e => e.scope === callEnclosingId);
-    if (scopedEntry) {
-      typeName = scopedEntry.typeName;
-    } else {
-      // Try parent scope (e.g., call is in method, binding in class)
-      const enclosing = symbolById.get(callEnclosingId);
-      if (enclosing?.parentId) {
-        const parentEntry = entries.find(e => e.scope === enclosing.parentId);
-        if (parentEntry) typeName = parentEntry.typeName;
-      }
-    }
-  }
-
-  // Fallback: if only one entry or no scope match, use first (module-level or single)
-  if (!typeName) {
-    // Prefer module-level binding (scope undefined) when no scope match
-    const moduleLevelEntry = entries.find(e => !e.scope);
-    typeName = moduleLevelEntry?.typeName ?? entries[0].typeName;
-  }
+  const typeName = resolveTypeNameForVar(varName, filePath, typeBindingsPerFile, symbolById, callEnclosingId);
+  if (!typeName) return null;
 
   // Find candidate whose parent class name matches the resolved type,
   // including ancestors via MRO (heritage chain)
@@ -845,6 +985,57 @@ function makeLink(fromId: string, toId: string, type: LinkType, confidence: numb
   };
 }
 
+/**
+ * Last resort when a receiver-based call's callee could not be resolved to a
+ * project symbol (whether because no candidate shares its name at all, or
+ * because receiver-type narrowing failed/scored too low). The callee itself
+ * (e.g. `.join()`, `.has()`) may genuinely be external/builtin — but the
+ * receiver it's invoked on can still be a real local symbol worth recording
+ * as a dependency (e.g. `SAFETY_TOOLS.join('/')`: SAFETY_TOOLS is a project
+ * const, `join` is Array.prototype.join and will never resolve). Without
+ * this, the receiver reference is silently dropped from the graph entirely.
+ * Only a bare-identifier receiver is considered — compound paths (`this.foo`,
+ * `a.b`) are intentionally out of scope. Resolution prefers the file the
+ * receiver was actually imported from (see the import-map lookup below);
+ * otherwise falls back to a same-file match. This is a best-effort fallback,
+ * not a scope-accurate resolution — it can miss renamed/aliased imports.
+ */
+function tryLinkReceiverReference(
+  call: RawCall,
+  symbolByName: Map<string, CodeSymbol[]>,
+  importedNamesPerFile: Map<string, Map<string, string>>,
+  links: SymbolLink[],
+): void {
+  if (
+    !call.receiver ||
+    call.receiver.includes('.') ||
+    call.receiver === 'this' ||
+    call.receiver === 'self' ||
+    call.isArgumentRef
+  ) {
+    return;
+  }
+  const receiverCandidates = symbolByName.get(call.receiver);
+  if (!receiverCandidates || receiverCandidates.length === 0) return;
+
+  // Prefer the file the receiver name was actually imported from, if any —
+  // this correctly disambiguates when another file coincidentally declares a
+  // same-named symbol. Falls back to a same-file match otherwise. Like the
+  // resolver's existing "imported type name" strategy, this assumes the local
+  // import binding name matches the target symbol's own name — it will miss
+  // renamed/aliased default imports (e.g. `import Foo from './registry'` where
+  // the exported symbol is actually named something else); that is a known,
+  // accepted limitation shared with the rest of the receiver-resolution logic.
+  const importedFile = importedNamesPerFile.get(call.filePath)?.get(call.receiver);
+  const target = importedFile
+    ? receiverCandidates.find(s => s.filePath === importedFile)
+    : receiverCandidates.find(s => s.filePath === call.filePath);
+
+  if (target) {
+    links.push(makeLink(call.enclosingSymbolId, target.id, 'references', 0.85, call.line));
+  }
+}
+
 function deduplicateLinks(links: SymbolLink[]): SymbolLink[] {
   const seen = new Set<string>();
   return links.filter(l => {
@@ -931,6 +1122,14 @@ function findDefaultExport(targetSymbols: CodeSymbol[]): CodeSymbol | undefined 
   return exported[0];
 }
 
+// ── Dynamic language detection ──
+
+/** Files in dynamically-typed languages where receiver types can't be statically resolved */
+function isDynamicLang(filePath: string): boolean {
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  return ext === 'py' || ext === 'rb' || ext === 'php';
+}
+
 // ── External module detection ──
 
 /** Returns true if the module path refers to an external package (not a relative local import) */
@@ -978,6 +1177,35 @@ const BUILTIN_GLOBALS = new Set([
   'var_dump', 'echo', 'isset', 'unset', 'empty', 'die', 'exit',
   'array_map', 'array_filter', 'array_merge', 'array_keys', 'array_values',
   'count', 'strlen', 'substr', 'explode', 'implode', 'trim',
+]);
+
+/** JS/TS test-framework globals (Jest/Vitest/Mocha/Jasmine) injected ambiently when a
+ *  project opts into globals mode (e.g. Vitest's `globals: true`) — no import, no project
+ *  symbol. Intentionally kept separate from BUILTIN_GLOBALS: these names are common enough
+ *  as ordinary project identifiers (`test`, `it`, `suite`) that treating them as unconditional
+ *  globals in the "unique candidate" fast path could wrongly suppress a real link to an
+ *  actual project symbol of the same name. Only checked where `candidates.length === 0` is
+ *  already established (no project symbol shares the name), where that risk cannot occur. */
+const TEST_FRAMEWORK_GLOBALS = new Set([
+  'describe', 'it', 'test', 'expect', 'beforeEach', 'afterEach', 'beforeAll', 'afterAll',
+  'suite', 'bench', 'vi', 'jest',
+]);
+
+/** Web/DOM APIs — browser globals (also present in Electron renderer processes and
+ *  polyfilled/native in modern Node) — ambient, never a project symbol or tracked import.
+ *  Same isolation rationale as TEST_FRAMEWORK_GLOBALS: several of these names (`Event`,
+ *  `File`, `Request`, `Response`, `Worker`, `Image`, `History`) are plausible names for a
+ *  project's own classes/DTOs, so this set is only ever consulted where
+ *  `candidates.length === 0` already holds — it can never shadow a real project symbol. */
+const WEB_DOM_GLOBALS = new Set([
+  'URL', 'URLSearchParams', 'FormData', 'Headers', 'Request', 'Response',
+  'requestAnimationFrame', 'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback',
+  'IntersectionObserver', 'ResizeObserver', 'MutationObserver', 'PerformanceObserver',
+  'AbortController', 'AbortSignal', 'WebSocket', 'Notification', 'Blob', 'File', 'FileReader',
+  'CustomEvent', 'Event', 'EventTarget', 'Worker', 'SharedWorker', 'MessageChannel', 'MessagePort',
+  'localStorage', 'sessionStorage', 'indexedDB', 'navigator', 'window', 'document', 'location',
+  'history', 'performance', 'crypto', 'TextEncoder', 'TextDecoder',
+  'CSS', 'Image', 'Audio', 'Option',
 ]);
 
 /** Common built-in prototype/instance method names (Set/Map/Array/RegExp/String/Promise/...)

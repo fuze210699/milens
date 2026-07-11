@@ -140,6 +140,7 @@ export function extractMarkdown(source: string, filePath: string): ExtractionRes
     assignmentBindings: [],
     returnTypes: [],
     callResultBindings: [],
+    localBindings: [],
   };
 }
 

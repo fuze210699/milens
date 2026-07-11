@@ -1,5 +1,5 @@
 import type Parser from 'web-tree-sitter';
-import type { CodeSymbol, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, ExtractionResult, SymbolKind } from '../types.js';
+import type { CodeSymbol, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, RawLocalBinding, ExtractionResult, SymbolKind } from '../types.js';
 
 // ── Declarative language specification ──
 
@@ -13,6 +13,12 @@ export interface LangSpec {
   importSemantics?: 'named' | 'wildcard-leaf' | 'wildcard-transitive' | 'namespace'; // How imports expose symbols
   /** Determine whether a symbol is exported (overrides allTopLevelExported/uppercaseExported) */
   isExported?: (symbol: CodeSymbol) => boolean;
+  /** Filter which captured @name values should become symbols. Return false to skip.
+   *  `defNodeType` is the tree-sitter node type of the @def capture (e.g. "declaration", "rule_set"). */
+  filterSymbolName?: (name: string, defNodeType: string) => boolean;
+  /** Filter which captured @callee values should become calls. Return false to skip.
+   *  `defNodeType` is the tree-sitter node type of the @def capture (e.g. "jsx_opening_element"). */
+  filterCallee?: (callee: string, defNodeType: string) => boolean;
   queries: {
     functions?: string;
     classes?: string;
@@ -34,6 +40,7 @@ export interface LangSpec {
     assignmentChains?: string;
     returnTypes?: string;
     callResultBindings?: string;
+    localBindings?: string;
   };
   resolveImport(raw: string, fromFile: string, root: string, aliases: Record<string, string>): string | null;
 }
@@ -279,6 +286,7 @@ export function extractFromTree(
   const assignmentBindings: RawAssignmentBinding[] = [];
   const returnTypes: RawReturnType[] = [];
   const callResultBindings: RawCallResultBinding[] = [];
+  const localBindings: RawLocalBinding[] = [];
   const exportedNames = new Set<string>();
   // AST node id → symbol id, for function/method/class/struct/trait symbols only —
   // see findEnclosingViaAst above.
@@ -315,6 +323,9 @@ export function extractFromTree(
       const symKey = `${name}:${defNode.startPosition.row + 1}`;
       if (seenSymbolKeys.has(symKey)) continue;
       seenSymbolKeys.add(symKey);
+
+      // Filter: spec can define a name filter to skip certain captured symbols
+      if (spec.filterSymbolName && !spec.filterSymbolName(name, defNode.type)) continue;
 
       const sym: CodeSymbol = {
         id: makeSymbolId(kind, name, defNode.startPosition.row + 1),
@@ -428,6 +439,8 @@ export function extractFromTree(
       const calleeNode = captureNode(match, 'callee');
       const parentType = calleeNode?.parent?.type;
       const isArgumentRef = parentType === 'arguments' || parentType === 'pair' || parentType === 'array';
+
+      if (spec.filterCallee && !spec.filterCallee(callee, defNode.type)) continue;
 
       calls.push({
         filePath,
@@ -568,5 +581,24 @@ export function extractFromTree(
     }
   }
 
-  return { symbols, imports, calls, heritage, exportedNames, reExports, typeBindings, assignmentBindings, returnTypes, callResultBindings };
+  // ── Extract local bindings (params, const/let/var declarators, destructuring) ──
+  // These names can never be project symbols, imports, or globals by construction —
+  // used by the resolver to recognize "locally bound, not applicable to link" instead
+  // of miscounting a bare call to one of these (e.g. a useState setter, a destructured
+  // callback prop) as an unresolved reference.
+
+  if (spec.queries.localBindings) {
+    for (const match of runQuery(spec.queries.localBindings)) {
+      const name = captureText(match, 'name');
+      const nameNode = captureNode(match, 'name');
+      if (!name || !nameNode) continue;
+
+      const line = nameNode.startPosition.row + 1;
+      const scope = findEnclosingViaAst(root, nameNode.startPosition, containerNodeIds) ?? `${filePath}#module:_top:0`;
+
+      localBindings.push({ filePath, name, scope, line });
+    }
+  }
+
+  return { symbols, imports, calls, heritage, exportedNames, reExports, typeBindings, assignmentBindings, returnTypes, callResultBindings, localBindings };
 }

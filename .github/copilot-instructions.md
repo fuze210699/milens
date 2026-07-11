@@ -1,7 +1,7 @@
 <!-- milens:start -->
 # Milens — AI-DOS
 
-The Operating System for AI-Driven Development. This project is indexed by milens (2264 symbols, 2936 links, 229 files).
+The Operating System for AI-Driven Development. This project is indexed by milens (2362 symbols, 3127 links, 235 files).
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
 
@@ -224,13 +224,14 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symb
 
 ## Reference
 
-### ⭐ Core Tools — Use Every Session (8)
+### ⭐ Core Tools — Use Every Session (9)
 
 | Tool | Purpose |
 |---|---|
 | `mcp_milens_overview` | **Use this first.** Combined context + impact + grep. 1 call replaces 3-5 file reads. |
 | `mcp_milens_impact` | Blast radius BEFORE editing. Shows what WILL BREAK. |
 | `mcp_milens_edit_check` | Pre-edit safety: callers + exports + re-export chains + test coverage |
+| `mcp_milens_guard_edit_check` | HARD pre-edit gate: blocks if dependents > 5, tracks checks for session audit |
 | `mcp_milens_context` | 360° view: all callers + all callees. Instant dependency graph. |
 | `mcp_milens_query` | Find symbol definitions by name (FTS5 instant search) |
 | `mcp_milens_grep` | Search ALL files for any text (templates, configs, docs, styles) |
@@ -257,10 +258,11 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symb
 | `mcp_milens_find_dead_code` | Unused exported symbols | Before major refactors |
 | `mcp_milens_find_similar` | Symbols with shared callers/callees | Finding refactor patterns |
 
-### 📚 Advanced Tools — Reference (19)
+### 📚 Advanced Tools — Reference (20)
 
 | Tool | Purpose |
 |---|---|
+| `mcp_milens_generate_findings_report` | Render investigated findings into a Markdown+XML report for a worker/coder agent |
 | `mcp_milens_status` | Index health: symbols, links, files, coverage, staleness |
 | `mcp_milens_repos` | List all indexed repositories |
 | `mcp_milens_annotate` | Record observations about symbols (persists across sessions) |

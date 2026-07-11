@@ -6,6 +6,9 @@
     {"fromFile":"service.rb","toFile":"models.rb","type":"imports","fromName":"_top","toName":"UserRepo"},
     {"fromFile":"service.rb","toFile":"mixins.rb","type":"imports","fromName":"_top","toName":"Loggable"},
     {"fromFile":"service.rb","toFile":"service.rb","type":"extends","fromName":"AdminService","toName":"UserService"},
-    {"fromFile":"service.rb","toFile":"mixins.rb","type":"implements","fromName":"AdminService","toName":"Loggable"}
+    {"fromFile":"service.rb","toFile":"mixins.rb","type":"implements","fromName":"AdminService","toName":"Loggable"},
+    {"fromFile":"models.rb","toFile":"models.rb","type":"references","fromName":"UserRepo","toName":"@users"},
+    {"fromFile":"service.rb","toFile":"service.rb","type":"references","fromName":"UserService","toName":"@repo"},
+    {"fromFile":"service.rb","toFile":"service.rb","type":"references","fromName":"AdminService","toName":"@repo"}
   ]
 }

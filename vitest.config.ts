@@ -5,6 +5,9 @@ export default defineConfig({
     globals: true,
     root: '.',
     include: ['test/**/*.test.ts'],
+    setupFiles: ['test/setup.ts'],
+    maxWorkers: 4,
+    retry: 2,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],

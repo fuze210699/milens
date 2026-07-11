@@ -36,6 +36,13 @@ jobs:
       # Build and smoke test
       - run: npm run build
       - run: node dist/cli.js analyze -p . --force
+      # Phase 0.1: Generate release-stats artifact for downstream repos
+      - name: Generate release stats
+        run: node scripts/gen-release-stats.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-stats
+          path: release-stats.json
       - run: node scripts/smoke-test.mjs
       - run: npm publish
         env:

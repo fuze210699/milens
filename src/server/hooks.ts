@@ -158,10 +158,11 @@ export async function defaultOnSessionStart(ctx: SessionContext, dbPath: string)
   }
 
   try {
-    const { generateCrossRefSection } = await import('../agents-md.js');
+    const { generateCrossRefSection, syncCrossRefToAgentsMd } = await import('../agents-md.js');
     const crossRef = generateCrossRefSection(ctx.rootPath);
     if (crossRef) {
       lines.push(crossRef);
+      syncCrossRefToAgentsMd(ctx.rootPath);
     }
   } catch {
     // no cross-ref config — skip silently

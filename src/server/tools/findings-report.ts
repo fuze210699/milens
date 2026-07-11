@@ -191,7 +191,7 @@ export function registerFindingsReportTools(server: McpServer, deps: Deps): void
       let gitignoreWarning = '';
       try {
         const gitignoreContent = existsSync(gitignorePath) ? readFileSync(gitignorePath, 'utf-8') : '';
-        if (!/(^|\n)\.milens\/?(\n|$)/.test(gitignoreContent)) {
+        if (!/(^|\r?\n)\.milens\/?(\r?\n|$)/.test(gitignoreContent)) {
           gitignoreWarning = '\n\n⚠ ".milens/" is not in this repo\'s .gitignore — this report may get picked up by `git add -A`. Consider adding ".milens/" to .gitignore.';
         }
       } catch { /* non-fatal */ }

@@ -143,7 +143,7 @@ No routes detected.
 | Repo | Role | Visibility |
 |------|------|------------|
 | **milens** (upstream) | Core engine — parser, analyzer, store, server, security, CLI | Public MIT |
-| **milens-cloud** | Cloud backend + GitHub App + Stripe | Private |
+| **milens-cloud** | Cloud backend + GitHub App | Private |
 | **milens-web** | Landing page + docs (static HTML) | Private |
 
 ### Contract

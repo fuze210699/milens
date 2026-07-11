@@ -90,6 +90,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="v${{ needs.check-version.outputs.version }}"
-          git tag "$VERSION"
-          git push origin "$VERSION"
-          gh release create "$VERSION" --generate-notes --title "$VERSION"
+
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists locally, skipping tag creation."
+          else
+            git tag "$VERSION"
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists on origin, skipping push."
+          else
+            git push origin "$VERSION"
+          fi
+
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists, skipping."
+          else
+            gh release create "$VERSION" --generate-notes --title "$VERSION"
+          fi

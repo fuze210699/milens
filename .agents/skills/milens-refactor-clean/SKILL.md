@@ -16,7 +16,7 @@ Identify dead or unwanted code, verify it's truly unused via context and text se
 | `mcp_milens_impact` | Blast radius assessment before removal |
 | `mcp_milens_grep` | Text search for symbol name in configs, templates, docs |
 | `mcp_milens_detect_changes` | Post-refactor verification of changed files |
-| `mcp_milens_test_impact` | Identify affected test files to run |
+| `mcp_milens_tests` | Identify affected test files to run |
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root**.
 
@@ -101,7 +101,7 @@ Check that:
 Identify and run tests impacted by the removal.
 
 ```
-mcp_milens_test_impact({repo: "<workspaceRoot>"})
+mcp_milens_tests({mode: "impact", repo: "<workspaceRoot>"})
 ```
 
 This lists test files that reference the removed code or its dependents. Run all affected tests to ensure nothing is broken.
@@ -185,7 +185,7 @@ Changed files:
 
 **Step 7 — Test impact:**
 ```
-mcp_milens_test_impact({repo: "/home/user/project"})
+mcp_milens_tests({mode: "impact", repo: "/home/user/project"})
 ```
 
 **Output:** 2 affected test files — `src/__tests__/helpers.test.ts`, `src/__tests__/types.test.ts`. Both pass after updating.
@@ -196,7 +196,7 @@ mcp_milens_test_impact({repo: "/home/user/project"})
 2. **Grep is the backstop.** `context` only catches code-level references. `grep` catches template usage, string-based routing, config files, and docs. Never skip Step 3.
 3. **Remove in small batches.** Delete 1-3 symbols per commit. Large-scale deletion makes `detect_changes` harder to verify and `git bisect` harder to use.
 4. **Update docs proactively.** If `grep` finds documentation references, update or remove them in the same commit. Stale docs referencing deleted symbols are worse than no docs.
-5. **Test impact is not optional.** Removing code can break tests that import the symbol directly. Run `test_impact` and fix before committing.
+5. **Test impact is not optional.** Removing code can break tests that import the symbol directly. Run `tests (mode=impact)` and fix before committing.
 
 ## Quality Gate
 
@@ -206,4 +206,4 @@ mcp_milens_test_impact({repo: "/home/user/project"})
 | Verification complete | `context` + `grep` run for every candidate marked for removal | Any candidate removed without both checks |
 | Blast radius safe | All removed symbols have 0 depth-1 dependents | Any symbol with dependents removed without justification |
 | Change scope clean | `detect_changes` shows only expected files | Unexpected files in the diff |
-| Tests pass | All `test_impact` files pass | Any affected test file fails |
+| Tests pass | All `tests (mode=impact)` files pass | Any affected test file fails |

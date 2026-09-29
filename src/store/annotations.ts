@@ -69,9 +69,7 @@ export class AnnotationStore {
         "UPDATE annotations SET confidence = ?, updated_at = datetime('now') WHERE id = ?"
       ),
 
-      boostRecallConfidence: this.db.prepare(
-        "UPDATE annotations SET confidence = MIN(confidence + 0.05, 0.95), updated_at = datetime('now') WHERE id = ? AND confidence < 0.9"
-      ),
+      getById: this.db.prepare('SELECT * FROM annotations WHERE id = ?'),
 
       getEvolutionEvents: this.db.prepare(
         'SELECT * FROM evolution_log WHERE annotation_id = ? ORDER BY created_at ASC'
@@ -142,6 +140,11 @@ export class AnnotationStore {
     };
   }
 
+  getById(id: string): Annotation | null {
+    const row = this.stmts.getById.get(id) as any;
+    return row ? rowToAnnotation(row) : null;
+  }
+
   recall(filters?: { symbol?: string; key?: AnnotationKey; agent?: string; sessionId?: string; limit?: number }): Annotation[] {
     const limit = filters?.limit ?? 50;
     let rows: any[];
@@ -158,11 +161,6 @@ export class AnnotationStore {
       rows = this.stmts.queryBySession.all(filters.sessionId) as any[];
     } else {
       rows = this.stmts.queryAll.all(limit) as any[];
-    }
-
-    // Boost confidence on recall (real-time learning)
-    for (const row of rows) {
-      this.stmts.boostRecallConfidence.run(row.id);
     }
 
     return rows.map(row => {

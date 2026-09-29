@@ -22,26 +22,26 @@ Call these tools in sequence to understand project structure:
 1. \`codebase_summary({})\` → compact overview: symbols, domains, top hubs, test coverage %
 2. \`domains({})\` → module clusters with file/symbol counts — identify which domains are relevant to this feature
 3. \`routes({})\` → inventory of API endpoints — identify which routes need changes or new routes needed
-${args.target ? `4. \`smart_context({name: "${args.target}", intent: "understand"})\` → 360° view of the target symbol (incoming refs, outgoing deps, callers, file peers)` : `4. \`query({query: "${args.feature.split(' ')[0]}"})\` → find relevant symbols by name`}
+${args.target ? `4. \`overview({name: "${args.target}", intent: "understand"})\` → 360° view of the target symbol (incoming refs, outgoing deps, callers, file peers)` : `4. \`query({query: "${args.feature.split(' ')[0]}"})\` → find relevant symbols by name`}
 
 ## STEP 2 — TARGET ANALYSIS
 ${args.target ? `Perform deep analysis on "${args.target}":
-1. \`smart_context({name: "${args.target}", intent: "edit"})\` → direct callers, blast radius, test coverage, re-export chains
+1. \`overview({name: "${args.target}", intent: "edit"})\` → direct callers, blast radius, test coverage, re-export chains
 2. \`edit_check({name: "${args.target}"})\` → pre-edit safety: callers, export status, inherited-by warnings, test coverage
 3. \`trace({name: "${args.target}", direction: "to"})\` → execution paths from entrypoints TO this symbol — understand how code reaches it
 4. \`impact({target: "${args.target}", direction: "upstream", depth: 3})\` → blast radius: what WILL break if this changes
    - depth 1 = WILL BREAK (direct callers)
    - depth 2 = LIKELY AFFECTED (indirect callers)
    - depth 3 = MAY NEED TESTING (transitive dependents)` : `No target symbol specified. Use \`codebase_summary()\` and \`domains()\` output to identify key symbols that need modification. For each key symbol found, run:
-1. \`smart_context({name: "keySymbol", intent: "edit"})\` → callers + blast radius
+1. \`overview({name: "keySymbol", intent: "edit"})\` → callers + blast radius
 2. \`edit_check({name: "keySymbol"})\` → pre-edit safety
 3. \`impact({target: "keySymbol", depth: 2})\` → upstream dependents`}
 
 ## STEP 3 — TEST STRATEGY
-${args.target ? `1. \`test_plan({name: "${args.target}"})\` → mock plan + >=3 test scenarios for the target symbol
-2. \`test_coverage_gaps({limit: 10})\` → nearby untested exported symbols sorted by risk` : `1. \`test_coverage_gaps({limit: 20})\` → all untested exported symbols, sorted by risk (heat + deps)
-2. For top 5 untested symbols from gaps: \`test_plan({name})\` → mock strategy + scenarios`}
-${args.target ? `3. \`impact({target: "${args.target}", direction: "upstream", depth: 1})\` → identify test files that import or call this symbol` : `3. \`test_impact({})\` → map changed files to which test files need to run`}
+${args.target ? `1. \`tests({mode: "plan", name: "${args.target}"})\` → mock plan + >=3 test scenarios for the target symbol
+2. \`tests({mode: "gaps", limit: 10})\` → nearby untested exported symbols sorted by risk` : `1. \`tests({mode: "gaps", limit: 20})\` → all untested exported symbols, sorted by risk (heat + deps)
+2. For top 5 untested symbols from gaps: \`tests({mode: "plan", name})\` → mock strategy + scenarios`}
+${args.target ? `3. \`impact({target: "${args.target}", direction: "upstream", depth: 1})\` → identify test files that import or call this symbol` : `3. \`tests({mode: "impact", })\` → map changed files to which test files need to run`}
 
 ## STEP 4 — DEPENDENCY DEEPENING (if needed)
 For any key relationships discovered in steps 1-3:
@@ -79,10 +79,10 @@ For each step:
 - **Impacted Symbols:** symbols affected by this change (from impact() output)
 
 ### 5. Testing Strategy
-- Test files to create/modify (from test_plan() output)
-- Mock requirements (from test_plan() dependencies-to-mock)
-- Test scenarios (from test_plan() >=3 scenarios per symbol)
-- Coverage improvement estimate (from test_coverage_gaps() baseline vs expected)
+- Test files to create/modify (from tests({mode: "plan"}) output)
+- Mock requirements (from tests({mode: "plan"}) dependencies-to-mock)
+- Test scenarios (from tests({mode: "plan"}) >=3 scenarios per symbol)
+- Coverage improvement estimate (from tests({mode: "gaps"}) baseline vs expected)
 - Command to run tests: \`npx vitest run <files>\`
 
 ### 6. Risks & Mitigations
@@ -203,20 +203,20 @@ async function testerHandler(args: { focus?: string }) {
 ${args.focus ? `\nFocus symbol: "${args.focus}"` : ''}
 
 ## STEP 1 — IDENTIFY COVERAGE GAPS
-1. Run \`test_coverage_gaps({limit: 20})\` → untested exported symbols sorted by risk (heat × dependents).
+1. Run \`tests({mode: "gaps", limit: 20})\` → untested exported symbols sorted by risk (heat × dependents).
    - Risk levels: CRITICAL (heat>80), HIGH (heat>50), MEDIUM (heat>30), LOW
    - Pay special attention to HIGH and CRITICAL — these are exploitable gaps
-${args.focus ? `2. Run \`smart_context({name: "${args.focus}", intent: "test"})\` → existing tests for this symbol, dependencies to mock, callers to cover` : `2. From the gaps list, identify the top 5 critical symbols to prioritize`}
+${args.focus ? `2. Run \`overview({name: "${args.focus}", intent: "test"})\` → existing tests for this symbol, dependencies to mock, callers to cover` : `2. From the gaps list, identify the top 5 critical symbols to prioritize`}
 
 ## STEP 2 — BUILD TEST PLANS
-${args.focus ? `Run \`test_plan({name: "${args.focus}"})\` → generates:
+${args.focus ? `Run \`tests({mode: "plan", name: "${args.focus}"})\` → generates:
 - Mock plan: which dependencies to mock and how
 - >=3 test scenarios: happy path, edge cases, error handling
-- Suggested test file location` : `For each of the top 5 untested symbols from gaps, run \`test_plan({name: "symbolName"})\` → mock plan + >=3 test scenarios each`}
+- Suggested test file location` : `For each of the top 5 untested symbols from gaps, run \`tests({mode: "plan", name: "symbolName"})\` → mock plan + >=3 test scenarios each`}
 ${args.focus ? `\nAlso run \`context({name: "${args.focus}"})\` → full incoming/outgoing to understand all relationships before writing tests.` : `\nAlso run \`context({name: "symbolName"})\` for each symbol → understand full relationships before writing tests.`}
 
 ## STEP 3 — IMPLEMENT TESTS
-Implement the test scenarios from test_plan():
+Implement the test scenarios from tests({mode: "plan"}):
 - Create test files in the suggested locations
 - Write >=3 test cases per symbol: happy path, edge case, error condition
 - Mock external dependencies per the mock plan
@@ -225,8 +225,8 @@ ${args.focus ? `- Verify tests reference "${args.focus}" correctly (check contex
 
 ## STEP 4 — VERIFY IMPACT
 After writing tests:
-1. Run \`test_impact({})\` → maps changed code to affected test files — verify new tests are in the list
-2. Run \`test_coverage_gaps({limit: 10})\` again → verify coverage improved (symbols should drop off the gaps list)
+1. Run \`tests({mode: "impact", })\` → maps changed code to affected test files — verify new tests are in the list
+2. Run \`tests({mode: "gaps", limit: 10})\` again → verify coverage improved (symbols should drop off the gaps list)
 3. Run \`review_symbol({name: "symbolName"})\` for the tested symbol → confirm "test coverage: yes" now shows
 
 ## OUTPUT FORMAT — Test Coverage Report
@@ -239,8 +239,8 @@ After writing tests:
 ### 2. Test Plans (for top 5)
 For each symbol:
 - **Symbol:** name [kind] file:line
-- **Mock Dependencies:** list from test_plan() dependencies-to-mock
-- **Test Scenarios:** >=3 scenarios from test_plan()
+- **Mock Dependencies:** list from tests({mode: "plan"}) dependencies-to-mock
+- **Test Scenarios:** >=3 scenarios from tests({mode: "plan"})
   1. Happy path: description
   2. Edge case: description
   3. Error handling: description
@@ -251,7 +251,7 @@ For each symbol:
 | ... | src/__tests__/...test.ts | vitest |
 
 ### 4. Coverage Improvement Estimate
-- **Before:** X% (from initial test_coverage_gaps)
+- **Before:** X% (from initial tests({mode: "gaps"}))
 - **After:** Y% (estimated after implementing all test plans)
 - **Delta:** +Z%
 - **Remaining gaps:** N symbols still untested
@@ -515,7 +515,7 @@ async function debuggerHandler(args: { target: string; error_description?: strin
 ${args.error_description ? `\nReported error: "${args.error_description}"` : ''}
 
 ## STEP 1 — EXECUTION CONTEXT (What happens around this symbol?)
-Run \`smart_context({name: "${args.target}", intent: "debug"})\` → returns:
+Run \`overview({name: "${args.target}", intent: "debug"})\` → returns:
 - Execution paths: call chains from entrypoints TO this symbol
 - What this symbol calls: downstream dependencies (immediate callees)
 - Data types used: interfaces, types, classes passed as parameters or returned
@@ -598,7 +598,7 @@ For each root cause hypothesis:
 ### 6. Recommended Next Steps
 - [ ] Reproduce bug with specific test case
 - [ ] Apply fix for most probable root cause
-- [ ] Run \`test_impact({})\` to identify affected tests
+- [ ] Run \`tests({mode: "impact", })\` to identify affected tests
 - [ ] Run affected test suite
 - [ ] Review fix with \`review_symbol({name: "${args.target}"})\`
 

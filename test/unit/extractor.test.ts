@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getParser, loadLanguage } from '../../src/parser/loader.js';
-import { extractFromTree } from '../../src/parser/extract.js';
+import { extractFromTree, createStableIdAllocator } from '../../src/parser/extract.js';
 import { extractVueScript, extractVueTemplateRefs, extractVueCompositionApi, extractVueTemplateAst } from '../../src/parser/lang-vue.js';
 import tsSpec from '../../src/parser/lang-ts.js';
 import pySpec from '../../src/parser/lang-py.js';
@@ -123,8 +123,8 @@ export class UserRepository {
     const result = await extractTs(source);
     const pushCall = result.calls.find(c => c.calleeName === 'push');
     expect(pushCall).toBeDefined();
-    expect(pushCall!.enclosingSymbolId).toContain('#method:save:');
-    expect(pushCall!.enclosingSymbolId).not.toContain('#class:UserRepository:');
+    expect(pushCall!.enclosingSymbolId).toContain('#method:save');
+    expect(pushCall!.enclosingSymbolId).not.toContain('#class:UserRepository');
   });
 
   it('attributes a method-parameter type annotation to the method, not the class (regression: was mis-attributed to class via column-0 lookup)', async () => {
@@ -142,8 +142,8 @@ export class UserRepository {
     const result = await extractTs(source);
     const paramBinding = result.typeBindings.find(tb => tb.variableName === 'user' && tb.typeName === 'User');
     expect(paramBinding).toBeDefined();
-    expect(paramBinding!.scope).toContain('#method:save:');
-    expect(paramBinding!.scope).not.toContain('#class:UserRepository:');
+    expect(paramBinding!.scope).toContain('#method:save');
+    expect(paramBinding!.scope).not.toContain('#class:UserRepository');
   });
 
   it('attributes a class-field type annotation directly to the class when there is no enclosing method', async () => {
@@ -157,7 +157,7 @@ export class UserRepository {
     const result = await extractTs(source);
     const fieldBinding = result.typeBindings.find(tb => tb.variableName === 'active' && tb.typeName === 'User');
     expect(fieldBinding).toBeDefined();
-    expect(fieldBinding!.scope).toContain('#class:UserRepository:');
+    expect(fieldBinding!.scope).toContain('#class:UserRepository');
   });
 
   it('attributes a call inside a deeply nested (indented) function to the innermost function', async () => {
@@ -171,7 +171,7 @@ function outer() {
     const result = await extractTs(source);
     const call = result.calls.find(c => c.calleeName === 'doSomething');
     expect(call).toBeDefined();
-    expect(call!.enclosingSymbolId).toContain('#function:inner:');
+    expect(call!.enclosingSymbolId).toContain('#function:inner');
   });
 
   it('falls back to the module top-level symbol for a call outside any function/class', async () => {
@@ -196,8 +196,8 @@ class Wrapper {
     const result = await extractTs(source);
     const chain = result.assignmentBindings.find(ab => ab.target === 'b' && ab.source === 'a');
     expect(chain).toBeDefined();
-    expect(chain!.scope).toContain('#method:run:');
-    expect(chain!.scope).not.toContain('#class:Wrapper:');
+    expect(chain!.scope).toContain('#method:run');
+    expect(chain!.scope).not.toContain('#class:Wrapper');
   });
 
   it('attributes a call-result binding inside an indented method to the method', async () => {
@@ -211,8 +211,8 @@ class Wrapper {
     const result = await extractTs(source);
     const binding = result.callResultBindings.find(cr => cr.target === 'user' && cr.calleeName === 'getUser');
     expect(binding).toBeDefined();
-    expect(binding!.scope).toContain('#method:run:');
-    expect(binding!.scope).not.toContain('#class:Wrapper:');
+    expect(binding!.scope).toContain('#method:run');
+    expect(binding!.scope).not.toContain('#class:Wrapper');
   });
 });
 
@@ -322,7 +322,7 @@ describe('Vue extractor', () => {
   <el-button v-on:submit="onSubmit" />
 </template>`;
     const htmlParser = await getParser('tree-sitter-html');
-    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue');
+    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue', createStableIdAllocator('Test.vue'));
 
     expect(result.calls.length).toBeGreaterThan(0);
     const calleeNames = result.calls.map(c => c.calleeName);
@@ -335,7 +335,7 @@ describe('Vue extractor', () => {
   it('AST-based extraction captures class attributes with . prefix', async () => {
     const source = `<template><div class="container main" /></template>`;
     const htmlParser = await getParser('tree-sitter-html');
-    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue');
+    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue', createStableIdAllocator('Test.vue'));
 
     const calleeNames = result.calls.map(c => c.calleeName);
     expect(calleeNames).toContain('.container');
@@ -345,7 +345,7 @@ describe('Vue extractor', () => {
   it('AST-based extraction captures ref attributes as symbols', async () => {
     const source = `<template><input ref="inputEl" /></template>`;
     const htmlParser = await getParser('tree-sitter-html');
-    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue');
+    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue', createStableIdAllocator('Test.vue'));
 
     const refSym = result.symbols.find(s => s.name === 'inputEl');
     expect(refSym).toBeDefined();
@@ -362,7 +362,7 @@ describe('Vue extractor', () => {
   />
 </template>`;
     const htmlParser = await getParser('tree-sitter-html');
-    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue');
+    const result = extractVueTemplateAst(htmlParser, source, 'Test.vue', createStableIdAllocator('Test.vue'));
 
     const calleeNames = result.calls.map(c => c.calleeName);
     expect(calleeNames).toContain('MyComponent');
@@ -374,7 +374,7 @@ describe('Vue extractor', () => {
   it('AST-based extraction returns empty for no template', async () => {
     const source = `<script setup>const x = 1;</script>`;
     const htmlParser = await getParser('tree-sitter-html');
-    const result = extractVueTemplateAst(htmlParser, source, 'NoTemplate.vue');
+    const result = extractVueTemplateAst(htmlParser, source, 'NoTemplate.vue', createStableIdAllocator('NoTemplate.vue'));
 
     expect(result.calls.length).toBe(0);
     expect(result.symbols.length).toBe(0);
@@ -382,18 +382,19 @@ describe('Vue extractor', () => {
 
   it('extracts Composition API defineProps child symbols', () => {
     const scriptContent = `const props = defineProps<{ name: string; age?: number }>();`;
-    const syms = extractVueCompositionApi(scriptContent, 'Test.vue', 10);
+    const alloc = createStableIdAllocator('Test.vue');
+    const parent = { id: alloc.make('variable', 'props'), name: 'props', kind: 'variable' as const, filePath: 'Test.vue', startLine: 1, endLine: 1, exported: false };
+    const syms = extractVueCompositionApi(scriptContent, 'Test.vue', 10, alloc, [parent]);
     const names = syms.map(s => s.name);
     expect(names).toContain('name');
     expect(names).toContain('age');
-    // Child props should have parentId pointing to the props variable
     const child = syms.find(s => s.name === 'name');
-    expect(child!.parentId).toContain('props');
+    expect(child!.parentId).toBe(parent.id);
   });
 
   it('does not emit symbols for defineEmits event name string literals', () => {
     const scriptContent = `const emit = defineEmits(['update:modelValue', 'change']);`;
-    const syms = extractVueCompositionApi(scriptContent, 'Test.vue', 5);
+    const syms = extractVueCompositionApi(scriptContent, 'Test.vue', 5, createStableIdAllocator('Test.vue'));
     const names = syms.map(s => s.name);
     expect(names).not.toContain('update:modelValue');
     expect(names).not.toContain('change');
@@ -464,5 +465,49 @@ end
     const result = extractFromTree(tree, lang, rubySpec, 'imports.rb');
 
     expect(result.imports.some(i => i.modulePath === './models')).toBe(true);
+  });
+});
+
+describe('Stable symbol identity (F4)', () => {
+  const CODE = [
+    'export class Repo {',
+    '  save() { return 1; }',
+    '}',
+    'export function helper() { return 2; }',
+  ].join('\n');
+
+  async function idsFor(source: string): Promise<Map<string, string>> {
+    const parser = await getParser(tsSpec.wasmName);
+    const lang = await loadLanguage(tsSpec.wasmName);
+    const tree = parser.parse(source);
+    const result = extractFromTree(tree, lang, tsSpec, 'src/repo.ts');
+    const byName = new Map<string, string>();
+    for (const s of result.symbols) byName.set(`${s.kind}:${s.name}`, s.id);
+    return byName;
+  }
+
+  it('omits line numbers so IDs survive a line-shifting edit', async () => {
+    const base = await idsFor(CODE);
+    const shifted = await idsFor('\n\n\n// prepended lines\n' + CODE);
+
+    for (const [key, id] of base) {
+      expect(id).not.toMatch(/:\d+$/);
+      expect(shifted.get(key)).toBe(id);
+    }
+    expect(base.get('method:save')).toBe('src/repo.ts#method:save');
+    expect(base.get('function:helper')).toBe('src/repo.ts#function:helper');
+  });
+
+  it('disambiguates two same-kind same-name symbols by occurrence order', async () => {
+    const src = 'function dup() {}\nfunction dup() {}\n';
+    const ids = await idsFor(src);
+    const parser = await getParser(tsSpec.wasmName);
+    const lang = await loadLanguage(tsSpec.wasmName);
+    const tree = parser.parse(src);
+    const result = extractFromTree(tree, lang, tsSpec, 'src/repo.ts');
+    const dupIds = result.symbols.filter(s => s.name === 'dup').map(s => s.id);
+    expect(new Set(dupIds).size).toBe(dupIds.length);
+    expect(dupIds).toContain('src/repo.ts#function:dup');
+    expect(dupIds).toContain('src/repo.ts#function:dup:2');
   });
 });

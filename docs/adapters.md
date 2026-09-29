@@ -94,10 +94,10 @@ Different harnesses benefit from different tool profiles:
 | Profile | Tools | Recommended For |
 |---|---|---|
 | `minimal` | 10 | Gemini, Zed (limited context windows) |
-| `standard` | 25 | Claude Code, OpenCode, Codex, Cursor, Copilot (daily coding) |
+| `standard` | 25 | Claude Code, OpenCode, Codex, Cursor, Copilot (daily coding) — **default** |
 | `full` | 43 | Security audits, architecture reviews (all tools) |
 
-Set via environment variable: `MILENS_PROFILE=standard`
+Set via environment variable: `MILENS_PROFILE=standard`. When unset, milens defaults to `standard`; set `MILENS_PROFILE=full` to expose every tool.
 
 ## MCP Config Reference
 

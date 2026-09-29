@@ -17,11 +17,20 @@ export interface CodeSymbol {
   signature?: string;
   role?: SymbolRole;
   heat?: number;
+  importance?: number;
 }
 
 export type SymbolRole = 'entrypoint' | 'hub' | 'utility' | 'leaf' | 'datatype';
 
 export type LinkType = 'imports' | 'calls' | 'extends' | 'implements' | 'contains' | 'references';
+
+export type ResolutionState = 'resolved' | 'probable' | 'ambiguous';
+
+export function resolutionState(confidence: number): ResolutionState {
+  if (confidence >= 0.9) return 'resolved';
+  if (confidence >= 0.7) return 'probable';
+  return 'ambiguous';
+}
 
 export interface SymbolLink {
   id: string;
@@ -30,6 +39,8 @@ export interface SymbolLink {
   type: LinkType;
   confidence: number;
   line?: number;
+  lines?: number[];
+  reason?: string;
 }
 
 export interface RawImport {
@@ -76,6 +87,7 @@ export interface ExtractionResult {
   returnTypes: RawReturnType[];
   callResultBindings: RawCallResultBinding[];
   localBindings: RawLocalBinding[];
+  hasParseError?: boolean;
 }
 
 export interface RawReExport {

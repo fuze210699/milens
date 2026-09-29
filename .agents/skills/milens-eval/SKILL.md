@@ -11,11 +11,11 @@ A structured quality gate for feature development: plan tests, implement changes
 
 | Tool | Purpose |
 |---|---|
-| `mcp_milens_test_plan` | Generate test strategy before implementation |
+| `mcp_milens_tests` | Generate test strategy before implementation |
 | `mcp_milens_detect_changes` | Verify only expected files changed after implementation |
 | `mcp_milens_review_pr` | Risk assessment of the changes |
-| `mcp_milens_test_impact` | Identify and run affected test files |
-| `mcp_milens_test_coverage_gaps` | Verify no new untested critical symbols introduced |
+| `mcp_milens_tests` | Identify and run affected test files |
+| `mcp_milens_tests` | Verify no new untested critical symbols introduced |
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root**.
 
@@ -26,7 +26,7 @@ A structured quality gate for feature development: plan tests, implement changes
 Before writing code, plan the test strategy.
 
 ```
-mcp_milens_test_plan({name: "<symbolName>", repo: "<workspaceRoot>"})
+mcp_milens_tests({mode: "plan", name: "<symbolName>", repo: "<workspaceRoot>"})
 ```
 
 This provides:
@@ -79,7 +79,7 @@ Focus on:
 Identify and run all affected tests.
 
 ```
-mcp_milens_test_impact({repo: "<workspaceRoot>"})
+mcp_milens_tests({mode: "impact", repo: "<workspaceRoot>"})
 ```
 
 This returns the list of test files impacted by the changes. Run them all:
@@ -92,7 +92,7 @@ This returns the list of test files impacted by the changes. Run them all:
 Verify no new untested critical symbols were introduced.
 
 ```
-mcp_milens_test_coverage_gaps({repo: "<workspaceRoot>", limit: 20})
+mcp_milens_tests({mode: "gaps", repo: "<workspaceRoot>", limit: 20})
 ```
 
 Review the output:
@@ -133,7 +133,7 @@ Apply the pass/fail criteria (see Quality Gate section below) and produce a verd
 
 **Step 1 — Test plan:**
 ```
-mcp_milens_test_plan({name: "RateLimiter", repo: "/home/user/project"})
+mcp_milens_tests({mode: "plan", name: "RateLimiter", repo: "/home/user/project"})
 ```
 
 **Output:**
@@ -181,7 +181,7 @@ No CRITICAL findings. 1 LOW suggestion: add JSDoc to RateLimiter class.
 
 **Step 5 — Test impact:**
 ```
-mcp_milens_test_impact({repo: "/home/user/project"})
+mcp_milens_tests({mode: "impact", repo: "/home/user/project"})
 ```
 
 **Output:**
@@ -194,7 +194,7 @@ Run tests: `npm test -- middleware.test.ts` — all 4 pass.
 
 **Step 6 — Coverage gaps:**
 ```
-mcp_milens_test_coverage_gaps({repo: "/home/user/project", limit: 20})
+mcp_milens_tests({mode: "gaps", repo: "/home/user/project", limit: 20})
 ```
 
 **Output:** No new HIGH-risk symbols introduced. 3 pre-existing LOW/medium gaps unrelated to this change.
@@ -216,6 +216,6 @@ mcp_milens_test_coverage_gaps({repo: "/home/user/project", limit: 20})
 | Test plan exists | Test plan generated with ≥3 scenarios | No test plan or < 3 scenarios |
 | Change scope | `detect_changes` shows only expected files | Unexpected files in diff (unless harmless) |
 | Review risk | No CRITICAL findings | Unresolved CRITICAL findings |
-| Test execution | All `test_impact` files pass | Any test file fails |
+| Test execution | All `tests (mode=impact)` files pass | Any test file fails |
 | Coverage gaps | No new HIGH-risk symbols without tests | New HIGH-risk symbol has 0 test coverage |
 | Gate verdict | PASSED or CONDITIONAL PASS (with documented remediation) | FAILED — must fix and re-run evaluation |

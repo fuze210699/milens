@@ -264,8 +264,9 @@ describe('Resolver', () => {
     });
 
     const callLinks = result.links.filter(l => l.type === 'calls');
-    // 1 scope-resolved call + 2 type annotation refs (AuthDatabase, RedisCache)
-    expect(callLinks.length).toBe(3);
+    // 1 scope-resolved call; the 2 type annotations are 'references', not calls
+    expect(callLinks.length).toBe(1);
+    expect(result.links.filter(l => l.type === 'references').length).toBe(2);
     // Should resolve to AuthDatabase.run (NOT RedisCache.run)
     const runLink = callLinks.find(l => l.toId === 'db.ts#method:run:3');
     expect(runLink).toBeDefined();
@@ -396,8 +397,9 @@ describe('Resolver', () => {
     });
 
     const callLinks = result.links.filter(l => l.type === 'calls');
-    // 1 chain-resolved call + 1 type annotation ref (Database)
-    expect(callLinks.length).toBe(2);
+    // 1 chain-resolved call; the type annotation (Database) is a 'references' link
+    expect(callLinks.length).toBe(1);
+    expect(result.links.filter(l => l.type === 'references').length).toBe(1);
     const queryLink = callLinks.find(l => l.toId === 'db.ts#method:query:3');
     expect(queryLink).toBeDefined();
     expect(queryLink!.confidence).toBe(0.93);
@@ -455,8 +457,9 @@ describe('Resolver', () => {
     });
 
     const callLinks = result.links.filter(l => l.type === 'calls');
-    // 1 return-type-resolved call + 1 return type annotation ref (UserService)
-    expect(callLinks.length).toBe(2);
+    // 1 return-type-resolved call; the return type annotation (UserService) is a 'references' link
+    expect(callLinks.length).toBe(1);
+    expect(result.links.filter(l => l.type === 'references').length).toBe(1);
     const saveLink = callLinks.find(l => l.toId === 'service.ts#method:save:3');
     expect(saveLink).toBeDefined();
     expect(saveLink!.confidence).toBe(0.93);
@@ -490,7 +493,7 @@ describe('Resolver', () => {
     });
 
     // Should create a reference link from login method → LoginDto
-    const refLinks = result.links.filter(l => l.toId === 'dto.ts#class:LoginDto:1' && l.type === 'calls');
+    const refLinks = result.links.filter(l => l.toId === 'dto.ts#class:LoginDto:1' && l.type === 'references');
     expect(refLinks.length).toBe(1);
     expect(refLinks[0].confidence).toBe(0.7);
   });
@@ -521,7 +524,7 @@ describe('Resolver', () => {
     });
 
     // Should create a reference link from getUser → User
-    const refLinks = result.links.filter(l => l.toId === 'model.ts#interface:User:1' && l.type === 'calls');
+    const refLinks = result.links.filter(l => l.toId === 'model.ts#interface:User:1' && l.type === 'references');
     expect(refLinks.length).toBe(1);
     expect(refLinks[0].fromId).toBe('svc.ts#method:getUser:5');
     expect(refLinks[0].confidence).toBe(0.7);
@@ -1044,11 +1047,11 @@ describe('Resolver', () => {
       expect(refLinks[0].toId).toBe('b.ts#variable:REGISTRY:1');
     });
 
-    it('known limitation: does not link a renamed default-import receiver whose local name differs from the target symbol name', () => {
-      // import LocalAlias from './registry' — the actual exported symbol is named
-      // `Registry`, not `LocalAlias`. The import-map lookup assumes local name ==
-      // symbol name (same accepted limitation as the resolver's existing imported-
-      // type-name strategy), so this intentionally does not resolve.
+    it('links a renamed default-import receiver to the default-exported symbol even when the local name differs (audit2 #3)', () => {
+      // import LocalAlias from './registry' — the actual default-exported symbol is
+      // named `Registry`. A bare builtin method (`.has()`) on the receiver cannot
+      // resolve, but the receiver LocalAlias is provably the default export of b.ts,
+      // so the reference edge must still be recorded against Registry.
       const fileA: CodeSymbol[] = [
         { id: 'a.ts#function:caller:1', name: 'caller', kind: 'function', filePath: 'a.ts', startLine: 1, endLine: 5, exported: true },
       ];
@@ -1080,7 +1083,183 @@ describe('Resolver', () => {
         resolvedImportPaths: new Map([['a.ts::./b', 'b.ts']]),
       });
 
-      expect(result.links.filter(l => l.type === 'references').length).toBe(0);
+      const refLinks = result.links.filter(l => l.type === 'references');
+      expect(refLinks.length).toBe(1);
+      expect(refLinks[0].fromId).toBe('a.ts#function:caller:1');
+      expect(refLinks[0].toId).toBe('b.ts#class:Registry:1');
+    });
+
+    it('resolves a default-imported receiver method call to the class method (audit2 #3)', () => {
+      // import Repo from './repo'; Repo.save() — Repo is the default export named
+      // UserRepository; save() is one of its methods.
+      const fileA: CodeSymbol[] = [
+        { id: 'a.ts#function:caller:1', name: 'caller', kind: 'function', filePath: 'a.ts', startLine: 1, endLine: 5, exported: true },
+      ];
+      const fileB: CodeSymbol[] = [
+        { id: 'b.ts#class:UserRepository:1', name: 'UserRepository', kind: 'class', filePath: 'b.ts', startLine: 1, endLine: 9, exported: true },
+        { id: 'b.ts#method:save:3', name: 'save', kind: 'method', filePath: 'b.ts', startLine: 3, endLine: 5, exported: false, parentId: 'b.ts#class:UserRepository:1' },
+      ];
+      const imports: RawImport[] = [{
+        filePath: 'a.ts',
+        modulePath: './repo',
+        names: [{ name: 'Repo' }],
+        isDefault: true,
+        isWildcard: false,
+        line: 1,
+      }];
+      const calls: RawCall[] = [{
+        filePath: 'a.ts',
+        enclosingSymbolId: 'a.ts#function:caller:1',
+        calleeName: 'save',
+        receiver: 'Repo',
+        line: 3,
+      }];
+
+      const result = resolveLinksWithStats({
+        symbolsByFile: new Map([['a.ts', fileA], ['b.ts', fileB]]),
+        allSymbols: [...fileA, ...fileB],
+        imports,
+        calls,
+        heritage: [],
+        resolvedImportPaths: new Map([['a.ts::./repo', 'b.ts']]),
+      });
+
+      const callLinks = result.links.filter(l => l.type === 'calls');
+      expect(callLinks.length).toBe(1);
+      expect(callLinks[0].toId).toBe('b.ts#method:save:3');
+      expect(result.unresolvedCalls).toBe(0);
+    });
+
+    it('links a named-alias receiver to the exported symbol under its real name (audit2 #3)', () => {
+      // import { Registry as R } from './b'; R.has() — receiver R aliases Registry.
+      const fileA: CodeSymbol[] = [
+        { id: 'a.ts#function:caller:1', name: 'caller', kind: 'function', filePath: 'a.ts', startLine: 1, endLine: 5, exported: true },
+      ];
+      const fileB: CodeSymbol[] = [
+        { id: 'b.ts#variable:Registry:1', name: 'Registry', kind: 'variable', filePath: 'b.ts', startLine: 1, endLine: 1, exported: true },
+      ];
+      const imports: RawImport[] = [{
+        filePath: 'a.ts',
+        modulePath: './b',
+        names: [{ name: 'Registry', alias: 'R' }],
+        isDefault: false,
+        isWildcard: false,
+        line: 1,
+      }];
+      const calls: RawCall[] = [{
+        filePath: 'a.ts',
+        enclosingSymbolId: 'a.ts#function:caller:1',
+        calleeName: 'has',
+        receiver: 'R',
+        line: 3,
+      }];
+
+      const result = resolveLinksWithStats({
+        symbolsByFile: new Map([['a.ts', fileA], ['b.ts', fileB]]),
+        allSymbols: [...fileA, ...fileB],
+        imports,
+        calls,
+        heritage: [],
+        resolvedImportPaths: new Map([['a.ts::./b', 'b.ts']]),
+      });
+
+      const refLinks = result.links.filter(l => l.type === 'references');
+      expect(refLinks.length).toBe(1);
+      expect(refLinks[0].toId).toBe('b.ts#variable:Registry:1');
+    });
+
+    it('prefers an exact import-alias binding over an unrelated same-named global (call-alias precedence)', () => {
+      const fileA: CodeSymbol[] = [
+        { id: 'a.ts#function:caller:1', name: 'caller', kind: 'function', filePath: 'a.ts', startLine: 1, endLine: 5, exported: true },
+      ];
+      const fileB: CodeSymbol[] = [
+        { id: 'b.ts#function:foo:1', name: 'foo', kind: 'function', filePath: 'b.ts', startLine: 1, endLine: 3, exported: true },
+      ];
+      // An unrelated file exports a real function literally named `bar`.
+      const fileC: CodeSymbol[] = [
+        { id: 'c.ts#function:bar:1', name: 'bar', kind: 'function', filePath: 'c.ts', startLine: 1, endLine: 3, exported: true },
+      ];
+      const imports: RawImport[] = [{
+        filePath: 'a.ts', modulePath: './b', names: [{ name: 'foo', alias: 'bar' }], isDefault: false, isWildcard: false, line: 1,
+      }];
+      const calls: RawCall[] = [
+        { filePath: 'a.ts', enclosingSymbolId: 'a.ts#function:caller:1', calleeName: 'bar', line: 3 },
+      ];
+
+      const result = resolveLinksWithStats({
+        symbolsByFile: new Map([['a.ts', fileA], ['b.ts', fileB], ['c.ts', fileC]]),
+        allSymbols: [...fileA, ...fileB, ...fileC],
+        imports,
+        calls,
+        heritage: [],
+        resolvedImportPaths: new Map([['a.ts::./b', 'b.ts']]),
+      });
+
+      const callLink = result.links.find(l => l.type === 'calls');
+      expect(callLink?.toId).toBe('b.ts#function:foo:1');
+      expect(callLink?.reason).toBe('call-alias');
+    });
+
+    it('resolves a named-alias import call to the exported symbol (import { foo as bar }; bar())', () => {
+      const fileA: CodeSymbol[] = [
+        { id: 'a.ts#function:caller:1', name: 'caller', kind: 'function', filePath: 'a.ts', startLine: 1, endLine: 5, exported: true },
+      ];
+      const fileB: CodeSymbol[] = [
+        { id: 'b.ts#function:foo:1', name: 'foo', kind: 'function', filePath: 'b.ts', startLine: 1, endLine: 3, exported: true },
+      ];
+      const imports: RawImport[] = [{
+        filePath: 'a.ts',
+        modulePath: './b',
+        names: [{ name: 'foo', alias: 'bar' }],
+        isDefault: false,
+        isWildcard: false,
+        line: 1,
+      }];
+      const calls: RawCall[] = [{
+        filePath: 'a.ts',
+        enclosingSymbolId: 'a.ts#function:caller:1',
+        calleeName: 'bar',
+        line: 3,
+      }];
+
+      const result = resolveLinksWithStats({
+        symbolsByFile: new Map([['a.ts', fileA], ['b.ts', fileB]]),
+        allSymbols: [...fileA, ...fileB],
+        imports,
+        calls,
+        heritage: [],
+        resolvedImportPaths: new Map([['a.ts::./b', 'b.ts']]),
+      });
+
+      const callLinks = result.links.filter(l => l.type === 'calls');
+      expect(callLinks.length).toBe(1);
+      expect(callLinks[0].fromId).toBe('a.ts#function:caller:1');
+      expect(callLinks[0].toId).toBe('b.ts#function:foo:1');
+      expect(result.unresolvedCalls).toBe(0);
+    });
+
+    it('preserves all callsite lines on a deduplicated edge (audit2 #5)', () => {
+      const symbols: CodeSymbol[] = [
+        { id: 'a.ts#function:caller:1', name: 'caller', kind: 'function', filePath: 'a.ts', startLine: 1, endLine: 20, exported: true },
+        { id: 'a.ts#function:helper:22', name: 'helper', kind: 'function', filePath: 'a.ts', startLine: 22, endLine: 24, exported: true },
+      ];
+      const calls: RawCall[] = [
+        { filePath: 'a.ts', enclosingSymbolId: 'a.ts#function:caller:1', calleeName: 'helper', line: 3 },
+        { filePath: 'a.ts', enclosingSymbolId: 'a.ts#function:caller:1', calleeName: 'helper', line: 9 },
+      ];
+
+      const result = resolveLinksWithStats({
+        symbolsByFile: new Map([['a.ts', symbols]]),
+        allSymbols: symbols,
+        imports: [],
+        calls,
+        heritage: [],
+        resolvedImportPaths: new Map(),
+      });
+
+      const callLinks = result.links.filter(l => l.type === 'calls' && l.toId === 'a.ts#function:helper:22');
+      expect(callLinks.length).toBe(1);
+      expect(callLinks[0].lines).toEqual([3, 9]);
     });
 
     it('deduplicates multiple builtin-method calls on the same receiver within the same function', () => {
@@ -1338,6 +1517,47 @@ describe('Resolver', () => {
       const callLinks = result.links.filter(l => l.type === 'calls');
       expect(callLinks.length).toBe(1);
       expect(callLinks[0].toId).toBe('utils.ts#function:helper:1');
+    });
+  });
+
+  describe('resolution evidence (audit2 #1: reason tags)', () => {
+    it('tags each link with the resolution branch that produced it', () => {
+      const fileA: CodeSymbol[] = [
+        { id: 'a.ts#function:caller:1', name: 'caller', kind: 'function', filePath: 'a.ts', startLine: 1, endLine: 5, exported: true },
+        { id: 'a.ts#function:helper:22', name: 'helper', kind: 'function', filePath: 'a.ts', startLine: 22, endLine: 24, exported: true },
+      ];
+      const fileB: CodeSymbol[] = [
+        { id: 'b.ts#function:remote:1', name: 'remote', kind: 'function', filePath: 'b.ts', startLine: 1, endLine: 3, exported: true },
+        { id: 'b.ts#function:helper:9', name: 'helper', kind: 'function', filePath: 'b.ts', startLine: 9, endLine: 11, exported: true },
+      ];
+      const fileC: CodeSymbol[] = [
+        { id: 'c.ts#function:remote:1', name: 'remote', kind: 'function', filePath: 'c.ts', startLine: 1, endLine: 3, exported: true },
+      ];
+      const imports: RawImport[] = [{
+        filePath: 'a.ts', modulePath: './b', names: [{ name: 'remote' }], isDefault: false, isWildcard: false, line: 1,
+      }];
+      const calls: RawCall[] = [
+        { filePath: 'a.ts', enclosingSymbolId: 'a.ts#function:caller:1', calleeName: 'helper', line: 3 },
+        { filePath: 'a.ts', enclosingSymbolId: 'a.ts#function:caller:1', calleeName: 'remote', line: 4 },
+      ];
+
+      const result = resolveLinksWithStats({
+        symbolsByFile: new Map([['a.ts', fileA], ['b.ts', fileB], ['c.ts', fileC]]),
+        allSymbols: [...fileA, ...fileB, ...fileC],
+        imports,
+        calls,
+        heritage: [],
+        resolvedImportPaths: new Map([['a.ts::./b', 'b.ts']]),
+      });
+
+      const importLink = result.links.find(l => l.type === 'imports');
+      expect(importLink?.reason).toBe('import-named');
+
+      const helperCall = result.links.find(l => l.type === 'calls' && l.toId === 'a.ts#function:helper:22');
+      expect(helperCall?.reason).toBe('call-samefile');
+
+      const remoteCall = result.links.find(l => l.type === 'calls' && l.toId === 'b.ts#function:remote:1');
+      expect(remoteCall?.reason).toBe('call-imported');
     });
   });
 });

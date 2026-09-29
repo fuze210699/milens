@@ -15,6 +15,7 @@ vi.mock('node:http', async (importOriginal) => {
       capturedRequestHandler = handler;
       return {
         listen: vi.fn((_port: number, _host: string, cb: Function) => cb()),
+        on: vi.fn(),
       };
     }),
   };
@@ -127,10 +128,28 @@ function createTestDir() {
   return dir;
 }
 
+function captureListeners() {
+  return {
+    SIGINT: process.listeners('SIGINT'),
+    SIGTERM: process.listeners('SIGTERM'),
+    end: process.stdin.listeners('end'),
+    close: process.stdin.listeners('close'),
+  };
+}
+
+function removeAddedListeners(base: ReturnType<typeof captureListeners>) {
+  for (const l of process.listeners('SIGINT')) if (!base.SIGINT.includes(l)) process.removeListener('SIGINT', l as any);
+  for (const l of process.listeners('SIGTERM')) if (!base.SIGTERM.includes(l)) process.removeListener('SIGTERM', l as any);
+  for (const l of process.stdin.listeners('end')) if (!base.end.includes(l)) process.stdin.removeListener('end', l as any);
+  for (const l of process.stdin.listeners('close')) if (!base.close.includes(l)) process.stdin.removeListener('close', l as any);
+}
+
 describe('startStdio', () => {
   let testDir: string;
+  let listenerBase: ReturnType<typeof captureListeners>;
 
   beforeEach(() => {
+    listenerBase = captureListeners();
     vi.clearAllMocks();
     Object.keys(registeredTools).forEach(k => delete registeredTools[k]);
     mockServerConnect.mockResolvedValue(undefined);
@@ -152,6 +171,7 @@ describe('startStdio', () => {
   });
 
   afterEach(() => {
+    removeAddedListeners(listenerBase);
     try { rmSync(testDir, { recursive: true, force: true }); } catch {}
   });
 
@@ -238,8 +258,10 @@ describe('startStdio', () => {
 
 describe('startHttp', () => {
   let testDir: string;
+  let listenerBase: ReturnType<typeof captureListeners>;
 
   beforeEach(() => {
+    listenerBase = captureListeners();
     vi.clearAllMocks();
     Object.keys(registeredTools).forEach(k => delete registeredTools[k]);
     mockServerConnect.mockResolvedValue(undefined);
@@ -262,6 +284,7 @@ describe('startHttp', () => {
   });
 
   afterEach(() => {
+    removeAddedListeners(listenerBase);
     try { rmSync(testDir, { recursive: true, force: true }); } catch {}
   });
 

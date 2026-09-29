@@ -1,4 +1,4 @@
-import type { LangSpec } from './extract.js';
+import type { LangSpec, StableIdAllocator } from './extract.js';
 import type { RawCall, CodeSymbol } from '../types.js';
 import type Parser from 'web-tree-sitter';
 import tsSpec from './lang-ts.js';
@@ -91,6 +91,7 @@ export function extractVueTemplateAst(
   parser: Parser,
   source: string,
   filePath: string,
+  alloc: StableIdAllocator,
 ): { calls: RawCall[]; symbols: CodeSymbol[] } {
   const calls: RawCall[] = [];
   const symbols: CodeSymbol[] = [];
@@ -153,7 +154,7 @@ export function extractVueTemplateAst(
           if (!seenCalls.has(dedupKey)) {
             seenCalls.add(dedupKey);
             symbols.push({
-              id: `${filePath}#variable:${value}:${attrLine}`,
+              id: alloc.make('variable', value),
               name: value,
               kind: 'variable',
               filePath,
@@ -228,6 +229,8 @@ export function extractVueCompositionApi(
   scriptContent: string,
   filePath: string,
   lineOffset: number,
+  alloc: StableIdAllocator,
+  parentSymbols: CodeSymbol[] = [],
 ): CodeSymbol[] {
   const symbols: CodeSymbol[] = [];
   const lines = scriptContent.split('\n');
@@ -241,14 +244,14 @@ export function extractVueCompositionApi(
     if (propsMatch) {
       const varName = propsMatch[1];
       const typeBody = propsMatch[2];
-      const parentId = `${filePath}#variable:${varName}:${absLine}`;
+      const parentId = parentSymbols.find(s => s.name === varName && s.kind === 'variable')?.id;
 
       const propRe = /(\w+)\s*\??\s*:\s*(?:string|number|boolean|any|void|never|unknown|[A-Z]\w*|[\w\[\]<>|&,'"]+)/g;
       let pm: RegExpExecArray | null;
       while ((pm = propRe.exec(typeBody)) !== null) {
         const propName = pm[1];
         symbols.push({
-          id: `${filePath}#variable:${propName}:${absLine}`,
+          id: alloc.make('variable', propName),
           name: propName,
           kind: 'variable',
           filePath,

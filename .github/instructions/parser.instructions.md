@@ -27,34 +27,34 @@ When working with code in **parser/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ### Edit-safety enforcement
-A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`/`smart_context`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
+A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
 
 ## Overview
-Contains 85 symbols (31 exported) across 16 files.
+Contains 88 symbols (33 exported) across 16 files.
 
 ## Key Symbols
 - **`LangSpec`** [interface] (src/parser/extract.ts:6) — 32 refs
-- **`loadLanguage`** [function] (src/parser/loader.ts:21) — 15 refs
-- **`getParser`** [function] (src/parser/loader.ts:32) — 14 refs
-- **`extractFromTree`** [function] (src/parser/extract.ts:274) — 9 refs
+- **`loadLanguage`** [function] (src/parser/loader.ts:21) — 16 refs
+- **`getParser`** [function] (src/parser/loader.ts:32) — 15 refs
+- **`extractFromTree`** [function] (src/parser/extract.ts:291) — 10 refs
+- **`StableIdAllocator`** [interface] (src/parser/extract.ts:274) — 6 refs
 - **`supportedExtensions`** [function] (src/parser/languages.ts:29) — 6 refs
+- **`createStableIdAllocator`** [function] (src/parser/extract.ts:278) — 5 refs
 - **`extractHtmlScripts`** [function] (src/parser/lang-html.ts:38) — 5 refs
+- **`spec`** [variable] (src/parser/lang-js.ts:1) — 5 refs
 - **`extractMarkdown`** [function] (src/parser/lang-md.ts:34) — 5 refs
 - **`spec`** [variable] (src/parser/lang-ts.ts:1) — 5 refs
 - **`extractVueScript`** [function] (src/parser/lang-vue.ts:19) — 5 refs
 - **`initTreeSitter`** [function] (src/parser/loader.ts:15) — 5 refs
 - **`clearQueryCache`** [function] (src/parser/extract.ts:79) — 4 refs
 - **`extractHtmlRefs`** [function] (src/parser/lang-html.ts:57) — 4 refs
-- **`extractHtmlLinks`** [function] (src/parser/lang-html.ts:99) — 4 refs
-- **`spec`** [variable] (src/parser/lang-js.ts:1) — 4 refs
-- **`extractVueTemplateRefs`** [function] (src/parser/lang-vue.ts:38) — 4 refs
 
 ## Entry Points
 - **`LangSpec`** [interface] — 32 incoming references
-- **`loadLanguage`** [function] — 15 incoming references
-- **`getParser`** [function] — 14 incoming references
-- **`extractFromTree`** [function] — 9 incoming references
-- **`supportedExtensions`** [function] — 6 incoming references
+- **`loadLanguage`** [function] — 16 incoming references
+- **`getParser`** [function] — 15 incoming references
+- **`extractFromTree`** [function] — 10 incoming references
+- **`StableIdAllocator`** [interface] — 6 incoming references
 
 ## Dependencies
 - **root**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+4 more)
@@ -62,9 +62,9 @@ Contains 85 symbols (31 exported) across 16 files.
 - **store**: `load`
 
 ## Used By
-- **analyzer**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `extractVueScript`, `extractVueTemplateRefs` (+9 more)
+- **analyzer**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `createStableIdAllocator`, `extractVueScript` (+11 more)
 - **server**: `getParser`, `loadLanguage`, `ALL_LANGS`
-- **test**: `getParser`, `loadLanguage`, `extractFromTree`, `extractVueScript`, `extractVueTemplateRefs`, `extractVueCompositionApi`, `extractVueTemplateAst`, `spec` (+11 more)
+- **test**: `getParser`, `loadLanguage`, `extractFromTree`, `createStableIdAllocator`, `extractVueScript`, `extractVueTemplateRefs`, `extractVueCompositionApi`, `extractVueTemplateAst` (+12 more)
 
 ## Files
 - src/parser/extract.ts

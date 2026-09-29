@@ -271,11 +271,29 @@ const CONTAINER_KINDS = new Set<SymbolKind>(['class', 'struct', 'trait', 'module
 
 // ── Universal symbol extractor ──
 
+export interface StableIdAllocator {
+  make(kind: SymbolKind, name: string): string;
+}
+
+export function createStableIdAllocator(filePath: string): StableIdAllocator {
+  const counts = new Map<string, number>();
+  return {
+    make(kind: SymbolKind, name: string): string {
+      const base = `${filePath}#${kind}:${name}`;
+      const key = `${kind}:${name}`;
+      const n = (counts.get(key) ?? 0) + 1;
+      counts.set(key, n);
+      return n === 1 ? base : `${base}:${n}`;
+    },
+  };
+}
+
 export function extractFromTree(
   tree: Parser.Tree,
   lang: Parser.Language,
   spec: LangSpec,
   filePath: string,
+  idAllocator?: StableIdAllocator,
 ): ExtractionResult {
   const symbols: CodeSymbol[] = [];
   const imports: RawImport[] = [];
@@ -299,8 +317,9 @@ export function extractFromTree(
     return q ? q.matches(root) : [];
   }
 
-  function makeSymbolId(kind: SymbolKind, name: string, line: number): string {
-    return `${filePath}#${kind}:${name}:${line}`;
+  const alloc = idAllocator ?? createStableIdAllocator(filePath);
+  function makeSymbolId(kind: SymbolKind, name: string, _line: number): string {
+    return alloc.make(kind, name);
   }
 
   // ── Extract symbol definitions ──
@@ -600,5 +619,7 @@ export function extractFromTree(
     }
   }
 
-  return { symbols, imports, calls, heritage, exportedNames, reExports, typeBindings, assignmentBindings, returnTypes, callResultBindings, localBindings };
+  const heErr = (root as any).hasError;
+  const hasParseError = typeof heErr === 'function' ? Boolean(heErr.call(root)) : Boolean(heErr);
+  return { symbols, imports, calls, heritage, exportedNames, reExports, typeBindings, assignmentBindings, returnTypes, callResultBindings, localBindings, hasParseError };
 }

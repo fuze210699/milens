@@ -8,8 +8,7 @@ export function boostConfidence(
   annotationId: string,
   increment: number = 0.1,
 ): void {
-  const results = store.recall({ limit: 1000 });
-  const ann = results.find(a => a.id === annotationId);
+  const ann = store.getById(annotationId);
   if (!ann) return;
   const oldConf = ann.confidence;
   const newConf = Math.min(oldConf + increment, 1.0);
@@ -25,8 +24,7 @@ export function decayConfidence(
   annotationId: string,
   decrement: number = 0.1,
 ): void {
-  const results = store.recall({ limit: 1000 });
-  const ann = results.find(a => a.id === annotationId);
+  const ann = store.getById(annotationId);
   if (!ann) return;
   const oldConf = ann.confidence;
   const newConf = Math.max(oldConf - decrement, 0.0);

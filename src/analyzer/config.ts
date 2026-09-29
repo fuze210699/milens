@@ -113,7 +113,9 @@ function readTsConfigPaths(configPath: string, aliases: Record<string, string>):
       const target = (targets as string[])[0]?.replace('/*', '').replace('./', '') ?? '';
       if (clean && target) aliases[clean] = target;
     }
-  } catch { /* ignore parse errors */ }
+  } catch (e: any) {
+    process.stderr.write(`[milens] ⚠ Could not parse ${configPath} — path aliases skipped (${e?.message || e}). Fix the file so imports resolve correctly.\n`);
+  }
 }
 
 function resolveExtendsPath(baseDir: string, extendsValue: string): string | null {

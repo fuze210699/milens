@@ -5,7 +5,6 @@ import {
   HookManager,
   defaultOnSessionStart,
   defaultOnSessionEnd,
-  defaultOnPreCommit,
   defaultOnFileChange,
   defaultOnPreCompact,
   defaultOnPostCompact,
@@ -178,17 +177,6 @@ export function registerSessionTools(server: McpServer, deps: Deps): void {
       const store = new AnnotationStore(db.connection);
       const result = store.handoff(from_session, to_agent, context);
       return { content: [{ type: 'text' as const, text: `Handoff complete.\nNew session: ${result.newSessionId}\nAgent: ${to_agent}\nAnnotations recorded in prior session: ${result.annotationsCopied} (retrievable via recall())` }] };
-    },
-  );
-
-  server.tool(
-    'pre_commit_check',
-    'Run pre-commit risk analysis: detect_changes + review_pr + dead code + coverage gaps. Use before committing.',
-    { repo: z.string().optional().describe('Repository root path') },
-    async ({ repo }) => {
-      const { root } = getDb(repo);
-      const report = await defaultOnPreCommit(root);
-      return { content: [{ type: 'text' as const, text: report }] };
     },
   );
 

@@ -22,22 +22,22 @@ When working with code in **analyzer/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ### Edit-safety enforcement
-A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`/`smart_context`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
+A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
 
 ## Overview
-Contains 131 symbols (24 exported) across 8 files.
+Contains 136 symbols (24 exported) across 8 files.
 
 ## Key Symbols
-- **`analyze`** [function] (src/analyzer/engine.ts:139) — 10 refs
+- **`analyze`** [function] (src/analyzer/engine.ts:141) — 14 refs
 - **`resolveLinksWithStats`** [function] (src/analyzer/resolver.ts:54) — 9 refs
-- **`reviewPr`** [function] (src/analyzer/review.ts:261) — 9 refs
+- **`reviewPr`** [function] (src/analyzer/review.ts:258) — 9 refs
 - **`countDependentFiles`** [function] (src/analyzer/risk.ts:13) — 9 refs
 - **`loadAliases`** [function] (src/analyzer/config.ts:10) — 6 refs
 - **`ResolutionResult`** [interface] (src/analyzer/resolver.ts:39) — 6 refs
 - **`classifyRisk`** [function] (src/analyzer/risk.ts:33) — 5 refs
 - **`scoreSymbolRisk`** [function] (src/analyzer/risk.ts:41) — 5 refs
 - **`diffResolutions`** [function] (src/analyzer/scope-resolver.ts:768) — 5 refs
-- **`enrichMetadata`** [function] (src/analyzer/enrich.ts:21) — 4 refs
+- **`enrichMetadata`** [function] (src/analyzer/enrich.ts:24) — 4 refs
 - **`ReviewResult`** [interface] (src/analyzer/review.ts:19) — 4 refs
 - **`scanFiles`** [function] (src/analyzer/scanner.ts:11) — 4 refs
 - **`resolveWithScopes`** [function] (src/analyzer/scope-resolver.ts:48) — 4 refs
@@ -45,16 +45,16 @@ Contains 131 symbols (24 exported) across 8 files.
 - **`resolveLinks`** [function] (src/analyzer/resolver.ts:49) — 3 refs
 
 ## Entry Points
+- **`analyze`** [function] — 14 incoming references
 - **`ScopeNode`** [interface] — 11 incoming references
-- **`analyze`** [function] — 10 incoming references
 - **`resolveLinksWithStats`** [function] — 9 incoming references
 - **`reviewPr`** [function] — 9 incoming references
 - **`countDependentFiles`** [function] — 9 incoming references
 
 ## Dependencies
-- **parser**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `extractVueScript`, `extractVueTemplateRefs` (+9 more)
+- **parser**: `langForFile`, `supportedExtensions`, `getParser`, `loadLanguage`, `extractFromTree`, `clearQueryCache`, `createStableIdAllocator`, `extractVueScript` (+11 more)
 - **root**: `isTestFile`, `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding` (+8 more)
-- **store**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction` (+18 more)
+- **store**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `getMeta`, `isFileUpToDate`, `getAllFileFacts`, `getSymbolsByFile` (+27 more)
 - **ui**: `ProgressPhase`, `ProgressReporter`, `startPhase`, `tick`, `endPhase`, `finalize`
 
 ## Used By

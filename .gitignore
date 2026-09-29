@@ -12,3 +12,4 @@ src/build-info.ts
 .DS_Store
 .milens-cross-ref.json
 release-stats.json
+midota-security-checklist/

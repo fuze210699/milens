@@ -79,8 +79,10 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
   // Build re-export map: file → (name → sourceFile)
   const reExportMap = buildReExportMap(input.reExports ?? [], input.resolvedImportPaths);
 
-  // Build imported names per file: file → (name → targetFile)
+  // Build imported names per file: file → (localName → targetFile)
   const importedNamesPerFile = new Map<string, Map<string, string>>();
+  const importedExportName = new Map<string, Map<string, string>>();
+  const defaultImportTargets = new Map<string, Map<string, string>>();
   for (const imp of input.imports) {
     const targetFile = input.resolvedImportPaths.get(`${imp.filePath}::${imp.modulePath}`);
     if (!targetFile) continue;
@@ -89,8 +91,19 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
       fileImports = new Map();
       importedNamesPerFile.set(imp.filePath, fileImports);
     }
-    for (const { name } of imp.names) {
-      fileImports.set(name, targetFile);
+    for (const { name, alias } of imp.names) {
+      const localName = alias ?? name;
+      fileImports.set(localName, targetFile);
+      if (alias && alias !== name) {
+        let em = importedExportName.get(imp.filePath);
+        if (!em) { em = new Map(); importedExportName.set(imp.filePath, em); }
+        em.set(localName, name);
+      }
+      if (imp.isDefault) {
+        let dm = defaultImportTargets.get(imp.filePath);
+        if (!dm) { dm = new Map(); defaultImportTargets.set(imp.filePath, dm); }
+        dm.set(localName, targetFile);
+      }
     }
     // Wildcard-leaf semantics: expand wildcard import to include all exported symbols
     const semantics = input.perFileImportSemantics?.get(imp.filePath);
@@ -277,12 +290,12 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
       // Default import — find default-exported symbol or single primary export
       const defaultTarget = findDefaultExport(targetSymbols);
       if (defaultTarget) {
-        links.push(makeLink(fromId, defaultTarget.id, 'imports', 0.85, imp.line));
+        links.push(makeLink(fromId, defaultTarget.id, 'imports', 0.85, imp.line, 'import-default'));
       } else {
         // Fallback: link to the module-level symbol (file still imports from target)
         const moduleTop = targetSymbols.find(s => s.kind === 'module');
         if (moduleTop) {
-          links.push(makeLink(fromId, moduleTop.id, 'imports', 0.6, imp.line));
+          links.push(makeLink(fromId, moduleTop.id, 'imports', 0.6, imp.line, 'import-default-module'));
         } else {
           unresolvedImports++;
         }
@@ -298,7 +311,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
         }
 
         if (target) {
-          links.push(makeLink(fromId, target.id, 'imports', 0.95, imp.line));
+          links.push(makeLink(fromId, target.id, 'imports', 0.95, imp.line, 'import-named'));
         } else {
           unresolvedImports++;
         }
@@ -308,7 +321,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
       const exported = targetSymbols.filter(s => s.exported);
       if (exported.length > 0) {
         for (const target of exported) {
-          links.push(makeLink(fromId, target.id, 'imports', 0.65, imp.line));
+          links.push(makeLink(fromId, target.id, 'imports', 0.65, imp.line, 'import-wildcard'));
         }
       } else {
         unresolvedImports++;
@@ -320,6 +333,17 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
   for (const call of input.calls) {
     const candidates = symbolByName.get(call.calleeName);
     if (!candidates || candidates.length === 0) {
+      if (!call.receiver) {
+        const aliasFile = importedNamesPerFile.get(call.filePath)?.get(call.calleeName);
+        const exportName = importedExportName.get(call.filePath)?.get(call.calleeName);
+        if (aliasFile && exportName) {
+          const target = input.symbolsByFile.get(aliasFile)?.find(s => s.name === exportName && s.exported);
+          if (target) {
+            links.push(makeLink(call.enclosingSymbolId, target.id, 'calls', 0.95, call.line, 'call-alias'));
+            continue;
+          }
+        }
+      }
       // No project symbol matches this callee name.
       // - Method calls (has receiver): must be external — the method doesn't exist in the project
       // - Bare calls: check built-in globals and external import names
@@ -341,8 +365,20 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
         // symbol by construction — see RawLocalBinding.
         unresolvedCalls++;
       }
-      tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links);
+      tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links, input.symbolsByFile, defaultImportTargets, importedExportName);
       continue;
+    }
+
+    if (!call.receiver) {
+      const aliasFile = importedNamesPerFile.get(call.filePath)?.get(call.calleeName);
+      const exportName = importedExportName.get(call.filePath)?.get(call.calleeName);
+      if (aliasFile && exportName) {
+        const target = input.symbolsByFile.get(aliasFile)?.find(s => s.name === exportName && s.exported);
+        if (target) {
+          links.push(makeLink(call.enclosingSymbolId, target.id, 'calls', 0.95, call.line, 'call-alias'));
+          continue;
+        }
+      }
     }
 
     // Fast path: unique name globally.
@@ -380,13 +416,13 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
         externalCalls++;
         continue;
       }
-      links.push(makeLink(call.enclosingSymbolId, candidates[0].id, 'calls', 0.9, call.line));
+      links.push(makeLink(call.enclosingSymbolId, candidates[0].id, 'calls', 0.9, call.line, 'call-unique'));
       continue;
     }
 
     // ── Receiver-aware narrowing (highest priority for member calls) ──
     if (call.receiver) {
-      const narrowed = narrowByReceiver(call, candidates, symbolById, symbolByName, importedNamesPerFile, input.symbolsByFile, typeBindingsPerFile, heritageAncestors);
+      const narrowed = narrowByReceiver(call, candidates, symbolById, symbolByName, importedNamesPerFile, input.symbolsByFile, typeBindingsPerFile, heritageAncestors, defaultImportTargets);
       // Was this receiver's OWN declared type imported from an external module
       // (e.g. `this.configService: ConfigService` where ConfigService comes from
       // '@nestjs/config')? Existing classification below only checked the callee
@@ -398,13 +434,13 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
       const receiverIsExternallyTyped = isReceiverExternallyTyped(call, typeBindingsPerFile, symbolById, externalNamesPerFile);
       if (narrowed) {
         if (narrowed.confidence >= MIN_LINK_CONFIDENCE) {
-          links.push(makeLink(call.enclosingSymbolId, narrowed.symbol.id, 'calls', narrowed.confidence, call.line));
+          links.push(makeLink(call.enclosingSymbolId, narrowed.symbol.id, 'calls', narrowed.confidence, call.line, 'call-receiver'));
         } else if (receiverIsExternallyTyped) {
           externalCalls++;
-          tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links);
+          tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links, input.symbolsByFile, defaultImportTargets, importedExportName);
         } else {
           unresolvedCalls++;
-          tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links);
+          tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links, input.symbolsByFile, defaultImportTargets, importedExportName);
         }
         continue;
       }
@@ -416,7 +452,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
       } else {
         unresolvedCalls++;
       }
-      tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links);
+      tryLinkReceiverReference(call, symbolByName, importedNamesPerFile, links, input.symbolsByFile, defaultImportTargets, importedExportName);
       continue;
     }
 
@@ -428,7 +464,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     // real risk of the "t() shadows an unrelated file's symbol" mis-link this guards against.
     const sameFile = candidates.filter(s => s.filePath === call.filePath);
     if (sameFile.length > 0) {
-      links.push(makeLink(call.enclosingSymbolId, sameFile[0].id, 'calls', 0.9, call.line));
+      links.push(makeLink(call.enclosingSymbolId, sameFile[0].id, 'calls', 0.9, call.line, 'call-samefile'));
       continue;
     }
 
@@ -438,7 +474,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     if (importedFromFile) {
       const imported = candidates.find(s => s.filePath === importedFromFile);
       if (imported) {
-        links.push(makeLink(call.enclosingSymbolId, imported.id, 'calls', 0.95, call.line));
+        links.push(makeLink(call.enclosingSymbolId, imported.id, 'calls', 0.95, call.line, 'call-imported'));
         continue;
       }
     }
@@ -460,7 +496,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
     // ── Proximity scoring fallback (replaces blind candidates[0]) ──
     const best = scoreCandidates(call, candidates, directImportsPerFile);
     if (best.confidence >= MIN_LINK_CONFIDENCE) {
-      links.push(makeLink(call.enclosingSymbolId, best.symbol.id, 'calls', best.confidence, call.line));
+      links.push(makeLink(call.enclosingSymbolId, best.symbol.id, 'calls', best.confidence, call.line, 'call-proximity'));
     } else if (!call.isArgumentRef) {
       // Below threshold — "no link is better than a wrong link". For isArgumentRef
       // identifiers this is frequently a plain local value that only coincidentally
@@ -487,7 +523,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
           ?? (candidates.length === 1 ? candidates[0] : null);
       if (target) {
         const fromId = tb.scope ?? `${tb.filePath}#module:_top:0`;
-        links.push(makeLink(fromId, target.id, 'calls', 0.7, tb.line));
+        links.push(makeLink(fromId, target.id, 'references', 0.7, tb.line, 'type-annotation'));
       }
     }
   }
@@ -512,7 +548,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
           s.startLine <= rt.line && s.endLine >= rt.line
         );
         const fromId = fromSym?.id ?? `${rt.filePath}#module:_top:0`;
-        links.push(makeLink(fromId, target.id, 'calls', 0.7, rt.line));
+        links.push(makeLink(fromId, target.id, 'references', 0.7, rt.line, 'return-annotation'));
       }
     }
   }
@@ -535,7 +571,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
         ?? parents[0];
 
       if (parent) {
-        links.push(makeLink(child.id, parent.id, h.type, 0.95, h.line));
+        links.push(makeLink(child.id, parent.id, h.type, 0.95, h.line, 'heritage'));
       }
     } else {
       // Parent not found in project symbols — check if it comes from an external import
@@ -553,7 +589,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
           endLine: 0,
           exported: true,
         });
-        links.push(makeLink(child.id, extId, h.type, 0.7, h.line));
+        links.push(makeLink(child.id, extId, h.type, 0.7, h.line, 'heritage-external'));
       }
     }
   }
@@ -561,7 +597,7 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
   // ── Containment links (method → class) ──
   for (const sym of input.allSymbols) {
     if (sym.parentId) {
-      links.push(makeLink(sym.parentId, sym.id, 'contains', 1.0));
+      links.push(makeLink(sym.parentId, sym.id, 'contains', 1.0, undefined, 'contains'));
     }
   }
 
@@ -584,13 +620,13 @@ export function resolveLinksWithStats(input: ResolutionInput): ResolutionResult 
             target = followReExportChain(name, sourceFile, reExportMap, input.symbolsByFile);
           }
           if (target) {
-            links.push(makeLink(fromId, target.id, 'imports', 0.85, re.line));
+            links.push(makeLink(fromId, target.id, 'imports', 0.85, re.line, 'reexport-named'));
           }
         }
       } else {
         // Wildcard: export * from './source' — link to all exported symbols
         for (const sym of sourceSymbols.filter(s => s.exported)) {
-          links.push(makeLink(fromId, sym.id, 'imports', 0.6, re.line));
+          links.push(makeLink(fromId, sym.id, 'imports', 0.6, re.line, 'reexport-wildcard'));
         }
       }
     }
@@ -610,6 +646,7 @@ function narrowByReceiver(
   symbolsByFile: Map<string, CodeSymbol[]>,
   typeBindingsPerFile: Map<string, Map<string, Array<{ typeName: string; scope?: string; line: number }>>>,
   heritageAncestors?: Map<string, string[]>,
+  defaultImportTargets?: Map<string, Map<string, string>>,
 ): { symbol: CodeSymbol; confidence: number } | null {
   const receiver = call.receiver!;
 
@@ -620,6 +657,16 @@ function narrowByReceiver(
     if (parentId) {
       const method = candidates.find(c => c.parentId === parentId);
       if (method) return { symbol: method, confidence: 0.95 };
+    }
+  }
+
+  const defaultTargetFile = defaultImportTargets?.get(call.filePath)?.get(receiver);
+  if (defaultTargetFile) {
+    const targetSymbols = symbolsByFile.get(defaultTargetFile);
+    const defaultExport = targetSymbols ? findDefaultExport(targetSymbols) : undefined;
+    if (defaultExport) {
+      const method = candidates.find(c => c.parentId === defaultExport.id);
+      if (method) return { symbol: method, confidence: 0.9 };
     }
   }
 
@@ -974,7 +1021,7 @@ function buildIdIndex(symbols: CodeSymbol[]): Map<string, CodeSymbol> {
   return index;
 }
 
-function makeLink(fromId: string, toId: string, type: LinkType, confidence: number, line?: number): SymbolLink {
+function makeLink(fromId: string, toId: string, type: LinkType, confidence: number, line?: number, reason?: string): SymbolLink {
   return {
     id: `${fromId}->${type}->${toId}`,
     fromId,
@@ -982,6 +1029,7 @@ function makeLink(fromId: string, toId: string, type: LinkType, confidence: numb
     type,
     confidence,
     line,
+    reason,
   };
 }
 
@@ -995,16 +1043,18 @@ function makeLink(fromId: string, toId: string, type: LinkType, confidence: numb
  * const, `join` is Array.prototype.join and will never resolve). Without
  * this, the receiver reference is silently dropped from the graph entirely.
  * Only a bare-identifier receiver is considered — compound paths (`this.foo`,
- * `a.b`) are intentionally out of scope. Resolution prefers the file the
- * receiver was actually imported from (see the import-map lookup below);
- * otherwise falls back to a same-file match. This is a best-effort fallback,
- * not a scope-accurate resolution — it can miss renamed/aliased imports.
+ * `a.b`) are intentionally out of scope. Resolution handles default imports (by
+ * structural default export), named-alias imports (by real export name), the
+ * file the receiver was actually imported from, and finally a same-file match.
  */
 function tryLinkReceiverReference(
   call: RawCall,
   symbolByName: Map<string, CodeSymbol[]>,
   importedNamesPerFile: Map<string, Map<string, string>>,
   links: SymbolLink[],
+  symbolsByFile?: Map<string, CodeSymbol[]>,
+  defaultImportTargets?: Map<string, Map<string, string>>,
+  importedExportName?: Map<string, Map<string, string>>,
 ): void {
   if (
     !call.receiver ||
@@ -1015,6 +1065,28 @@ function tryLinkReceiverReference(
   ) {
     return;
   }
+
+  const defaultTargetFile = defaultImportTargets?.get(call.filePath)?.get(call.receiver);
+  if (defaultTargetFile && symbolsByFile) {
+    const defaultExport = findDefaultExport(symbolsByFile.get(defaultTargetFile) ?? []);
+    if (defaultExport) {
+      links.push(makeLink(call.enclosingSymbolId, defaultExport.id, 'references', 0.85, call.line, 'receiver-ref-default'));
+      return;
+    }
+  }
+
+  const realExportName = importedExportName?.get(call.filePath)?.get(call.receiver);
+  if (realExportName) {
+    const aliasFile = importedNamesPerFile.get(call.filePath)?.get(call.receiver);
+    if (aliasFile) {
+      const target = symbolByName.get(realExportName)?.find(s => s.filePath === aliasFile);
+      if (target) {
+        links.push(makeLink(call.enclosingSymbolId, target.id, 'references', 0.85, call.line, 'receiver-ref'));
+        return;
+      }
+    }
+  }
+
   const receiverCandidates = symbolByName.get(call.receiver);
   if (!receiverCandidates || receiverCandidates.length === 0) return;
 
@@ -1032,17 +1104,25 @@ function tryLinkReceiverReference(
     : receiverCandidates.find(s => s.filePath === call.filePath);
 
   if (target) {
-    links.push(makeLink(call.enclosingSymbolId, target.id, 'references', 0.85, call.line));
+    links.push(makeLink(call.enclosingSymbolId, target.id, 'references', 0.85, call.line, 'receiver-ref'));
   }
 }
 
 function deduplicateLinks(links: SymbolLink[]): SymbolLink[] {
-  const seen = new Set<string>();
-  return links.filter(l => {
-    if (seen.has(l.id)) return false;
-    seen.add(l.id);
-    return true;
-  });
+  const byId = new Map<string, SymbolLink>();
+  for (const l of links) {
+    const existing = byId.get(l.id);
+    if (!existing) {
+      byId.set(l.id, { ...l, lines: l.line != null ? [l.line] : [] });
+      continue;
+    }
+    if (l.line != null && !existing.lines!.includes(l.line)) existing.lines!.push(l.line);
+    if (l.confidence > existing.confidence) existing.confidence = l.confidence;
+  }
+  for (const l of byId.values()) {
+    if (l.lines && l.lines.length > 1) l.lines.sort((a, b) => a - b);
+  }
+  return [...byId.values()];
 }
 
 // ── Re-export chain resolution ──

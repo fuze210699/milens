@@ -10,11 +10,7 @@ import type { Deps } from './deps.js';
 export function registerTestingTools(server: McpServer, deps: Deps): void {
   const { getDb } = deps;
 
-  server.tool(
-    'test_coverage_gaps',
-    'Untested exported symbols sorted by risk. Prioritize writing tests for these.',
-    { limit: z.number().optional().default(20), repo: z.string().optional() },
-    async ({ limit, repo }) => {
+  const gapsReport = async (limit: number, repo?: string) => {
       const { db } = getDb(repo);
       const coverage = db.getTestCoverage();
       const gaps = db.getTestCoverageGaps(limit);
@@ -30,19 +26,17 @@ export function registerTestingTools(server: McpServer, deps: Deps): void {
         }
       }
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
+  };
 
-  server.tool(
-    'test_impact',
-    'Map changed code -> which test files to run. Use after making changes.',
-    { ref: z.string().optional().default('HEAD'), repo: z.string().optional() },
-    async ({ ref, repo }) => {
+  const impactReport = async (ref: string, repo?: string) => {
       const { db, root } = getDb(repo);
       let changedFiles: string[] = [];
+      const safeRef = /^[\w./~^@{}-]+(\.\.\.?[\w./~^@{}-]+)?$/.test(ref) && !ref.startsWith('-')
+        ? ref
+        : 'HEAD';
       try {
-        const { execSync } = await import('node:child_process');
-        const diff = execSync(`git diff --name-only ${ref}`, { cwd: root, encoding: 'utf-8' }).trim();
+        const { execFileSync } = await import('node:child_process');
+        const diff = execFileSync('git', ['diff', '--name-only', safeRef], { cwd: root, encoding: 'utf-8' }).trim();
         changedFiles = diff ? diff.split('\n').filter(Boolean) : [];
       } catch {}
       if (changedFiles.length === 0) return { content: [{ type: 'text' as const, text: 'No changed files.' }] };
@@ -64,29 +58,16 @@ export function registerTestingTools(server: McpServer, deps: Deps): void {
         lines.push(`\nSuggested command: npx vitest run ${impact.testFiles.join(' ')}`);
       }
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-    },
-  );
+  };
 
-  server.tool(
-    'test_plan',
-    'Generate a test strategy for a symbol: mock plan + >=3 test scenarios.',
-    { name: z.string(), repo: z.string().optional() },
-    async ({ name, repo }) => {
+  const planReport = async (name: string, repo?: string) => {
       const { db, root } = getDb(repo);
       const plan = generateTestPlan(db, name, root);
       if (!plan) return { content: [{ type: 'text' as const, text: `"${name}" not found.` }] };
       return { content: [{ type: 'text' as const, text: plan.planText }] };
-    },
-  );
+  };
 
-  server.tool(
-    'test_generate',
-    'Generate a test file for a symbol using its test plan. Detects test framework and follows project conventions.',
-    {
-      symbol: z.string().describe('Symbol name to generate tests for'),
-      repo: z.string().optional(),
-    },
-    async ({ symbol, repo }) => {
+  const generateReport = async (symbol: string, repo?: string) => {
       const { db, root } = getDb(repo);
       const plan = generateTestPlan(db, symbol, root);
       if (!plan) return { content: [{ type: 'text' as const, text: `Symbol not found: "${symbol}"` }] };
@@ -141,6 +122,29 @@ export function registerTestingTools(server: McpServer, deps: Deps): void {
       writeFileSync(join(root, writePath), testCode, 'utf-8');
 
       return { content: [{ type: 'text' as const, text: `Test file generated: ${writePath}\nFramework: ${framework}\nScenarios: ${plan.testScenarios.length}\nMock deps: ${plan.mockStrategy.length}` }] };
+  };
+
+  server.tool(
+    'tests',
+    'Testing intelligence. mode=gaps (untested symbols by risk), impact (changed code → test files to run), plan (mock plan + scenarios for a symbol), generate (write a test file for a symbol).',
+    {
+      mode: z.enum(['gaps', 'impact', 'plan', 'generate']).optional().describe('gaps|impact|plan|generate (inferred from args when omitted)'),
+      name: z.string().optional().describe('Symbol name (mode=plan)'),
+      symbol: z.string().optional().describe('Symbol name (mode=generate)'),
+      ref: z.string().optional().default('HEAD').describe('Git ref (mode=impact)'),
+      limit: z.number().optional().default(20).describe('Max results (mode=gaps)'),
+      repo: z.string().optional(),
+    },
+    async ({ mode, name, symbol, ref, limit, repo }) => {
+      const m = mode ?? (symbol ? 'generate' : name ? 'plan' : 'gaps');
+      if (m === 'gaps') return gapsReport(limit ?? 20, repo);
+      if (m === 'impact') return impactReport(ref ?? 'HEAD', repo);
+      if (m === 'plan') {
+        if (!name) return { content: [{ type: 'text' as const, text: 'mode=plan requires `name`.' }] };
+        return planReport(name, repo);
+      }
+      if (!symbol) return { content: [{ type: 'text' as const, text: 'mode=generate requires `symbol`.' }] };
+      return generateReport(symbol, repo);
     },
   );
 }

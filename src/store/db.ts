@@ -45,18 +45,18 @@ export class Database {
          ON CONFLICT(path) DO UPDATE SET hash = excluded.hash, analyzed_at = datetime('now')`
       ),
       insertSym: this.db.prepare(
-        `INSERT OR REPLACE INTO symbols (id, name, kind, file_path, start_line, end_line, exported, parent_id, signature, role, heat)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT OR REPLACE INTO symbols (id, name, kind, file_path, start_line, end_line, exported, parent_id, signature, role, heat, importance)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ),
       updateMeta: this.db.prepare(
-        `UPDATE symbols SET role = ?, heat = ? WHERE id = ?`
+        `UPDATE symbols SET role = ?, heat = ?, importance = ? WHERE id = ?`
       ),
       upsertZone: this.db.prepare(
         `UPDATE file_hashes SET zone = ? WHERE path = ?`
       ),
       insertLink: this.db.prepare(
-        `INSERT OR REPLACE INTO links (id, from_id, to_id, type, confidence, line_number)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT OR REPLACE INTO links (id, from_id, to_id, type, confidence, line_number, lines, reason)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       ),
       searchFts: this.db.prepare(
         `SELECT s.* FROM symbol_fts f
@@ -71,21 +71,32 @@ export class Database {
       linksOut: this.db.prepare('SELECT * FROM links WHERE from_id = ?'),
       upstream: this.db.prepare(`
         WITH RECURSIVE upstream(id, depth, via) AS (
-          SELECT from_id, 1, type FROM links WHERE to_id = ? AND type IN ('calls', 'imports', 'extends', 'implements')
+          SELECT from_id, 1, type FROM links WHERE to_id = ? AND type IN ('calls', 'imports', 'extends', 'implements', 'references')
           UNION
           SELECT l.from_id, u.depth + 1, l.type
           FROM links l JOIN upstream u ON l.to_id = u.id
-          WHERE u.depth < ? AND l.type IN ('calls', 'imports', 'extends', 'implements')
+          WHERE u.depth < ? AND l.type IN ('calls', 'imports', 'extends', 'implements', 'references')
         )
         SELECT DISTINCT s.*, u.depth, u.via FROM upstream u JOIN symbols s ON s.id = u.id ORDER BY u.depth
       `),
       downstream: this.db.prepare(`
         WITH RECURSIVE downstream(id, depth, via, path) AS (
-          SELECT to_id, 1, type, ',' || to_id || ',' FROM links WHERE from_id = ? AND type IN ('calls', 'imports', 'extends', 'implements')
+          SELECT to_id, 1, type, ',' || to_id || ',' FROM links WHERE from_id = ? AND type IN ('calls', 'imports', 'extends', 'implements', 'references')
           UNION
           SELECT l.to_id, d.depth + 1, l.type, d.path || l.to_id || ','
           FROM links l JOIN downstream d ON l.from_id = d.id
-          WHERE d.depth < ? AND l.type IN ('calls', 'imports', 'extends', 'implements')
+          WHERE d.depth < ? AND l.type IN ('calls', 'imports', 'extends', 'implements', 'references')
+            AND d.path NOT LIKE '%,' || l.to_id || ',%'
+        )
+        SELECT DISTINCT s.*, d.depth, d.via FROM downstream d JOIN symbols s ON s.id = d.id ORDER BY d.depth
+      `),
+      downstreamExec: this.db.prepare(`
+        WITH RECURSIVE downstream(id, depth, via, path) AS (
+          SELECT to_id, 1, type, ',' || to_id || ',' FROM links WHERE from_id = ? AND type IN ('calls', 'extends', 'implements')
+          UNION
+          SELECT l.to_id, d.depth + 1, l.type, d.path || l.to_id || ','
+          FROM links l JOIN downstream d ON l.from_id = d.id
+          WHERE d.depth < ? AND l.type IN ('calls', 'extends', 'implements')
             AND d.path NOT LIKE '%,' || l.to_id || ',%'
         )
         SELECT DISTINCT s.*, d.depth, d.via FROM downstream d JOIN symbols s ON s.id = d.id ORDER BY d.depth
@@ -105,6 +116,10 @@ export class Database {
           SELECT DISTINCT l.to_id FROM links l
           JOIN symbols src ON src.id = l.from_id
           WHERE (src.file_path LIKE '%/test/%' OR src.file_path LIKE '%\\test\\%'
+                 OR src.file_path LIKE '%/tests/%' OR src.file_path LIKE '%\\tests\\%'
+                 OR src.file_path LIKE 'test/%' OR src.file_path LIKE 'tests/%'
+                 OR src.file_path LIKE 'test\\%' OR src.file_path LIKE 'tests\\%'
+                 OR src.file_path LIKE '%__tests__%'
                  OR src.file_path LIKE '%.test.%' OR src.file_path LIKE '%.spec.%')
         )
         ORDER BY s.heat DESC
@@ -133,10 +148,20 @@ export class Database {
     const colNames = new Set(cols.map((c: any) => c.name));
     if (!colNames.has('role')) this.db.exec(`ALTER TABLE symbols ADD COLUMN role TEXT`);
     if (!colNames.has('heat')) this.db.exec(`ALTER TABLE symbols ADD COLUMN heat INTEGER DEFAULT 0`);
+    if (!colNames.has('importance')) this.db.exec(`ALTER TABLE symbols ADD COLUMN importance INTEGER DEFAULT 0`);
 
     const fhCols = this.db.prepare(`PRAGMA table_info(file_hashes)`).all() as any[];
     const fhNames = new Set(fhCols.map((c: any) => c.name));
     if (!fhNames.has('zone')) this.db.exec(`ALTER TABLE file_hashes ADD COLUMN zone TEXT`);
+
+    const linkCols = this.db.prepare(`PRAGMA table_info(links)`).all() as any[];
+    const linkColNames = new Set(linkCols.map((c: any) => c.name));
+    if (!linkColNames.has('lines')) {
+      this.db.exec(`ALTER TABLE links ADD COLUMN lines TEXT`);
+    }
+    if (!linkColNames.has('reason')) {
+      this.db.exec(`ALTER TABLE links ADD COLUMN reason TEXT`);
+    }
 
     // ── Migrate annotations table (symbol_id → symbol, missing columns) ──
     try {
@@ -216,19 +241,22 @@ export class Database {
       sym.id, sym.name, sym.kind, sym.filePath,
       sym.startLine, sym.endLine, sym.exported ? 1 : 0,
       sym.parentId ?? null, sym.signature ?? null,
-      sym.role ?? null, sym.heat ?? 0,
+      sym.role ?? null, sym.heat ?? 0, sym.importance ?? 0,
     );
   }
 
   insertLink(link: SymbolLink): void {
+    const lines = link.lines && link.lines.length > 0 ? link.lines : (link.line != null ? [link.line] : []);
     this.stmts.insertLink.run(
       link.id, link.fromId, link.toId, link.type,
-      link.confidence, link.line ?? null,
+      link.confidence, link.line ?? (lines[0] ?? null),
+      lines.length > 0 ? lines.join(',') : null,
+      link.reason ?? null,
     );
   }
 
-  updateSymbolMetadata(id: string, role: string, heat: number): void {
-    this.stmts.updateMeta.run(role, heat, id);
+  updateSymbolMetadata(id: string, role: string, heat: number, importance = 0): void {
+    this.stmts.updateMeta.run(role, heat, importance, id);
   }
 
   setFileZone(filePath: string, zone: string): void {
@@ -284,8 +312,9 @@ export class Database {
     return rows.map(r => ({ symbol: rowToSymbol(r), depth: r.depth, via: r.via }));
   }
 
-  findDownstream(symbolId: string, maxDepth = 3): Array<{ symbol: CodeSymbol; depth: number; via: string }> {
-    const rows = this.stmts.downstream.all(symbolId, maxDepth) as any[];
+  findDownstream(symbolId: string, maxDepth = 3, executionOnly = false): Array<{ symbol: CodeSymbol; depth: number; via: string }> {
+    const stmt = executionOnly ? this.stmts.downstreamExec : this.stmts.downstream;
+    const rows = stmt.all(symbolId, maxDepth) as any[];
     return rows.map(r => ({ symbol: rowToSymbol(r), depth: r.depth, via: r.via }));
   }
 
@@ -555,6 +584,10 @@ export class Database {
     this.db.exec('DELETE FROM links');
   }
 
+  clearLinks(): void {
+    this.db.exec('DELETE FROM links');
+  }
+
   // ── Repo metadata (unresolved counts, etc.) ──
 
   setMeta(key: string, value: string): void {
@@ -737,14 +770,82 @@ export class Database {
     `).run(...filePaths);
   }
 
+  setFileFacts(path: string, factsJson: string): void {
+    this.db.prepare(
+      `INSERT OR REPLACE INTO file_facts (path, facts, updated_at) VALUES (?, ?, datetime('now'))`
+    ).run(path, factsJson);
+  }
+
+  getFileFacts(path: string): any | null {
+    const row = this.db.prepare('SELECT facts FROM file_facts WHERE path = ?').get(path) as any;
+    if (!row) return null;
+    try { return JSON.parse(row.facts); } catch { return null; }
+  }
+
+  getAllFileFacts(): Map<string, any> {
+    const rows = this.db.prepare('SELECT path, facts FROM file_facts').all() as any[];
+    const out = new Map<string, any>();
+    for (const r of rows) {
+      try { out.set(r.path, JSON.parse(r.facts)); } catch { /* skip corrupt */ }
+    }
+    return out;
+  }
+
+  deleteFileFacts(path: string): void {
+    this.db.prepare('DELETE FROM file_facts WHERE path = ?').run(path);
+  }
+
+  pruneOrphanFileFacts(knownPaths: string[]): number {
+    if (knownPaths.length === 0) return 0;
+    return this.db.transaction(() => {
+      this.db.exec('CREATE TEMP TABLE IF NOT EXISTS _known_fact_paths (path TEXT PRIMARY KEY)');
+      this.db.exec('DELETE FROM _known_fact_paths');
+      const ins = this.db.prepare('INSERT OR IGNORE INTO _known_fact_paths (path) VALUES (?)');
+      for (const p of knownPaths) ins.run(p);
+      const result = this.db.prepare('DELETE FROM file_facts WHERE path NOT IN (SELECT path FROM _known_fact_paths)').run();
+      this.db.exec('DROP TABLE _known_fact_paths');
+      return result.changes;
+    })();
+  }
+
+  pruneFilesNotIn(knownPaths: string[]): number {
+    if (knownPaths.length === 0) return 0;
+    return this.db.transaction(() => {
+      this.db.exec('CREATE TEMP TABLE IF NOT EXISTS _live_paths (path TEXT PRIMARY KEY)');
+      this.db.exec('DELETE FROM _live_paths');
+      const ins = this.db.prepare('INSERT OR IGNORE INTO _live_paths (path) VALUES (?)');
+      for (const p of knownPaths) ins.run(p);
+      this.db.exec(`DELETE FROM links WHERE from_id IN (SELECT id FROM symbols WHERE file_path NOT IN (SELECT path FROM _live_paths) AND file_path != '(external)')`);
+      this.db.exec(`DELETE FROM links WHERE to_id IN (SELECT id FROM symbols WHERE file_path NOT IN (SELECT path FROM _live_paths) AND file_path != '(external)')`);
+      const result = this.db.prepare(`DELETE FROM symbols WHERE file_path NOT IN (SELECT path FROM _live_paths) AND file_path != '(external)'`).run();
+      this.db.exec('DROP TABLE _live_paths');
+      return result.changes;
+    })();
+  }
+
+  pruneOrphanEmbeddings(): number {
+    const hasTable = this.db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='symbol_embeddings'"
+    ).get();
+    if (!hasTable) return 0;
+    const result = this.db.prepare(
+      'DELETE FROM symbol_embeddings WHERE symbol_id NOT IN (SELECT id FROM symbols)'
+    ).run();
+    return result.changes;
+  }
+
   /** Delete file_hashes rows for paths not in the given set (orphan cleanup after incremental analyze) */
   pruneOrphanFileHashes(knownPaths: string[]): number {
     if (knownPaths.length === 0) return 0;
-    const placeholders = knownPaths.map(() => '?').join(',');
-    const result = this.db.prepare(`
-      DELETE FROM file_hashes WHERE path NOT IN (${placeholders})
-    `).run(...knownPaths);
-    return result.changes;
+    return this.db.transaction(() => {
+      this.db.exec('CREATE TEMP TABLE IF NOT EXISTS _known_paths (path TEXT PRIMARY KEY)');
+      this.db.exec('DELETE FROM _known_paths');
+      const ins = this.db.prepare('INSERT OR IGNORE INTO _known_paths (path) VALUES (?)');
+      for (const p of knownPaths) ins.run(p);
+      const result = this.db.prepare('DELETE FROM file_hashes WHERE path NOT IN (SELECT path FROM _known_paths)').run();
+      this.db.exec('DROP TABLE _known_paths');
+      return result.changes;
+    })();
   }
 
   // ── Tool usage tracking ──
@@ -1133,10 +1234,14 @@ function rowToSymbol(row: any): CodeSymbol {
     signature: row.signature ?? undefined,
     role: row.role ?? undefined,
     heat: row.heat ?? undefined,
+    importance: row.importance ?? undefined,
   };
 }
 
 function rowToLink(row: any): SymbolLink {
+  const lines = typeof row.lines === 'string' && row.lines.length > 0
+    ? row.lines.split(',').map((n: string) => parseInt(n, 10)).filter((n: number) => Number.isFinite(n))
+    : undefined;
   return {
     id: row.id,
     fromId: row.from_id,
@@ -1144,5 +1249,7 @@ function rowToLink(row: any): SymbolLink {
     type: row.type,
     confidence: row.confidence,
     line: row.line_number ?? undefined,
+    lines,
+    reason: row.reason ?? undefined,
   };
 }

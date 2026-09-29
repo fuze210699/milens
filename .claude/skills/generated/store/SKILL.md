@@ -22,45 +22,46 @@ When working with code in **store/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ### Edit-safety enforcement
-A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`/`smart_context`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
+A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
 
 ## Overview
-Contains 146 symbols (15 exported) across 5 files.
+Contains 155 symbols (15 exported) across 5 files.
 
 ## Key Symbols
-- **`Database`** [class] (src/store/db.ts:10) — 80 refs
-- **`AnnotationStore`** [class] (src/store/annotations.ts:10) — 21 refs
-- **`RepoRegistry`** [class] (src/store/registry.ts:24) — 18 refs
-- **`runDecayPass`** [function] (src/store/confidence.ts:87) — 6 refs
+- **`Database`** [class] (src/store/db.ts:10) — 122 refs
+- **`RepoRegistry`** [class] (src/store/registry.ts:24) — 32 refs
+- **`AnnotationStore`** [class] (src/store/annotations.ts:10) — 29 refs
+- **`runDecayPass`** [function] (src/store/confidence.ts:85) — 6 refs
+- **`TfIdfProvider`** [class] (src/store/vectors.ts:44) — 6 refs
+- **`EmbeddingStore`** [class] (src/store/vectors.ts:170) — 6 refs
 - **`buildEmbeddingText`** [function] (src/store/vectors.ts:250) — 4 refs
-- **`TfIdfProvider`** [class] (src/store/vectors.ts:44) — 4 refs
-- **`EmbeddingStore`** [class] (src/store/vectors.ts:170) — 4 refs
-- **`decayConfidence`** [function] (src/store/confidence.ts:23) — 3 refs
+- **`decayConfidence`** [function] (src/store/confidence.ts:22) — 3 refs
 - **`boostConfidence`** [function] (src/store/confidence.ts:6) — 2 refs
-- **`getStaleAnnotations`** [function] (src/store/confidence.ts:40) — 2 refs
-- **`promoteSecurityAnnotations`** [function] (src/store/confidence.ts:50) — 2 refs
-- **`autoPromote`** [function] (src/store/confidence.ts:108) — 2 refs
+- **`getStaleAnnotations`** [function] (src/store/confidence.ts:38) — 2 refs
+- **`promoteSecurityAnnotations`** [function] (src/store/confidence.ts:48) — 2 refs
+- **`autoPromote`** [function] (src/store/confidence.ts:106) — 2 refs
 - **`EmbeddingProvider`** [interface] (src/store/vectors.ts:15) — 2 refs
 - **`NeuralProvider`** [class] (src/store/vectors.ts:122) — 0 refs
 - **`SimilarResult`** [interface] (src/store/vectors.ts:23) — 0 refs
 
 ## Entry Points
-- **`Database`** [class] — 80 incoming references
-- **`AnnotationStore`** [class] — 21 incoming references
-- **`RepoRegistry`** [class] — 18 incoming references
-- **`findSymbolById`** [method] — 15 incoming references
-- **`rowToSymbol`** [function] — 13 incoming references
+- **`Database`** [class] — 122 incoming references
+- **`RepoRegistry`** [class] — 32 incoming references
+- **`AnnotationStore`** [class] — 29 incoming references
+- **`findSymbolById`** [method] — 17 incoming references
+- **`getIncomingLinks`** [method] — 14 incoming references
 
 ## Dependencies
 - **root**: `Annotation`, `AnnotationKey`, `Session`, `EvolutionEvent`, `CodeSymbol`, `SymbolLink`, `RepoEntry`
 
 ## Used By
-- **root**: `Database`, `RepoRegistry`, `AnnotationStore`, `runDecayPass`, `getIncomingLinks`, `getAllSymbols`, `getCodebaseSummary`, `findDbPath` (+22 more)
-- **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `isFileUpToDate`, `upsertFileHash`, `getSymbolsByFile`, `transaction` (+18 more)
+- **root**: `Database`, `RepoRegistry`, `AnnotationStore`, `runDecayPass`, `getIncomingLinks`, `getAllSymbols`, `getCodebaseSummary`, `findDbPath` (+23 more)
+- **analyzer**: `Database`, `TfIdfProvider`, `EmbeddingStore`, `buildEmbeddingText`, `getMeta`, `isFileUpToDate`, `getAllFileFacts`, `getSymbolsByFile` (+27 more)
 - **orchestrator**: `Database`, `findSymbolByName`, `findUpstream`, `getTestCoverageGaps`, `findDeadCode`
 - **server**: `Database`, `AnnotationStore`, `RepoRegistry`, `runDecayPass`, `getCodebaseSummary`, `recall`, `getStats`, `getTestCoverage` (+38 more)
-- **test**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+76 more)
+- **test**: `Database`, `AnnotationStore`, `RepoRegistry`, `boostConfidence`, `decayConfidence`, `getStaleAnnotations`, `promoteSecurityAnnotations`, `runDecayPass` (+81 more)
 - **apps**: `remove`, `getAnnotations`, `Database`, `getCodebaseSummary`
+- **scripts**: `Database`, `getCodebaseSummary`
 - **parser**: `load`
 
 ## Files

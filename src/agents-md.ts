@@ -1,6 +1,6 @@
 import { Database } from './store/db.js';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { join, relative, basename, dirname } from 'node:path';
+import { join, relative, basename, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CodeSymbol, CrossRepoConfig } from './types.js';
 
@@ -30,7 +30,7 @@ function countDependents(db: Database, symbolId: string): number {
 }
 
 function relativeFilePath(filePath: string, rootPath: string): string {
-  const rel = relative(rootPath, filePath);
+  const rel = isAbsolute(filePath) ? relative(rootPath, filePath) : filePath;
   return rel.replace(/\\/g, '/');
 }
 

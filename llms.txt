@@ -24,7 +24,7 @@ milens indexes source code into a SQLite knowledge graph containing symbols (fun
 - `find_dead_code({kind?, limit?})` — Exported symbols with zero incoming references
 
 ### Understanding
-- `smart_context({name, intent})` — Intent-aware context: understand/edit/debug/test
+- `overview({name, intent})` — Intent-aware context: understand/edit/debug/test
 - `trace({to?, from?})` — Execution flow: call chains to/from entrypoints
 - `routes({framework?})` — Detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Go, PHP, Rails)
 - `explain_relationship({from, to})` — Shortest path between two symbols
@@ -39,18 +39,18 @@ milens indexes source code into a SQLite knowledge graph containing symbols (fun
 ### Review & Risk Assessment
 - `review_pr({})` — PR risk assessment: scores changed symbols by blast radius + test coverage
 - `review_symbol({name})` — Single symbol risk: role, heat, dependents, test status
-- `pre_commit_check({})` — Pre-commit risk analysis: detect_changes + review_pr + dead code + coverage gaps
+- `detect_changes({mode: "precommit"})` — Pre-commit risk analysis: changes + review + dead code + coverage gaps
 - `orchestrate({})` — Full orchestration cycle: detect_changes → review_pr → impact → coverage gaps → dead code
 
 ### Security
 - `security_scan({scope?, severity?})` — Scan codebase for vulnerabilities using 190+ built-in rules
-- `fix_apply({ruleId, file, line})` — Apply a security fix suggestion to a file with backup
+- `security_scan({mode: "fix", ruleId, file, line})` — Apply a security fix suggestion to a file with backup
 
 ### Testing
-- `test_plan({name})` — Dependency-aware test plan: mocks, strategies, suggested tests
-- `test_generate({symbol})` — Generate a test file using its test plan, following project conventions
-- `test_coverage_gaps({})` — Untested exported symbols sorted by risk
-- `test_impact({})` — Maps git changes → test files to run
+- `tests({mode: "plan", name})` — Dependency-aware test plan: mocks, strategies, suggested tests
+- `tests({mode: "generate", symbol})` — Generate a test file using its test plan, following project conventions
+- `tests({mode: "gaps"})` — Untested exported symbols sorted by risk
+- `tests({mode: "impact"})` — Maps git changes → test files to run
 
 ### Developer Tools
 - `ast_explore({code, language})` — Parse code snippet → S-expression AST tree

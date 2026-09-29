@@ -1,6 +1,9 @@
 name: Accuracy Parity Check
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   parity:
     strategy:

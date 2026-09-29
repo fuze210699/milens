@@ -15,7 +15,7 @@ Debug issues by tracing execution flow, analyzing blast radius, exploring depend
 | `mcp_milens_context` | 360° symbol view: incoming refs + outgoing deps |
 | `mcp_milens_impact` | Blast radius: what breaks if target changes |
 | `mcp_milens_explain_relationship` | Shortest path between two symbols |
-| `mcp_milens_smart_context` | Intent-aware context for debug intent |
+| `mcp_milens_overview` | Intent-aware context for debug intent |
 | `mcp_milens_overview` | Combined context + impact + grep in one call |
 | `mcp_milens_grep` | Text search across all files (templates, configs, error messages) |
 | `mcp_milens_review_symbol` | Deep-dive single symbol risk assessment |
@@ -30,7 +30,7 @@ Debug issues by tracing execution flow, analyzing blast radius, exploring depend
 Get deep context on the problematic symbol.
 
 ```
-mcp_milens_smart_context({name: "<targetSymbol>", intent: "debug", repo: "<workspaceRoot>"})
+mcp_milens_overview({name: "<targetSymbol>", intent: "debug", repo: "<workspaceRoot>"})
 ```
 
 This returns execution paths, data flow, dependencies, and test coverage in one call.
@@ -134,7 +134,7 @@ Each hypothesis MUST cite specific tools and their output as evidence.
 
 ## Never Skip
 
-1. Always run `mcp_milens_smart_context` first — it is the most efficient starting point for debugging
+1. Always run `mcp_milens_overview` first — it is the most efficient starting point for debugging
 2. Never skip blast radius analysis — a fix that introduces new breakage is not a fix
 3. Always cite specific tool outputs as evidence for each hypothesis
 4. Always include regression risk in fix suggestions

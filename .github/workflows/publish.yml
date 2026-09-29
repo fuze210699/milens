@@ -10,6 +10,9 @@ on:
     paths:
       - 'package.json'
 
+permissions:
+  contents: read
+
 jobs:
   check-version:
     runs-on: ubuntu-latest
@@ -106,5 +109,12 @@ jobs:
           if gh release view "$VERSION" >/dev/null 2>&1; then
             echo "Release $VERSION already exists, skipping."
           else
-            gh release create "$VERSION" --generate-notes --title "$VERSION"
+            # Generate release notes from Conventional Commits (matches CHANGELOG.md).
+            # Fall back to GitHub's auto-notes if git-cliff produces nothing.
+            npx git-cliff --config cliff.toml --latest --strip header > release-notes.md || true
+            if [ -s release-notes.md ]; then
+              gh release create "$VERSION" --notes-file release-notes.md --title "$VERSION"
+            else
+              gh release create "$VERSION" --generate-notes --title "$VERSION"
+            fi
           fi

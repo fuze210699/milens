@@ -14,7 +14,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "mcp__milens__(impact|context|overview|guard_edit_check|edit_check|smart_context)",
+        "matcher": "mcp__milens__(impact|context|overview|guard_edit_check|edit_check)",
         "hooks": [
           {
             "type": "command",

@@ -22,13 +22,13 @@ When working with code in **security/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ### Edit-safety enforcement
-A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`/`smart_context`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
+A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
 
 ## Overview
 Contains 47 symbols (17 exported) across 2 files.
 
 ## Key Symbols
-- **`loadRules`** [function] (src/security/rules.ts:1301) — 6 refs
+- **`loadRules`** [function] (src/security/rules.ts:1301) — 8 refs
 - **`auditDependencies`** [function] (src/security/deps.ts:732) — 4 refs
 - **`detectEcosystem`** [function] (src/security/deps.ts:512) — 3 refs
 - **`parseDependencies`** [function] (src/security/deps.ts:524) — 3 refs
@@ -45,8 +45,8 @@ Contains 47 symbols (17 exported) across 2 files.
 - **`SecurityMatch`** [interface] (src/security/rules.ts:47) — 0 refs
 
 ## Entry Points
+- **`loadRules`** [function] — 8 incoming references
 - **`readManifest`** [function] — 6 incoming references
-- **`loadRules`** [function] — 6 incoming references
 - **`auditDependencies`** [function] — 4 incoming references
 - **`detectEcosystem`** [function] — 3 incoming references
 - **`parseDependencies`** [function] — 3 incoming references
@@ -55,6 +55,7 @@ Contains 47 symbols (17 exported) across 2 files.
 - **root**: `loadRules`, `auditDependencies`
 - **server**: `loadRules`
 - **test**: `detectEcosystem`, `parseDependencies`, `checkVulnerabilities`, `auditDependencies`, `loadRules`, `getRulesByCategory`, `getRulesBySeverity`
+- **scripts**: `loadRules`
 
 ## Files
 - src/security/deps.ts

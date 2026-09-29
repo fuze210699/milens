@@ -7,7 +7,7 @@
     {"fromFile":"main.rs","toFile":"models.rs","type":"calls","fromName":"register","toName":"save"},
     {"fromFile":"models.rs","toFile":"models.rs","type":"calls","fromName":"new","toName":"new"},
     {"fromFile":"models.rs","toFile":"models.rs","type":"calls","fromName":"find","toName":"find"},
-    {"fromFile":"admin.rs","toFile":"models.rs","type":"calls","fromName":"manage","toName":"User"},
-    {"fromFile":"main.rs","toFile":"models.rs","type":"calls","fromName":"register","toName":"User"}
+    {"fromFile":"admin.rs","toFile":"models.rs","type":"references","fromName":"manage","toName":"User"},
+    {"fromFile":"main.rs","toFile":"models.rs","type":"references","fromName":"register","toName":"User"}
   ]
 }

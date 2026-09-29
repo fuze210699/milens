@@ -6,7 +6,7 @@
  * Pro: $1/seat PR auto-review (private repos)
  */
 
-const { execSync } = require('node:child_process');
+const { execFileSync } = require('node:child_process');
 const { readFileSync, mkdirSync, existsSync, rmSync } = require('node:fs');
 const { join } = require('node:path');
 const crypto = require('node:crypto');
@@ -67,15 +67,20 @@ async function getTier(context) {
 async function runMilensAnalyze(repoUrl, branch, token) {
   const workDir = join(process.env.TEMP || '/tmp', `milens-${crypto.randomUUID().slice(0, 8)}`);
 
+  const GIT_REF_RE = /^[\w./~^@{}-]+$/;
+  if (typeof branch !== 'string' || branch.startsWith('-') || !GIT_REF_RE.test(branch)) {
+    return { success: false, error: `Unsafe branch name: ${branch}` };
+  }
+
   try {
     mkdirSync(workDir, { recursive: true });
 
     const authUrl = repoUrl.replace('https://', `https://x-access-token:${token}@`);
-    execSync(`git clone --depth 50 --single-branch --branch ${branch} ${authUrl} .`, {
+    execFileSync('git', ['clone', '--depth', '50', '--single-branch', '--branch', branch, authUrl, '.'], {
       cwd: workDir, stdio: 'pipe', timeout: 120000,
     });
 
-    execSync('npx milens analyze -p . --force --skills --skills-agents', {
+    execFileSync('npx', ['milens', 'analyze', '-p', '.', '--force', '--skills', '--skills-agents'], {
       cwd: workDir, stdio: 'pipe', timeout: 300000,
       env: { ...process.env, MILENS_PROFILE: 'standard' },
     });

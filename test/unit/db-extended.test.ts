@@ -292,3 +292,66 @@ describe('Database — annotations, sessions, graph methods', () => {
     });
   });
 });
+
+describe('Database — orphan embedding cleanup (F9-FK retention)', () => {
+  const ORPHAN_DB = join(import.meta.dirname, '..', 'tmp', 'db-orphan-embeddings.db');
+  let db: Database;
+
+  beforeAll(() => {
+    mkdirSync(join(import.meta.dirname, '..', 'tmp'), { recursive: true });
+    if (existsSync(ORPHAN_DB)) unlinkSync(ORPHAN_DB);
+    db = new Database(ORPHAN_DB);
+  });
+
+  afterAll(() => {
+    db.close();
+    if (existsSync(ORPHAN_DB)) unlinkSync(ORPHAN_DB);
+  });
+
+  it('findDownstream executionOnly excludes reference edges (trace fix)', () => {
+    const fn: CodeSymbol = { id: 'ex.ts#function:run:1', name: 'run', kind: 'function', filePath: 'ex.ts', startLine: 1, endLine: 3, exported: true };
+    const callee: CodeSymbol = { id: 'ex.ts#function:worker:5', name: 'worker', kind: 'function', filePath: 'ex.ts', startLine: 5, endLine: 7, exported: true };
+    const typ: CodeSymbol = { id: 'ex.ts#interface:Opts:9', name: 'Opts', kind: 'interface', filePath: 'ex.ts', startLine: 9, endLine: 11, exported: true };
+    db.insertSymbol(fn); db.insertSymbol(callee); db.insertSymbol(typ);
+    db.insertLink({ id: 'l-call', fromId: fn.id, toId: callee.id, type: 'calls', confidence: 0.9 });
+    db.insertLink({ id: 'l-ref', fromId: fn.id, toId: typ.id, type: 'references', confidence: 0.7 });
+
+    const all = db.findDownstream(fn.id, 3, false).map(d => d.symbol.id);
+    expect(all).toContain('ex.ts#interface:Opts:9');
+
+    const execOnly = db.findDownstream(fn.id, 3, true).map(d => d.symbol.id);
+    expect(execOnly).toContain('ex.ts#function:worker:5');
+    expect(execOnly).not.toContain('ex.ts#interface:Opts:9');
+  });
+
+  it('round-trips a link resolution reason (audit2 #1)', () => {
+    const from: CodeSymbol = { id: 'x.ts#function:from:1', name: 'from', kind: 'function', filePath: 'x.ts', startLine: 1, endLine: 2, exported: true };
+    const to: CodeSymbol = { id: 'x.ts#function:to:5', name: 'to', kind: 'function', filePath: 'x.ts', startLine: 5, endLine: 6, exported: true };
+    db.insertSymbol(from);
+    db.insertSymbol(to);
+    db.insertLink({ id: 'x.ts#function:from:1->calls->x.ts#function:to:5', fromId: from.id, toId: to.id, type: 'calls', confidence: 0.9, line: 1, reason: 'call-samefile' });
+
+    const links = db.getOutgoingLinks(from.id);
+    const call = links.find(l => l.type === 'calls');
+    expect(call?.reason).toBe('call-samefile');
+  });
+
+  it('removes embeddings whose symbol no longer exists but keeps live ones', () => {
+    const live: CodeSymbol = { id: 'a.ts#function:live:1', name: 'live', kind: 'function', filePath: 'a.ts', startLine: 1, endLine: 2, exported: true };
+    db.insertSymbol(live);
+
+    const raw = db.getRawDb();
+    const insert = raw.prepare('INSERT INTO symbol_embeddings (symbol_id, embedding, model) VALUES (?, ?, ?)');
+    insert.run('a.ts#function:live:1', Buffer.from([1, 2, 3, 4]), 'test');
+    insert.run('a.ts#function:gone:9', Buffer.from([5, 6, 7, 8]), 'test');
+
+    const before = raw.prepare('SELECT COUNT(*) as c FROM symbol_embeddings').get() as any;
+    expect(before.c).toBe(2);
+
+    const removed = db.pruneOrphanEmbeddings();
+    expect(removed).toBe(1);
+
+    const rows = raw.prepare('SELECT symbol_id FROM symbol_embeddings').all() as any[];
+    expect(rows.map(r => r.symbol_id)).toEqual(['a.ts#function:live:1']);
+  });
+});

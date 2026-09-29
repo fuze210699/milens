@@ -22,37 +22,37 @@ When working with code in **root/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ### Edit-safety enforcement
-A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`/`smart_context`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
+A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
 
 ## Overview
-Contains 238 symbols (157 exported) across 12 files.
+Contains 437 symbols (351 exported) across 16 files.
 
 ## Key Symbols
-- **`CodeSymbol`** [interface] (src/types.ts:8) — 52 refs
-- **`SymbolLink`** [interface] (src/types.ts:26) — 22 refs
-- **`RawCall`** [interface] (src/types.ts:45) — 18 refs
-- **`isTestFile`** [function] (src/utils.ts:4) — 10 refs
-- **`RawImport`** [interface] (src/types.ts:35) — 9 refs
-- **`RawHeritage`** [interface] (src/types.ts:59) — 7 refs
-- **`ExtractionResult`** [interface] (src/types.ts:67) — 6 refs
-- **`RawTypeBinding`** [interface] (src/types.ts:88) — 6 refs
-- **`RawAssignmentBinding`** [interface] (src/types.ts:96) — 6 refs
+- **`CodeSymbol`** [interface] (src/types.ts:8) — 54 refs
+- **`SymbolLink`** [interface] (src/types.ts:35) — 22 refs
+- **`RawCall`** [interface] (src/types.ts:56) — 18 refs
+- **`isTestFile`** [function] (src/utils.ts:4) — 12 refs
+- **`RawImport`** [interface] (src/types.ts:46) — 9 refs
+- **`RawHeritage`** [interface] (src/types.ts:70) — 7 refs
+- **`ExtractionResult`** [interface] (src/types.ts:78) — 6 refs
+- **`RawTypeBinding`** [interface] (src/types.ts:100) — 6 refs
+- **`RawAssignmentBinding`** [interface] (src/types.ts:108) — 6 refs
 - **`globToRegex`** [function] (src/utils.ts:16) — 6 refs
-- **`RawReturnType`** [interface] (src/types.ts:104) — 5 refs
-- **`RawCallResultBinding`** [interface] (src/types.ts:112) — 5 refs
-- **`AnalysisStats`** [interface] (src/types.ts:135) — 5 refs
-- **`generateAgentsMd`** [function] (src/agents-md.ts:93) — 4 refs
-- **`computeMetrics`** [function] (src/metrics.ts:21) — 4 refs
+- **`RawReturnType`** [interface] (src/types.ts:116) — 5 refs
+- **`RawCallResultBinding`** [interface] (src/types.ts:124) — 5 refs
+- **`AnalysisStats`** [interface] (src/types.ts:147) — 5 refs
+- **`generateCrossRefSection`** [function] (src/agents-md.ts:53) — 4 refs
+- **`generateAgentsMd`** [function] (src/agents-md.ts:142) — 4 refs
 
 ## Entry Points
-- **`CodeSymbol`** [interface] — 52 incoming references
+- **`CodeSymbol`** [interface] — 54 incoming references
 - **`SymbolLink`** [interface] — 22 incoming references
 - **`RawCall`** [interface] — 18 incoming references
-- **`isTestFile`** [function] — 10 incoming references
+- **`isTestFile`** [function] — 12 incoming references
 - **`RawImport`** [interface] — 9 incoming references
 
 ## Dependencies
-- **store**: `Database`, `RepoRegistry`, `AnnotationStore`, `runDecayPass`, `getIncomingLinks`, `getAllSymbols`, `getCodebaseSummary`, `findDbPath` (+22 more)
+- **store**: `Database`, `RepoRegistry`, `AnnotationStore`, `runDecayPass`, `getIncomingLinks`, `getAllSymbols`, `getCodebaseSummary`, `findDbPath` (+23 more)
 - **analyzer**: `loadAliases`, `analyze`, `resolve`
 - **ui**: `createProgressReporter`, `finalize`
 - **server**: `startHttp`, `startStdio`, `HookManager`, `defaultOnSessionStart`, `defaultOnSessionEnd`, `defaultOnPreCompact`, `defaultOnPostCompact`, `handleMarkChecked` (+6 more)
@@ -63,7 +63,7 @@ Contains 238 symbols (157 exported) across 12 files.
 - **analyzer**: `isTestFile`, `CodeSymbol`, `ExtractionResult`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding` (+8 more)
 - **orchestrator**: `CodeSymbol`
 - **parser**: `CodeSymbol`, `RawImport`, `RawCall`, `RawHeritage`, `RawReExport`, `RawTypeBinding`, `RawAssignmentBinding`, `RawReturnType` (+4 more)
-- **server**: `generateCrossRefSection`, `globToRegex`
+- **server**: `globToRegex`, `generateCrossRefSection`, `syncCrossRefToAgentsMd`, `resolutionState`
 - **store**: `Annotation`, `AnnotationKey`, `Session`, `EvolutionEvent`, `CodeSymbol`, `SymbolLink`, `RepoEntry`
 - **ui**: `AnalysisStats`
 - **test**: `generateAgentsMd`, `AnnotationKey`, `CodeSymbol`, `SymbolLink`, `computeMetrics`, `formatMetricsReport`, `MilensMetrics`, `RawImport` (+18 more)
@@ -73,7 +73,11 @@ Contains 238 symbols (157 exported) across 12 files.
 - CLAUDE.md
 - CONTRIBUTING.md
 - README.md
+- audit1.md
+- audit2.md
+- audit3.md
 - src/agents-md.ts
+- src/cli-dashboard.ts
 - src/cli.ts
 - src/metrics.ts
 - src/skills.ts

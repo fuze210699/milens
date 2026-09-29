@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS symbols (
   parent_id   TEXT,
   signature   TEXT,
   role        TEXT,
-  heat        INTEGER DEFAULT 0
+  heat        INTEGER DEFAULT 0,
+  importance  INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS links (
@@ -20,7 +21,9 @@ CREATE TABLE IF NOT EXISTS links (
   to_id       TEXT NOT NULL,
   type        TEXT NOT NULL,
   confidence  REAL DEFAULT 1.0,
-  line_number INTEGER
+  line_number INTEGER,
+  lines       TEXT,
+  reason      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS file_hashes (
@@ -28,6 +31,12 @@ CREATE TABLE IF NOT EXISTS file_hashes (
   hash        TEXT NOT NULL,
   analyzed_at TEXT NOT NULL DEFAULT (datetime('now')),
   zone        TEXT
+);
+
+CREATE TABLE IF NOT EXISTS file_facts (
+  path        TEXT PRIMARY KEY,
+  facts       TEXT NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS repo_meta (

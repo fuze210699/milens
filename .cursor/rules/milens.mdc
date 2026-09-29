@@ -8,9 +8,9 @@ alwaysApply: true
 <!-- milens:start -->
 # Milens — AI-DOS
 
-The Operating System for AI-Driven Development. This project is indexed by milens (2362 symbols, 3127 links, 235 files).
+The Operating System for AI-Driven Development. This project is indexed by milens (2639 symbols, 3524 links, 244 files).
 
-> **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
+> **Note on `repo`:** milens auto-resolves the target repository when the server was started for a single project (`serve -p <root>`) or when only one repo is indexed, so `repo` is optional in those cases. Pass `repo` (the **absolute path of the workspace root**) only when multiple repos are indexed — otherwise a tool can fail with "Multiple repos indexed" or resolve the wrong one.
 
 > **CRITICAL:** milens MCP tools are **deferred** in most editors. Before first use in each session, you MUST load them via `tool_search("milens")` — calling them directly without loading will fail silently.
 
@@ -90,20 +90,20 @@ When the user says... → do this FIRST:
 | "what docs mention `X`" | `mcp_milens_grep({pattern: "X", include: "**/*.md"})` — find all markdown references |
 | "review this PR" | `mcp_milens_review_pr({repo: "<workspaceRoot>"})` — risk assessment for changed files |
 | "is `X` risky to change" | `mcp_milens_review_symbol({name: "X", repo: "<workspaceRoot>"})` |
-| "write tests for `X`" | `mcp_milens_test_plan({name: "X", repo: "<workspaceRoot>"})` — deps, mocks, suggested tests |
-| "what needs tests" | `mcp_milens_test_coverage_gaps({repo: "<workspaceRoot>"})` — untested symbols by risk |
-| "which tests to run" | `mcp_milens_test_impact({repo: "<workspaceRoot>"})` — maps changes → test files |
+| "write tests for `X`" | `mcp_milens_tests({mode: "plan", name: "X", repo: "<workspaceRoot>"})` — deps, mocks, suggested tests |
+| "what needs tests" | `mcp_milens_tests({mode: "gaps", repo: "<workspaceRoot>"})` — untested symbols by risk |
+| "which tests to run" | `mcp_milens_tests({mode: "impact", repo: "<workspaceRoot>"})` — maps changes → test files |
 | "remember/note that `X`..." | `mcp_milens_annotate({symbol: "X", key: "note", value: "...", repo: "<workspaceRoot>"})` |
 | "what do we know about `X`" | `mcp_milens_recall({symbol: "X", repo: "<workspaceRoot>"})` |
 | "start new session" | `mcp_milens_session_start({agent: "...", repo: "<workspaceRoot>"})` |
 | "find code like `X`" | `mcp_milens_find_similar({name: "X", repo: "<workspaceRoot>"})` |
 | "search for `concept`" | `mcp_milens_semantic_search({query: "concept", repo: "<workspaceRoot>"})` |
-| "generate tests for `X`" | `mcp_milens_test_generate({symbol: "X", repo: "<workspaceRoot>"})` |
-| "fix security issue in `X`" | `mcp_milens_fix_apply({ruleId, file, line, repo: "<workspaceRoot>"})` |
+| "generate tests for `X`" | `mcp_milens_tests({mode: "generate", symbol: "X", repo: "<workspaceRoot>"})` |
+| "fix security issue in `X`" | `mcp_milens_security_scan({mode: "fix", ruleId, file, line, repo: "<workspaceRoot>"})` |
 | "remove dead code" | `mcp_milens_find_dead_code()` then `dead_code_remove` prompt |
 | "orchestrate/check changes" | `mcp_milens_orchestrate({repo: "<workspaceRoot>"})` |
 | "compare impact of `X`" | `mcp_milens_compare_impact({name: "X", action: "snapshot"|"compare", repo: "<workspaceRoot>"})` |
-| "check pre-commit" | `mcp_milens_pre_commit_check({repo: "<workspaceRoot>"})` |
+| "check pre-commit" | `mcp_milens_detect_changes({mode: "precommit", repo: "<workspaceRoot>"})` |
 | "save/restore context" | `mcp_milens_hook_preCompact()` / `mcp_milens_hook_postCompact()` |
 | "scan security / audit security" | `mcp_milens_security_scan({repo: "<workspaceRoot>"})` — full audit across all 190 rules |
 | "end session" / "finish work" | `mcp_milens_session_end({session_id: "..."})` — record stats, trigger onSessionEnd hook |
@@ -117,7 +117,7 @@ When the user says... → do this FIRST:
 | "I need to understand the parser" | Load `milens-parser` skill + `mcp_milens_get_file_symbols({file: "src/parser/"})` |
 | "I'm debugging a server issue" | Load `milens-server` skill + `mcp_milens_trace()` |
 | "I'm working with the database" | Load `milens-store` skill + `mcp_milens_get_file_symbols({file: "src/store/"})` |
-| "I need to write tests for this" | Load `milens-tdd` skill + `mcp_milens_test_plan()` |
+| "I need to write tests for this" | Load `milens-tdd` skill + `mcp_milens_tests({mode: "plan"})` |
 | "I'm planning a feature" | Load `milens-plan` skill + `mcp_milens_codebase_summary()` |
 | "I need to refactor this" | Load `milens-refactor-clean` skill + `mcp_milens_impact()` |
 | "Review my code changes" | Load `milens-code-review` skill + `mcp_milens_review_pr()` |
@@ -173,9 +173,9 @@ Every time you discover something important about a symbol, annotate it. The sys
 | Find ALL references to something | `mcp_milens_grep({pattern: "ClassName"})` |
 | Check if editing is safe | `mcp_milens_impact({target: "functionName"})` |
 | Edit with confidence | `mcp_milens_overview({name: "functionName"})` — context+impact+grep in 1 call |
-| Know which tests to run | `mcp_milens_test_impact()` — maps changes to test files |
-| Find what needs testing most | `mcp_milens_test_coverage_gaps()` — sorted by risk |
-| Get a test strategy | `mcp_milens_test_plan({name: "functionName"})` — mocks + scenarios |
+| Know which tests to run | `mcp_milens_tests({mode: "impact"})` — maps changes to test files |
+| Find what needs testing most | `mcp_milens_tests({mode: "gaps"})` — sorted by risk |
+| Get a test strategy | `mcp_milens_tests({mode: "plan", name: "functionName"})` — mocks + scenarios |
 | Review your changes | `mcp_milens_review_pr()` — risk scores for changed symbols |
 | Check for security issues | `mcp_milens_security_scan()` — 190 rules in one call |
 | Remove dead code safely | `mcp_milens_find_dead_code()` then use `dead_code_remove` prompt |
@@ -224,7 +224,7 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symb
 - NEVER edit a symbol without first running `mcp_milens_impact` on it.
 - NEVER delete or rename without running both `mcp_milens_grep` and `mcp_milens_impact`.
 - NEVER commit without running `mcp_milens_detect_changes()`.
-- NEVER call milens MCP tools without the `repo` parameter.
+- When multiple repos are indexed, pass the `repo` parameter so tools resolve the right one.
 - NEVER use `mcp_milens_query` for multi-word display text or UI labels — use `mcp_milens_grep`.
 
 ---
@@ -251,14 +251,13 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symb
 |---|---|---|
 | `mcp_milens_review_pr` | PR risk assessment | Before opening PR |
 | `mcp_milens_review_symbol` | Single symbol deep-dive | Symbol is flagged CRITICAL/HIGH |
-| `mcp_milens_test_plan` | Mock strategy + >=3 test scenarios | Writing new tests |
-| `mcp_milens_test_coverage_gaps` | Untested symbols sorted by risk | Finding test priorities |
-| `mcp_milens_test_impact` | Maps changes → test files | After making edits |
-| `mcp_milens_test_generate` | Auto-generate test file | Starting tests from scratch |
+| `mcp_milens_tests` | Mock strategy + >=3 test scenarios | Writing new tests |
+| `mcp_milens_tests` | Untested symbols sorted by risk | Finding test priorities |
+| `mcp_milens_tests` | Maps changes → test files | After making edits |
+| `mcp_milens_tests` | Auto-generate test file | Starting tests from scratch |
 | `mcp_milens_security_scan` | 190 security rules | Security audit requested |
 | `mcp_milens_trace` | Call chains from entrypoints | Debugging execution flow |
 | `mcp_milens_routes` | Framework routes/endpoints | Finding API endpoints |
-| `mcp_milens_smart_context` | Intent-aware context | Understand/edit/debug/test modes |
 | `mcp_milens_domains` | Domain clusters | Understanding module structure |
 | `mcp_milens_explain_relationship` | Shortest dependency path | How A connects to B |
 | `mcp_milens_get_type_hierarchy` | Inheritance tree | Class/interface exploration |
@@ -279,10 +278,9 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become `section` symb
 | `mcp_milens_session_context` | Get session metadata + annotations |
 | `mcp_milens_handoff` | Transfer context between agent sessions |
 | `mcp_milens_orchestrate` | Full cycle: detect → review → impact → gaps → dead code |
-| `mcp_milens_pre_commit_check` | Pre-commit risk scan |
 | `mcp_milens_compare_impact` | Compare impact graph before/after edit |
 | `mcp_milens_semantic_search` | Hybrid FTS5 + vector search |
-| `mcp_milens_fix_apply` | Apply security fix to a file |
+| `mcp_milens_security_scan` (mode=fix) | Apply security fix to a file |
 | `mcp_milens_hook_preCompact` | Save metrics before context compaction |
 | `mcp_milens_hook_postCompact` | Restore context after compaction |
 | `mcp_milens_hook_onFileChange` | Trigger on file change hook |

@@ -28,10 +28,10 @@ When working with code in **scripts/**, follow these mandatory safety rules:
 | See file symbols | `mcp_milens_get_file_symbols` |
 
 ### Edit-safety enforcement
-A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`/`smart_context`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
+A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).
 
 ## Overview
-Contains 80 symbols (0 exported) across 7 files.
+Contains 90 symbols (0 exported) across 8 files.
 
 ## Entry Points
 - **`ghApi`** [function] — 4 incoming references
@@ -42,6 +42,8 @@ Contains 80 symbols (0 exported) across 7 files.
 
 ## Dependencies
 - **analyzer**: `resolve`
+- **store**: `Database`, `getCodebaseSummary`
+- **security**: `loadRules`
 
 ## Used By
 - **apps**: `parseArgs`, `generatePrPayload`
@@ -51,6 +53,7 @@ Contains 80 symbols (0 exported) across 7 files.
 - scripts/check-console.mjs
 - scripts/create-pr.cjs
 - scripts/gen-build-info.mjs
+- scripts/gen-release-stats.mjs
 - scripts/pr-generator.cjs
 - scripts/smoke-test.mjs
 - scripts/sync-version.mjs

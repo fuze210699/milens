@@ -202,7 +202,7 @@ function renderSkillContent(
   lines.push('| See file symbols | `mcp_milens_get_file_symbols` |');
   lines.push('');
   lines.push('### Edit-safety enforcement');
-  lines.push('A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`/`smart_context`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).');
+  lines.push('A `PreToolUse` hook (warn mode by default) reminds you if no milens safety check (`impact`/`context`/`overview`/`guard_edit_check`/`edit_check`) was called before an `Edit`/`Write`/`MultiEdit`. Opt-in strict deny mode is available via `milens hooks guard-set-mode --mode strict`. Both modes consume the check after one edit. See `.milens/hook-state/config.json`. Known caveat: the underlying `PreToolUse` deny mechanism has at least one reliability issue (https://github.com/anthropics/claude-code/issues/4362).');
   lines.push('');
 
   lines.push('## Overview');
@@ -318,7 +318,7 @@ function renderMilensInstructions(_rootDir: string, stats: { symbols: number; li
 
 The Operating System for AI-Driven Development. This project is indexed by milens (${stats.symbols} symbols, ${stats.links} links, ${stats.files} files).
 
-> **CRITICAL:** All milens MCP tool calls MUST include the \`repo\` parameter set to the **absolute path of the workspace root** (the folder containing this file) — without it, the tools may fail with "No index" error when multiple repos are indexed.
+> **Note on \`repo\`:** milens auto-resolves the target repository when the server was started for a single project (\`serve -p <root>\`) or when only one repo is indexed, so \`repo\` is optional in those cases. Pass \`repo\` (the **absolute path of the workspace root**) only when multiple repos are indexed — otherwise a tool can fail with "Multiple repos indexed" or resolve the wrong one.
 
 > **CRITICAL:** milens MCP tools are **deferred** in most editors. Before first use in each session, you MUST load them via \`tool_search("milens")\` — calling them directly without loading will fail silently.
 
@@ -398,20 +398,20 @@ When the user says... → do this FIRST:
 | "what docs mention \`X\`" | \`${t('grep')}({pattern: "X", include: "**/*.md"})\` — find all markdown references |
 | "review this PR" | \`${t('review_pr')}({repo: "<workspaceRoot>"})\` — risk assessment for changed files |
 | "is \`X\` risky to change" | \`${t('review_symbol')}({name: "X", repo: "<workspaceRoot>"})\` |
-| "write tests for \`X\`" | \`${t('test_plan')}({name: "X", repo: "<workspaceRoot>"})\` — deps, mocks, suggested tests |
-| "what needs tests" | \`${t('test_coverage_gaps')}({repo: "<workspaceRoot>"})\` — untested symbols by risk |
-| "which tests to run" | \`${t('test_impact')}({repo: "<workspaceRoot>"})\` — maps changes → test files |
+| "write tests for \`X\`" | \`${t('tests')}({mode: "plan", name: "X", repo: "<workspaceRoot>"})\` — deps, mocks, suggested tests |
+| "what needs tests" | \`${t('tests')}({mode: "gaps", repo: "<workspaceRoot>"})\` — untested symbols by risk |
+| "which tests to run" | \`${t('tests')}({mode: "impact", repo: "<workspaceRoot>"})\` — maps changes → test files |
 | "remember/note that \`X\`..." | \`${t('annotate')}({symbol: "X", key: "note", value: "...", repo: "<workspaceRoot>"})\` |
 | "what do we know about \`X\`" | \`${t('recall')}({symbol: "X", repo: "<workspaceRoot>"})\` |
 | "start new session" | \`${t('session_start')}({agent: "...", repo: "<workspaceRoot>"})\` |
 | "find code like \`X\`" | \`${t('find_similar')}({name: "X", repo: "<workspaceRoot>"})\` |
 | "search for \`concept\`" | \`${t('semantic_search')}({query: "concept", repo: "<workspaceRoot>"})\` |
-| "generate tests for \`X\`" | \`${t('test_generate')}({symbol: "X", repo: "<workspaceRoot>"})\` |
-| "fix security issue in \`X\`" | \`${t('fix_apply')}({ruleId, file, line, repo: "<workspaceRoot>"})\` |
+| "generate tests for \`X\`" | \`${t('tests')}({mode: "generate", symbol: "X", repo: "<workspaceRoot>"})\` |
+| "fix security issue in \`X\`" | \`${t('security_scan')}({mode: "fix", ruleId, file, line, repo: "<workspaceRoot>"})\` |
 | "remove dead code" | \`${t('find_dead_code')}()\` then \`dead_code_remove\` prompt |
 | "orchestrate/check changes" | \`${t('orchestrate')}({repo: "<workspaceRoot>"})\` |
 | "compare impact of \`X\`" | \`${t('compare_impact')}({name: "X", action: "snapshot"|"compare", repo: "<workspaceRoot>"})\` |
-| "check pre-commit" | \`${t('pre_commit_check')}({repo: "<workspaceRoot>"})\` |
+| "check pre-commit" | \`${t('detect_changes')}({mode: "precommit", repo: "<workspaceRoot>"})\` |
 | "save/restore context" | \`${t('hook_preCompact')}()\` / \`${t('hook_postCompact')}()\` |
 | "scan security / audit security" | \`${t('security_scan')}({repo: "<workspaceRoot>"})\` — full audit across all 190 rules |
 | "end session" / "finish work" | \`${t('session_end')}({session_id: "..."})\` — record stats, trigger onSessionEnd hook |
@@ -425,7 +425,7 @@ When the user says... → do this FIRST:
 | "I need to understand the parser" | Load \`milens-parser\` skill + \`${t('get_file_symbols')}({file: "src/parser/"})\` |
 | "I'm debugging a server issue" | Load \`milens-server\` skill + \`${t('trace')}()\` |
 | "I'm working with the database" | Load \`milens-store\` skill + \`${t('get_file_symbols')}({file: "src/store/"})\` |
-| "I need to write tests for this" | Load \`milens-tdd\` skill + \`${t('test_plan')}()\` |
+| "I need to write tests for this" | Load \`milens-tdd\` skill + \`${t('tests')}({mode: "plan"})\` |
 | "I'm planning a feature" | Load \`milens-plan\` skill + \`${t('codebase_summary')}()\` |
 | "I need to refactor this" | Load \`milens-refactor-clean\` skill + \`${t('impact')}()\` |
 | "Review my code changes" | Load \`milens-code-review\` skill + \`${t('review_pr')}()\` |
@@ -481,9 +481,9 @@ Every time you discover something important about a symbol, annotate it. The sys
 | Find ALL references to something | \`${t('grep')}({pattern: "ClassName"})\` |
 | Check if editing is safe | \`${t('impact')}({target: "functionName"})\` |
 | Edit with confidence | \`${t('overview')}({name: "functionName"})\` — context+impact+grep in 1 call |
-| Know which tests to run | \`${t('test_impact')}()\` — maps changes to test files |
-| Find what needs testing most | \`${t('test_coverage_gaps')}()\` — sorted by risk |
-| Get a test strategy | \`${t('test_plan')}({name: "functionName"})\` — mocks + scenarios |
+| Know which tests to run | \`${t('tests')}({mode: "impact"})\` — maps changes to test files |
+| Find what needs testing most | \`${t('tests')}({mode: "gaps"})\` — sorted by risk |
+| Get a test strategy | \`${t('tests')}({mode: "plan", name: "functionName"})\` — mocks + scenarios |
 | Review your changes | \`${t('review_pr')}()\` — risk scores for changed symbols |
 | Check for security issues | \`${t('security_scan')}()\` — 190 rules in one call |
 | Remove dead code safely | \`${t('find_dead_code')}()\` then use \`dead_code_remove\` prompt |
@@ -532,7 +532,7 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` sy
 - NEVER edit a symbol without first running \`${t('impact')}\` on it.
 - NEVER delete or rename without running both \`${t('grep')}\` and \`${t('impact')}\`.
 - NEVER commit without running \`${t('detect_changes')}()\`.
-- NEVER call milens MCP tools without the \`repo\` parameter.
+- When multiple repos are indexed, pass the \`repo\` parameter so tools resolve the right one.
 - NEVER use \`${t('query')}\` for multi-word display text or UI labels — use \`${t('grep')}\`.
 
 ---
@@ -559,14 +559,13 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` sy
 |---|---|---|
 | \`${t('review_pr')}\` | PR risk assessment | Before opening PR |
 | \`${t('review_symbol')}\` | Single symbol deep-dive | Symbol is flagged CRITICAL/HIGH |
-| \`${t('test_plan')}\` | Mock strategy + >=3 test scenarios | Writing new tests |
-| \`${t('test_coverage_gaps')}\` | Untested symbols sorted by risk | Finding test priorities |
-| \`${t('test_impact')}\` | Maps changes → test files | After making edits |
-| \`${t('test_generate')}\` | Auto-generate test file | Starting tests from scratch |
+| \`${t('tests')}\` | Mock strategy + >=3 test scenarios | Writing new tests |
+| \`${t('tests')}\` | Untested symbols sorted by risk | Finding test priorities |
+| \`${t('tests')}\` | Maps changes → test files | After making edits |
+| \`${t('tests')}\` | Auto-generate test file | Starting tests from scratch |
 | \`${t('security_scan')}\` | 190 security rules | Security audit requested |
 | \`${t('trace')}\` | Call chains from entrypoints | Debugging execution flow |
 | \`${t('routes')}\` | Framework routes/endpoints | Finding API endpoints |
-| \`${t('smart_context')}\` | Intent-aware context | Understand/edit/debug/test modes |
 | \`${t('domains')}\` | Domain clusters | Understanding module structure |
 | \`${t('explain_relationship')}\` | Shortest dependency path | How A connects to B |
 | \`${t('get_type_hierarchy')}\` | Inheritance tree | Class/interface exploration |
@@ -587,10 +586,9 @@ Milens indexes **Markdown files** (.md, .mdx) — headings become \`section\` sy
 | \`${t('session_context')}\` | Get session metadata + annotations |
 | \`${t('handoff')}\` | Transfer context between agent sessions |
 | \`${t('orchestrate')}\` | Full cycle: detect → review → impact → gaps → dead code |
-| \`${t('pre_commit_check')}\` | Pre-commit risk scan |
 | \`${t('compare_impact')}\` | Compare impact graph before/after edit |
 | \`${t('semantic_search')}\` | Hybrid FTS5 + vector search |
-| \`${t('fix_apply')}\` | Apply security fix to a file |
+| \`${t('security_scan')}\` (mode=fix) | Apply security fix to a file |
 | \`${t('hook_preCompact')}\` | Save metrics before context compaction |
 | \`${t('hook_postCompact')}\` | Restore context after compaction |
 | \`${t('hook_onFileChange')}\` | Trigger on file change hook |

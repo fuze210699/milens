@@ -4,11 +4,10 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { resolve, relative, join, dirname, basename } from 'node:path';
+import { resolve, join, dirname, basename } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
+import { readFileSync, statSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import ignore from 'ignore';
 import { Database } from '../store/db.js';
 import { RepoRegistry } from '../store/registry.js';
 import { getParser, loadLanguage } from '../parser/loader.js';
@@ -19,13 +18,16 @@ import { registerAllPrompts } from './mcp-prompts.js';
 import { Orchestrator } from '../orchestrator/orchestrator.js';
 import { registerResources } from './tools/resources.js';
 import { countDependentFiles } from '../analyzer/risk.js';
+import { resolutionState } from '../types.js';
+import { grepFiles, matchesScope } from './grep.js';
+import { defaultOnPreCommit } from './hooks.js';
+import { fmtSymbol, fmtImpact, isTestFilePath } from './format.js';
 import { registerSessionTools } from './tools/session.js';
 import { registerTestingTools } from './tools/testing.js';
 import { registerSecurityTools } from './tools/security.js';
 import { registerFindingsReportTools } from './tools/findings-report.js';
 import { FileWatcher } from './watcher.js';
 import { reviewPr } from '../analyzer/review.js';
-import { globToRegex } from '../utils.js';
 import { BUILD_SHA, BUILT_AT } from '../build-info.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -48,7 +50,7 @@ class LazyDb {
   /** Check if DB file has been modified externally — invalidate caches if so */
   private checkExternalChange(): void {
     try {
-      const stat = require('node:fs').statSync(this.dbPath);
+      const stat = statSync(this.dbPath);
       const mtime = stat.mtimeMs;
       if (this.dbMtime > 0 && mtime > this.dbMtime) {
         this.statsCache = null;
@@ -63,7 +65,7 @@ class LazyDb {
     // Detect external changes (e.g. CLI analyze) and force-close + reopen
     let externalChange = false;
     try {
-      const stat = require('node:fs').statSync(this.dbPath);
+      const stat = statSync(this.dbPath);
       if (this.dbMtime > 0 && stat.mtimeMs > this.dbMtime + 1000) {
         externalChange = true;
       }
@@ -174,7 +176,6 @@ const TOKEN_SAVINGS_MULTIPLIER: Record<string, number> = {
   context: 5,         // vs incoming + outgoing + file reads
   impact: 6,          // vs recursive manual upstream/downstream exploration
   edit_check: 8,      // vs context + impact + grep + coverage check
-  smart_context: 6,   // vs multiple tool calls based on intent
   overview: 8,        // vs context + impact + grep combined
   trace: 5,           // vs manually tracing call chains
   routes: 3,          // vs searching for route patterns
@@ -216,177 +217,6 @@ function trackToolCall(trackDb: Database | null, tool: string, startMs: number, 
 
 // ── Compact formatters (token-efficient for AI agents) ──
 
-type DetailLevel = 'L0' | 'L1' | 'L2';
-
-function fmtSymbol(s: { id?: string; name: string; kind: string; filePath: string; startLine: number; role?: string; heat?: number }, detail: DetailLevel = 'L1') {
-  const base = `${s.name} [${s.kind}] ${s.filePath}:${s.startLine}`;
-  if (detail === 'L0') return `${s.name} [${s.kind}]`;
-  if (detail === 'L2') {
-    const meta: string[] = [];
-    if (s.role) meta.push(s.role);
-    if (s.heat != null && s.heat > 0) meta.push(`heat:${s.heat}`);
-    return meta.length > 0 ? `${base} {${meta.join(',')}}` : base;
-  }
-  return base;
-}
-
-function fmtImpact(items: Array<{ symbol: any; depth: number; via: string }>, detail: DetailLevel = 'L1') {
-  const grouped = new Map<number, string[]>();
-  for (const { symbol, depth, via } of items) {
-    const arr = grouped.get(depth) ?? [];
-    arr.push(`${fmtSymbol(symbol, detail)} (${via})`);
-    grouped.set(depth, arr);
-  }
-  const lines: string[] = [];
-  for (const [depth, refs] of [...grouped].sort((a, b) => a[0] - b[0])) {
-    lines.push(`depth ${depth}:`);
-    for (const r of refs) lines.push(`  ${r}`);
-  }
-  return lines.join('\n');
-}
-
-/** Check if a file path looks like a test/spec file */
-function isTestFilePath(filePath: string): boolean {
-  return /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
-    /^tests?[/\\]/.test(filePath) ||
-    /__tests__[/\\]/.test(filePath) ||
-    /_test\.(go|py|rb|rs|java|php)$/.test(filePath) ||
-    /^test_.*\.py$/.test(filePath.split('/').pop() ?? '');
-}
-
-// ── Text grep across project files ──
-
-const GREP_SKIP_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', 'out',
-  '.next', '.nuxt', '.svelte-kit', '.turbo', '.cache', '.parcel-cache',
-  '__pycache__', '.venv', 'venv', 'env',
-  'vendor', 'target',
-  '.idea',
-  'coverage', '.nyc_output',
-]);
-
-const BINARY_EXTENSIONS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.svg',
-  '.woff', '.woff2', '.ttf', '.eot',
-  '.zip', '.tar', '.gz', '.br',
-  '.pdf', '.doc', '.docx',
-  '.mp3', '.mp4', '.avi', '.mov',
-  '.wasm', '.node', '.so', '.dll', '.dylib',
-  '.lock',
-]);
-
-interface GrepMatch {
-  file: string;
-  line: number;
-  text: string;
-}
-
-function grepFiles(
-  rootPath: string,
-  pattern: string,
-  options: { isRegex?: boolean; caseSensitive?: boolean; maxResults?: number; includePattern?: string },
-): GrepMatch[] {
-  const { isRegex = false, caseSensitive = false, maxResults = 50, includePattern } = options;
-  const flags = caseSensitive ? '' : 'i';
-  let regex: RegExp;
-  try {
-    regex = isRegex ? safeRegex(pattern, flags) : new RegExp(escapeRegExp(pattern), flags);
-  } catch {
-    return [];
-  }
-
-  const ig = loadGrepIgnoreRules(rootPath);
-  const includeRe = includePattern ? globToRegex(includePattern) : null;
-  const results: GrepMatch[] = [];
-
-  function walk(dir: string) {
-    if (results.length >= maxResults) return;
-    let entries: string[];
-    try { entries = readdirSync(dir); } catch { return; }
-
-    for (const entry of entries) {
-      if (results.length >= maxResults) return;
-      const abs = join(dir, entry);
-      const rel = relative(rootPath, abs).replace(/\\/g, '/');
-
-      if (GREP_SKIP_DIRS.has(entry)) continue;
-      if (ig.ignores(rel)) continue;
-
-      let stat;
-      try { stat = statSync(abs); } catch { continue; }
-
-      if (stat.isDirectory()) {
-        walk(abs);
-      } else if (stat.isFile()) {
-        const ext = '.' + entry.split('.').pop()?.toLowerCase();
-        if (BINARY_EXTENSIONS.has(ext)) continue;
-        if (stat.size > 512 * 1024) continue; // skip files > 512KB
-        if (includeRe && !includeRe.test(rel)) continue;
-
-        try {
-          const content = readFileSync(abs, 'utf-8');
-          const lines = content.split('\n');
-          for (let i = 0; i < lines.length && results.length < maxResults; i++) {
-            if (regex.test(lines[i])) {
-              results.push({ file: rel, line: i + 1, text: lines[i].trim().slice(0, 200) });
-            }
-          }
-        } catch { /* skip unreadable files */ }
-      }
-    }
-  }
-
-  walk(rootPath);
-  return results;
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** Line-level scope matching for scoped grep */
-function matchesScope(lineText: string, scope: 'imports' | 'definitions'): boolean {
-  const trimmed = lineText.trimStart();
-  if (scope === 'imports') {
-    return /^(import\s|from\s|require\(|use\s|include\s|require_relative|require\s)/.test(trimmed);
-  }
-  // definitions: function, class, interface, struct, trait, enum, type, def, fn, pub fn, etc.
-  return /^(export\s+)?(async\s+)?(function|class|interface|type|enum|struct|trait|const|let|var|def|fn|pub\s+fn|pub\s+struct|pub\s+enum|module)\s/.test(trimmed);
-}
-
-/**
- * Validate user-supplied regex is safe from catastrophic backtracking (ReDoS).
- * This is a heuristic blocklist of known-dangerous constructs, not a formal
- * proof of safety — it catches common patterns but isn't exhaustive.
- */
-function safeRegex(pattern: string, flags: string): RegExp {
-  if (pattern.length > 200) throw new Error('Pattern too long');
-  // Reject nested quantifiers like (a+)+, (a*)*,  (a{1,})+
-  if (/([+*}])\)?[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
-  // Reject overlapping alternation inside quantified groups: (a|a)*, (ab|a)+
-  if (/\((?:[^)]*\|[^)]*)\)[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
-  // Reject backreferences inside quantified groups (exponential matching)
-  if (/\((?:[^)]*\\[1-9][^)]*)\)[+*{]/.test(pattern)) throw new Error('Unsafe regex pattern');
-  // Reject deeply nested groups (>3 levels)
-  let depth = 0, maxDepth = 0;
-  for (const ch of pattern) {
-    if (ch === '(') { depth++; maxDepth = Math.max(maxDepth, depth); }
-    else if (ch === ')') depth--;
-  }
-  if (maxDepth > 3) throw new Error('Unsafe regex pattern');
-  return new RegExp(pattern, flags);
-}
-
-function loadGrepIgnoreRules(rootPath: string): ReturnType<typeof ignore> {
-  const ig = ignore();
-  ig.add(['node_modules', 'dist', 'build', '.git', '__pycache__', 'vendor', 'target']);
-  try {
-    const content = readFileSync(join(rootPath, '.gitignore'), 'utf-8');
-    ig.add(content);
-  } catch { /* no .gitignore */ }
-  return ig;
-}
-
 // ── Server instructions (sent to client via MCP protocol on initialize) ──
 
 const MILENS_INSTRUCTIONS = `⚠️ CRITICAL: This project is indexed by milens (knowledge graph). Use milens MCP tools BEFORE reading files directly.
@@ -418,7 +248,6 @@ milens — code intelligence engine. Indexes codebases into symbol graphs.
 - \`edit_check\` — pre-edit safety: callers + export status + re-export chains + test coverage + ⚠ warnings (fastest for edits)
 - \`trace\` — execution flow: call chains from entrypoints to a symbol (or downstream from it)
 - \`routes\` — detect framework routes/endpoints (Express, FastAPI, NestJS, Flask, Go, PHP, Rails)
-- \`smart_context\` — intent-aware context: understand/edit/debug/test (returns only what matters for intent)
 - \`domains\` — show domain clusters: groups of files forming logical modules based on dependency graph
 - \`repos\` — list all indexed repositories with summary stats (multi-repo support)
 - \`detect_changes\` — git diff → affected symbols
@@ -428,11 +257,11 @@ milens — code intelligence engine. Indexes codebases into symbol graphs.
 - \`get_type_hierarchy\` — inheritance tree
 
 ## Rules
-- Before editing a symbol: run \`guard_edit_check\` or \`edit_check\` or \`smart_context\` with intent=edit
+- Before editing a symbol: run \`guard_edit_check\` or \`edit_check\` or \`overview\` with intent=edit
 - \`guard_edit_check({name, session_id})\` — HARD gate: records check for audit, blocks if dependents > 5
 - \`impact({mode: "strict"})\` — strict mode returns BLOCKED when depth-1 deps > 5
-- For debugging: run \`smart_context\` with intent=debug or \`trace\` to=symbol
-- For writing tests: run \`smart_context\` with intent=test — shows deps to mock + callers to cover
+- For debugging: run \`overview\` with intent=debug or \`trace\` to=symbol
+- For writing tests: run \`overview\` with intent=test — shows deps to mock + callers to cover
 - \`impact\` only tracks code deps — always pair with \`grep\` for templates/configs
 - Use \`query\` for camelCase/PascalCase identifiers, \`grep\` for display text or multi-word strings
 - impact depth: 1=WILL BREAK, 2=LIKELY AFFECTED, 3=MAY NEED TESTING
@@ -446,6 +275,173 @@ milens — code intelligence engine. Indexes codebases into symbol graphs.
 - \`milens://file/{path}\` — all symbols in a file
 - \`milens://domain/{name}\` — domain cluster details
 `;
+
+function renderSmartContext(db: Database, root: string, name: string, intent: 'understand' | 'edit' | 'debug' | 'test'): string {
+  const symbols = db.findSymbolByName(name);
+  if (symbols.length === 0) return `"${name}" not found. Try \`grep\`.`;
+
+  const sections: string[] = [];
+
+  for (const sym of symbols) {
+    sections.push(`${fmtSymbol(sym, 'L2')}${sym.exported ? ' (exported)' : ''}\n`);
+
+    if (intent === 'understand') {
+      const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+      const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+
+      if (incoming.length > 0) {
+        sections.push(`incoming (${incoming.length}):`);
+        for (const l of incoming) {
+          const from = db.findSymbolById(l.fromId);
+          sections.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
+        }
+      }
+      if (outgoing.length > 0) {
+        sections.push(`outgoing (${outgoing.length}):`);
+        for (const l of outgoing) {
+          const to = db.findSymbolById(l.toId);
+          sections.push(`  ${l.type}: ${to ? fmtSymbol(to) : l.toId}`);
+        }
+      }
+
+      const { ancestors, descendants } = db.getTypeHierarchy(sym.id);
+      if (ancestors.length > 0) {
+        sections.push(`extends: ${ancestors.map(a => fmtSymbol(a.symbol)).join(', ')}`);
+      }
+      if (descendants.length > 0) {
+        sections.push(`extended by: ${descendants.map(d => fmtSymbol(d.symbol)).join(', ')}`);
+      }
+
+      const siblings = db.getSymbolsByFile(sym.filePath)
+        .filter(s => s.id !== sym.id && !s.parentId)
+        .slice(0, 10);
+      if (siblings.length > 0) {
+        sections.push(`file peers: ${siblings.map(s => `${s.name} [${s.kind}]`).join(', ')}`);
+      }
+
+    } else if (intent === 'edit') {
+      const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+      const upstream = db.findUpstream(sym.id, 2);
+
+      if (incoming.length > 0) {
+        sections.push(`direct callers (${incoming.length}):`);
+        for (const l of incoming) {
+          const from = db.findSymbolById(l.fromId);
+          sections.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
+        }
+      } else {
+        sections.push(`direct callers: none`);
+      }
+
+      if (upstream.length > incoming.length) {
+        const depth2 = upstream.filter(u => u.depth === 2);
+        if (depth2.length > 0) {
+          sections.push(`indirect dependents (depth 2): ${depth2.length} symbols`);
+        }
+      }
+
+      const reExportMatches = grepFiles(root, name, { maxResults: 5, includePattern: '**/index.{ts,js,mjs}' })
+        .filter(m => /export\s*\{/.test(m.text) && m.text.includes('from'));
+      if (reExportMatches.length > 0) {
+        sections.push(`re-exported via: ${reExportMatches.map(m => `${m.file}:${m.line}`).join(', ')}`);
+      }
+
+      const testRefs = incoming.filter(l => {
+        const from = db.findSymbolById(l.fromId);
+        return from && isTestFilePath(from.filePath);
+      });
+      if (testRefs.length > 0) {
+        sections.push(`✓ has test coverage`);
+      } else if (sym.exported) {
+        sections.push(`⚠ no test coverage`);
+      }
+
+    } else if (intent === 'debug') {
+      const traces = db.traceToEntrypoints(sym.id, 6);
+      if (traces.length > 0) {
+        const seenChains = new Set<string>();
+        sections.push(`execution paths (${traces.length}):`);
+        let shown = 0;
+        for (let i = 0; i < traces.length && shown < 3; i++) {
+          const chain = traces[i].path;
+          const firstFile = chain[0]?.symbol?.filePath?.split('/').pop() ?? '';
+          const rendered = chain.map(s => s.symbol.name).join(' → ');
+          const key = `${firstFile}: ${rendered}`;
+          if (seenChains.has(key)) continue;
+          seenChains.add(key);
+          sections.push(`  ${key}`);
+          shown++;
+        }
+      } else {
+        sections.push(`no call chains found (may be entrypoint or unreachable)`);
+      }
+
+      const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type === 'calls');
+      if (outgoing.length > 0) {
+        sections.push(`calls (${outgoing.length}):`);
+        for (const l of outgoing) {
+          const to = db.findSymbolById(l.toId);
+          sections.push(`  ${to ? fmtSymbol(to) : l.toId}`);
+        }
+      }
+
+      const dataTypes = db.getOutgoingLinks(sym.id)
+        .filter(l => l.type === 'imports')
+        .map(l => db.findSymbolById(l.toId))
+        .filter(s => s && (s.kind === 'interface' || s.kind === 'type' || s.kind === 'class'))
+        .slice(0, 10);
+      if (dataTypes.length > 0) {
+        sections.push(`data types: ${dataTypes.map(s => s!.name).join(', ')}`);
+      }
+
+    } else if (intent === 'test') {
+      const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
+      const testRefs = incoming.filter(l => {
+        const from = db.findSymbolById(l.fromId);
+        return from && isTestFilePath(from.filePath);
+      });
+
+      if (testRefs.length > 0) {
+        const testFiles = [...new Set(testRefs.map(l => {
+          const from = db.findSymbolById(l.fromId);
+          return from?.filePath;
+        }).filter(Boolean))];
+        sections.push(`✓ tested from: ${testFiles.join(', ')}`);
+      } else {
+        sections.push(`⚠ no existing tests`);
+      }
+
+      const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
+      const externalDeps = outgoing.filter(l => {
+        const to = db.findSymbolById(l.toId);
+        return to && to.filePath !== sym.filePath;
+      });
+      if (externalDeps.length > 0) {
+        sections.push(`dependencies to mock (${externalDeps.length}):`);
+        for (const l of externalDeps) {
+          const to = db.findSymbolById(l.toId);
+          if (to) sections.push(`  ${l.type}: ${fmtSymbol(to)}`);
+        }
+      }
+
+      const nonTestCallers = incoming.filter(l => {
+        const from = db.findSymbolById(l.fromId);
+        return from && !isTestFilePath(from.filePath);
+      });
+      if (nonTestCallers.length > 0) {
+        sections.push(`callers to cover (${nonTestCallers.length}):`);
+        for (const l of nonTestCallers.slice(0, 5)) {
+          const from = db.findSymbolById(l.fromId);
+          if (from) sections.push(`  ${fmtSymbol(from)}`);
+        }
+      }
+    }
+
+    sections.push('');
+  }
+
+  return sections.join('\n');
+}
 
 // ── Server setup ──
 
@@ -565,29 +561,21 @@ export function createMcpServer(rootPath?: string): McpServer {
   }) as typeof server.tool;
 
   // ── Selective tool profiles ──
-  const profile = process.env.MILENS_PROFILE || undefined;
-  
-  if (profile && profile !== 'full') {
+  const profile = process.env.MILENS_PROFILE || 'standard';
+
+  if (profile !== 'full') {
     const minimal = new Set(['query', 'grep', 'context', 'impact', 'status', 'codebase_summary', 'edit_check', 'detect_changes', 'get_file_symbols', 'overview']);
-    const standard = new Set([...minimal, 'domains', 'repos', 'explain_relationship', 'find_dead_code', 'get_type_hierarchy', 'trace', 'routes', 'smart_context', 'review_pr', 'review_symbol', 'test_coverage_gaps', 'test_plan', 'test_impact', 'session_start', 'recall', 'generate_findings_report']);
+    const standard = new Set([...minimal, 'domains', 'repos', 'explain_relationship', 'find_dead_code', 'get_type_hierarchy', 'trace', 'routes', 'review_pr', 'review_symbol', 'tests', 'session_start', 'recall', 'generate_findings_report']);
     
     const allowed = profile === 'minimal' ? minimal : standard;
     
-    // Wrap the tracking-wrapped server.tool again, so profile gating sits on
-    // top: disabled tools still get registered (via the no-op handler below)
-    // and still get tracked, they just short-circuit to the disabled message.
+    // Profile gating sits on top of the tracking wrapper: out-of-profile tools
+    // are never registered, so they do not appear in listTools().
     const profileWrappedTool = server.tool.bind(server);
     server.tool = ((...args: any[]) => {
       const toolName = args[0] as string;
       if (!allowed.has(toolName)) {
-        // Return a no-op tool that explains it's disabled
-        const origLength = args.length;
-        const handler = args[origLength - 1];
-        if (typeof handler === 'function') {
-          args[origLength - 1] = async () => ({
-            content: [{ type: 'text', text: `Tool "${toolName}" disabled by profile "${profile}". Use --profile full to enable.` }],
-          });
-        }
+        return undefined as any;
       }
       return (profileWrappedTool as any)(...args);
     }) as typeof server.tool;
@@ -687,8 +675,9 @@ export function createMcpServer(rootPath?: string): McpServer {
       name: z.string().describe('Symbol name to inspect'),
       repo: z.string().optional(),
       detail: z.enum(['L0', 'L1', 'L2']).optional().default('L1').describe('Output detail: L0=names only, L1=default, L2=full metadata'),
+      limit: z.number().int().positive().max(1000).optional().default(50).describe('Max incoming/outgoing edges shown per side (hub symbols are truncated with a notice)'),
     },
-    async ({ name, repo, detail }) => {
+    async ({ name, repo, detail, limit }) => {
       const { db } = getDb(repo);
       const symbols = db.findSymbolByName(name);
       if (symbols.length === 0) {
@@ -703,9 +692,13 @@ export function createMcpServer(rootPath?: string): McpServer {
         if (incoming.length > 0) {
           lines.push('incoming:');
           const inSyms = incoming.map(l => ({ link: l, sym: db.findSymbolById(l.fromId) }));
-          if (detail === 'L2') inSyms.sort((a, b) => ((b.sym as any)?.heat ?? 0) - ((a.sym as any)?.heat ?? 0));
-          for (const { link: l, sym: from } of inSyms) {
-            lines.push(`  ${l.type}: ${from ? fmtSymbol(from, detail) : l.fromId}`);
+          inSyms.sort((a, b) => ((b.sym as any)?.heat ?? 0) - ((a.sym as any)?.heat ?? 0));
+          for (const { link: l, sym: from } of inSyms.slice(0, limit)) {
+            const why = detail === 'L2' ? ` [${resolutionState(l.confidence)}${l.reason ? `:${l.reason}` : ''}]` : '';
+            lines.push(`  ${l.type}: ${from ? fmtSymbol(from, detail) : l.fromId}${why}`);
+          }
+          if (inSyms.length > limit) {
+            lines.push(`  … +${inSyms.length - limit} more incoming (raise \`limit\` or use \`impact\`)`);
           }
         }
 
@@ -713,9 +706,13 @@ export function createMcpServer(rootPath?: string): McpServer {
         if (outgoing.length > 0) {
           lines.push('outgoing:');
           const outSyms = outgoing.map(l => ({ link: l, sym: db.findSymbolById(l.toId) }));
-          if (detail === 'L2') outSyms.sort((a, b) => ((b.sym as any)?.heat ?? 0) - ((a.sym as any)?.heat ?? 0));
-          for (const { link: l, sym: to } of outSyms) {
-            lines.push(`  ${l.type}: ${to ? fmtSymbol(to, detail) : l.toId}`);
+          outSyms.sort((a, b) => ((b.sym as any)?.heat ?? 0) - ((a.sym as any)?.heat ?? 0));
+          for (const { link: l, sym: to } of outSyms.slice(0, limit)) {
+            const why = detail === 'L2' ? ` [${resolutionState(l.confidence)}${l.reason ? `:${l.reason}` : ''}]` : '';
+            lines.push(`  ${l.type}: ${to ? fmtSymbol(to, detail) : l.toId}${why}`);
+          }
+          if (outSyms.length > limit) {
+            lines.push(`  … +${outSyms.length - limit} more outgoing (raise \`limit\` or use \`impact\`)`);
           }
         }
         lines.push('');
@@ -867,15 +864,19 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: overview ──
   server.tool(
     'overview',
-    'ONE call replaces 3-5 file reads. Combined context + impact + grep. Use BEFORE reading any source file. Typically far fewer tokens than reading files individually. Preferred before editing/deleting/renaming a symbol.',
+    'ONE call replaces 3-5 file reads. Combined context + impact + grep. Use BEFORE reading any source file. Pass `intent` (understand|edit|debug|test) for a focused, intent-aware view instead of the full combined output. Preferred before editing/deleting/renaming a symbol.',
     {
       name: z.string().describe('Symbol name'),
       repo: z.string().optional(),
       depth: z.number().optional().default(2).describe('Impact traversal depth (default: 2)'),
       detail: z.enum(['L0', 'L1', 'L2']).optional().default('L1').describe('Output detail level'),
+      intent: z.enum(['understand', 'edit', 'debug', 'test']).optional().describe('understand=360° view, edit=callers+blast radius, debug=execution paths+data flow, test=coverage+dependencies'),
     },
-    async ({ name, repo, depth, detail }) => {
+    async ({ name, repo, depth, detail, intent }) => {
       const { db, root } = getDb(repo);
+      if (intent) {
+        return { content: [{ type: 'text' as const, text: renderSmartContext(db, root, name, intent) }] };
+      }
       const symbols = db.findSymbolByName(name);
       const sections: string[] = [];
 
@@ -898,22 +899,30 @@ export function createMcpServer(rootPath?: string): McpServer {
             sections.push(`─── ${fmtSymbol(sym, detail)} ---`);
           }
 
+          const OVERVIEW_EDGE_CAP = 40;
+
           if (incoming.length > 0) {
             sections.push(`[incoming] ${incoming.length} refs:`);
-            const inSyms = incoming.map(l => {
+            const inSyms = incoming.slice(0, OVERVIEW_EDGE_CAP).map(l => {
               const s = db.findSymbolById(l.fromId);
               return s ? `  ${l.type}: ${fmtSymbol(s, detail)}` : `  ${l.type}: ${l.fromId}`;
             });
             sections.push(...inSyms);
+            if (incoming.length > OVERVIEW_EDGE_CAP) {
+              sections.push(`  … +${incoming.length - OVERVIEW_EDGE_CAP} more (use \`context\` with a higher \`limit\`)`);
+            }
           }
 
           if (outgoing.length > 0) {
             sections.push(`[outgoing] ${outgoing.length} deps:`);
-            const outSyms = outgoing.map(l => {
+            const outSyms = outgoing.slice(0, OVERVIEW_EDGE_CAP).map(l => {
               const s = db.findSymbolById(l.toId);
               return s ? `  ${l.type}: ${fmtSymbol(s, detail)}` : `  ${l.type}: ${l.toId}`;
             });
             sections.push(...outSyms);
+            if (outgoing.length > OVERVIEW_EDGE_CAP) {
+              sections.push(`  … +${outgoing.length - OVERVIEW_EDGE_CAP} more (use \`context\` with a higher \`limit\`)`);
+            }
           }
         }
 
@@ -1000,13 +1009,17 @@ export function createMcpServer(rootPath?: string): McpServer {
   // ── Tool: detect_changes ──
   server.tool(
     'detect_changes',
-    'Pre-commit safety check. Uses git diff to show which symbols changed + their direct dependents + risk. Use INSTEAD of manually running `git diff` before every commit.',
+    'Pre-commit safety check. Uses git diff to show which symbols changed + their direct dependents + risk. Use INSTEAD of manually running `git diff` before every commit. Pass `mode: "precommit"` for a full risk report (changes + review + dead code + coverage gaps).',
     {
       ref: z.string().optional().default('HEAD').describe('Git ref to diff against (default: HEAD)'),
+      mode: z.enum(['detect', 'precommit']).optional().default('detect').describe('detect=changed symbols + dependents; precommit=full pre-commit risk report'),
       repo: z.string().optional(),
     },
-    async ({ ref, repo }) => {
+    async ({ ref, mode, repo }) => {
       const { db, root } = getDb(repo);
+      if (mode === 'precommit') {
+        return { content: [{ type: 'text' as const, text: await defaultOnPreCommit(root) }] };
+      }
       // `ref` is passed straight to `git diff` below. Restrict it to characters
       // valid in a git ref so it can't be crafted as a flag (e.g. a leading "-")
       // and get interpreted as a git option instead of a revision.
@@ -1519,7 +1532,7 @@ export function createMcpServer(rootPath?: string): McpServer {
           }
         } else {
           // Trace downstream — show call/dependency tree from this symbol
-          const downstream = db.findDownstream(sym.id, depth);
+          const downstream = db.findDownstream(sym.id, depth, true);
           sections.push(`## Execution paths FROM ${fmtSymbol(sym)}\n`);
           if (downstream.length === 0) {
             sections.push('No downstream dependencies (leaf symbol).');
@@ -1703,198 +1716,6 @@ export function createMcpServer(rootPath?: string): McpServer {
     },
   );
 
-  // ── Tool: smart_context ──
-  server.tool(
-    'smart_context',
-    'Intent-aware context: returns different information based on what you want to do. Saves tokens by showing only what matters for your intent.',
-    {
-      name: z.string().describe('Symbol name'),
-      intent: z.enum(['understand', 'edit', 'debug', 'test'])
-        .describe('understand=360° view, edit=callers+blast radius, debug=execution paths+data flow, test=coverage+dependencies'),
-      repo: z.string().optional(),
-    },
-    async ({ name, intent, repo }) => {
-      const { db, root } = getDb(repo);
-      const symbols = db.findSymbolByName(name);
-      if (symbols.length === 0) {
-        return { content: [{ type: 'text' as const, text: `"${name}" not found. Try \`grep\`.` }] };
-      }
-
-      const sections: string[] = [];
-
-      for (const sym of symbols) {
-        sections.push(`${fmtSymbol(sym, 'L2')}${sym.exported ? ' (exported)' : ''}\n`);
-
-        if (intent === 'understand') {
-          // Full 360° — context + downstream + file structure
-          const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-          const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
-
-          if (incoming.length > 0) {
-            sections.push(`incoming (${incoming.length}):`);
-            for (const l of incoming) {
-              const from = db.findSymbolById(l.fromId);
-              sections.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
-            }
-          }
-          if (outgoing.length > 0) {
-            sections.push(`outgoing (${outgoing.length}):`);
-            for (const l of outgoing) {
-              const to = db.findSymbolById(l.toId);
-              sections.push(`  ${l.type}: ${to ? fmtSymbol(to) : l.toId}`);
-            }
-          }
-
-          // Heritage
-          const { ancestors, descendants } = db.getTypeHierarchy(sym.id);
-          if (ancestors.length > 0) {
-            sections.push(`extends: ${ancestors.map(a => fmtSymbol(a.symbol)).join(', ')}`);
-          }
-          if (descendants.length > 0) {
-            sections.push(`extended by: ${descendants.map(d => fmtSymbol(d.symbol)).join(', ')}`);
-          }
-
-          // Siblings — other symbols in same file
-          const siblings = db.getSymbolsByFile(sym.filePath)
-            .filter(s => s.id !== sym.id && !s.parentId)
-            .slice(0, 10);
-          if (siblings.length > 0) {
-            sections.push(`file peers: ${siblings.map(s => `${s.name} [${s.kind}]`).join(', ')}`);
-          }
-
-        } else if (intent === 'edit') {
-          // Focused: who calls this + blast radius + test coverage
-          const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-          const upstream = db.findUpstream(sym.id, 2);
-
-          if (incoming.length > 0) {
-            sections.push(`direct callers (${incoming.length}):`);
-            for (const l of incoming) {
-              const from = db.findSymbolById(l.fromId);
-              sections.push(`  ${l.type}: ${from ? fmtSymbol(from) : l.fromId}`);
-            }
-          } else {
-            sections.push(`direct callers: none`);
-          }
-
-          if (upstream.length > incoming.length) {
-            const depth2 = upstream.filter(u => u.depth === 2);
-            if (depth2.length > 0) {
-              sections.push(`indirect dependents (depth 2): ${depth2.length} symbols`);
-            }
-          }
-
-          // Re-export detection
-          const reExportMatches = grepFiles(root, name, { maxResults: 5, includePattern: '**/index.{ts,js,mjs}' })
-            .filter(m => /export\s*\{/.test(m.text) && m.text.includes('from'));
-          if (reExportMatches.length > 0) {
-            sections.push(`re-exported via: ${reExportMatches.map(m => `${m.file}:${m.line}`).join(', ')}`);
-          }
-
-          // Test coverage
-          const testRefs = incoming.filter(l => {
-            const from = db.findSymbolById(l.fromId);
-            return from && isTestFilePath(from.filePath);
-          });
-          if (testRefs.length > 0) {
-            sections.push(`✓ has test coverage`);
-          } else if (sym.exported) {
-            sections.push(`⚠ no test coverage`);
-          }
-
-        } else if (intent === 'debug') {
-          // Execution paths + data flow
-          const traces = db.traceToEntrypoints(sym.id, 6);
-          if (traces.length > 0) {
-            const seenChains = new Set<string>();
-            sections.push(`execution paths (${traces.length}):`);
-            let shown = 0;
-            for (let i = 0; i < traces.length && shown < 3; i++) {
-              const chain = traces[i].path;
-              const firstFile = chain[0]?.symbol?.filePath?.split('/').pop() ?? '';
-              const rendered = chain.map(s => s.symbol.name).join(' → ');
-              const key = `${firstFile}: ${rendered}`;
-              if (seenChains.has(key)) continue;
-              seenChains.add(key);
-              sections.push(`  ${key}`);
-              shown++;
-            }
-          } else {
-            sections.push(`no call chains found (may be entrypoint or unreachable)`);
-          }
-
-          // What does this call? (downstream immediate)
-          const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type === 'calls');
-          if (outgoing.length > 0) {
-            sections.push(`calls (${outgoing.length}):`);
-            for (const l of outgoing) {
-              const to = db.findSymbolById(l.toId);
-              sections.push(`  ${to ? fmtSymbol(to) : l.toId}`);
-            }
-          }
-
-          // Data types used
-          const dataTypes = db.getOutgoingLinks(sym.id)
-            .filter(l => l.type === 'imports')
-            .map(l => db.findSymbolById(l.toId))
-            .filter(s => s && (s.kind === 'interface' || s.kind === 'type' || s.kind === 'class'))
-            .slice(0, 10);
-          if (dataTypes.length > 0) {
-            sections.push(`data types: ${dataTypes.map(s => s!.name).join(', ')}`);
-          }
-
-        } else if (intent === 'test') {
-          // Test coverage + what to mock
-          const incoming = db.getIncomingLinks(sym.id).filter(l => l.type !== 'contains');
-          const testRefs = incoming.filter(l => {
-            const from = db.findSymbolById(l.fromId);
-            return from && isTestFilePath(from.filePath);
-          });
-
-          if (testRefs.length > 0) {
-            const testFiles = [...new Set(testRefs.map(l => {
-              const from = db.findSymbolById(l.fromId);
-              return from?.filePath;
-            }).filter(Boolean))];
-            sections.push(`✓ tested from: ${testFiles.join(', ')}`);
-          } else {
-            sections.push(`⚠ no existing tests`);
-          }
-
-          // Dependencies to mock
-          const outgoing = db.getOutgoingLinks(sym.id).filter(l => l.type !== 'contains');
-          const externalDeps = outgoing.filter(l => {
-            const to = db.findSymbolById(l.toId);
-            return to && to.filePath !== sym.filePath;
-          });
-          if (externalDeps.length > 0) {
-            sections.push(`dependencies to mock (${externalDeps.length}):`);
-            for (const l of externalDeps) {
-              const to = db.findSymbolById(l.toId);
-              if (to) sections.push(`  ${l.type}: ${fmtSymbol(to)}`);
-            }
-          }
-
-          // Inputs — what calls this? (test should cover these call patterns)
-          const nonTestCallers = incoming.filter(l => {
-            const from = db.findSymbolById(l.fromId);
-            return from && !isTestFilePath(from.filePath);
-          });
-          if (nonTestCallers.length > 0) {
-            sections.push(`callers to cover (${nonTestCallers.length}):`);
-            for (const l of nonTestCallers.slice(0, 5)) {
-              const from = db.findSymbolById(l.fromId);
-              if (from) sections.push(`  ${fmtSymbol(from)}`);
-            }
-          }
-        }
-
-        sections.push('');
-      }
-
-      return { content: [{ type: 'text' as const, text: sections.join('\n') }] };
-    },
-  );
 
   // Language ID → WASM name mapping for ast_explore/test_query
   const langWasmMap = new Map<string, string>();
@@ -2232,68 +2053,6 @@ export function createMcpServer(rootPath?: string): McpServer {
     }),
   );
 
-  // ── Prompt: vibe-code-planner ──
-  server.prompt(
-    'vibe-code-planner',
-    'ECC-style Planner Agent workflow: analyze codebase, create implementation plan with blast radius awareness',
-    { feature: z.string().describe('Feature or task name to plan') },
-    ({ feature }) => ({
-      messages: [{
-        role: 'user',
-        content: {
-          type: 'text',
-          text: `I am the Planner Agent. I need to create an implementation plan for "${feature}".\n\n` +
-            `Follow this ECC Planner workflow:\n\n` +
-            `PHASE 1 — CODEBASE INTELLIGENCE:\n` +
-            `1. Run \`codebase_summary()\` to understand the project structure\n` +
-            `2. Run \`domains()\` to see module clusters\n` +
-            `3. Run \`routes()\` to find relevant API endpoints\n\n` +
-            `PHASE 2 — TARGET ANALYSIS:\n` +
-            `4. Run \`smart_context({name: "keySymbol", intent: "edit"})\` for each affected symbol\n` +
-            `5. Run \`edit_check({name: "keySymbol"})\` for safety\n` +
-            `6. Run \`trace({to: "keySymbol"})\` to understand execution flow\n\n` +
-            `PHASE 3 — IMPACT PREDICTION:\n` +
-            `7. Run \`impact({target: "keySymbol", depth: 3})\` to see blast radius\n` +
-            `8. Run \`explain_relationship({from: "A", to: "B"})\` for distant dependencies\n\n` +
-            `PHASE 4 — TEST STRATEGY:\n` +
-            `9. Run \`test_plan({name: "keySymbol"})\` for mock strategy\n` +
-            `10. Run \`test_coverage_gaps()\` to check existing coverage\n\n` +
-            `PHASE 5 — FINAL PLAN:\n` +
-            `Output a plan.md with: Overview, Architecture Changes, Implementation Steps (file+action+why+deps+risk), Testing Strategy, Risks & Mitigations, Success Criteria.\n\n` +
-            `Use the ECC plan format with specific file paths, dependencies, and risk levels (LOW/MEDIUM/HIGH).`,
-        },
-      }],
-    }),
-  );
-
-  // ── Prompt: vibe-code-reviewer ──
-  server.prompt(
-    'vibe-code-reviewer',
-    'ECC-style Reviewer Agent workflow: PR risk assessment, dead code detection, security scan',
-    { session_id: z.string().optional().describe('Optional session ID for annotation context') },
-    ({ session_id }) => ({
-      messages: [{
-        role: 'user',
-        content: {
-          type: 'text',
-          text: `I am the Reviewer Agent. Review the current changes thoroughly.${session_id ? ` Session: ${session_id}` : ''}\n\n` +
-            `Follow this ECC Reviewer workflow:\n\n` +
-            `1. Run \`review_pr()\` to get risk scores for all changed symbols\n` +
-            `2. For each CRITICAL/HIGH symbol:\n` +
-            `   a. Run \`review_symbol({name})\` for deep dive\n` +
-            `   b. Run \`context({name})\` to see relationships\n` +
-            `   c. Run \`grep({pattern: "symbolName"})\` for text references\n` +
-            `3. Run \`find_dead_code()\` to detect orphaned symbols\n` +
-            `4. Run \`grep({pattern: "password|secret|api_key|token", scope: "code"})\` for secrets\n` +
-            `5. Run \`grep({pattern: "TODO|FIXME|HACK|console\\\\.log", scope: "code"})\` for tech debt\n` +
-            `6. Run \`detect_changes()\` to verify expected files only\n` +
-            `7. Create a review report: symbols OK to merge vs symbols needing fixes\n` +
-            `8. Run \`annotate({symbol, key: "bug"|"security", value})\` for any critical findings`,
-        },
-      }],
-    }),
-  );
-
   // ── Prompt: closed-loop-session ──
   server.prompt(
     'closed-loop-session',
@@ -2308,11 +2067,11 @@ export function createMcpServer(rootPath?: string): McpServer {
             `PHASE 1 — ANALYZE (bootstrap):\n` +
             `  session_start({agent: "${agent}"}) → codebase_summary() → domains() → recall()\n\n` +
             `PHASE 2 — PLAN:\n` +
-            `  smart_context({intent: "edit"}) → edit_check() → impact({depth: 3}) → test_plan()\n\n` +
+            `  overview({intent: "edit"}) → edit_check() → impact({depth: 3}) → tests({mode: "plan"})\n\n` +
             `PHASE 3 — CODE:\n` +
             `  Implement changes with guard: edit_check() before each edit, impact() mid-edit, context() for reference\n\n` +
             `PHASE 4 — VERIFY:\n` +
-            `  detect_changes() → test_impact() → review_pr() → test_coverage_gaps() → grep(secrets)\n\n` +
+            `  detect_changes() → tests({mode: "impact"}) → review_pr() → tests({mode: "gaps"}) → grep(secrets)\n\n` +
             `PHASE 5 — LEARN:\n` +
             `  annotate() key observations → session_context() → handoff() if needed\n\n` +
             `PHASE 6 — IMPROVE:\n` +
@@ -2433,7 +2192,7 @@ export function createMcpServer(rootPath?: string): McpServer {
 
 // ── Transport: stdio ──
 
-export async function startStdio(rootPath?: string): Promise<void> {
+export async function startStdio(rootPath?: string): Promise<() => void> {
   const server = createMcpServer(rootPath);
   const transport = new StdioServerTransport();
 
@@ -2476,6 +2235,14 @@ export async function startStdio(rootPath?: string): Promise<void> {
   process.stdin.on('end', cleanup);
   process.stdin.on('close', cleanup);
 
+  const dispose = () => {
+    process.removeListener('SIGINT', cleanup);
+    process.removeListener('SIGTERM', cleanup);
+    process.stdin.removeListener('end', cleanup);
+    process.stdin.removeListener('close', cleanup);
+    if (watcher) watcher.stop();
+  };
+
   try {
     await server.connect(transport);
   } catch (err: any) {
@@ -2486,11 +2253,13 @@ export async function startStdio(rootPath?: string): Promise<void> {
     if (watcher) watcher.stop();
     process.exit(1);
   }
+
+  return dispose;
 }
 
 // ── Transport: HTTP (Streamable) ──
 
-export async function startHttp(port: number, rootPath?: string): Promise<void> {
+export async function startHttp(port: number, rootPath?: string): Promise<() => void> {
   const server = createMcpServer(rootPath);
   const sessions = new Map<string, { transport: StreamableHTTPServerTransport; lastActive: number }>();
 
@@ -2616,10 +2385,28 @@ export async function startHttp(port: number, rootPath?: string): Promise<void> 
     }
   });
 
+  httpServer.on('error', (err: any) => {
+    if (err?.code === 'EADDRINUSE') {
+      process.stderr.write(`✗ Port ${port} is already in use.\n  → Start milens on another port: milens serve --http --port <PORT>\n`);
+    } else if (err?.code === 'EACCES') {
+      process.stderr.write(`✗ Permission denied binding port ${port}.\n  → Use a port above 1024, e.g. milens serve --http --port 3100\n`);
+    } else {
+      process.stderr.write(`✗ MCP server failed to start: ${err?.message || err}\n`);
+    }
+    process.exit(1);
+  });
+
   // Bind to localhost only — prevents network exposure without auth
   httpServer.listen(port, '127.0.0.1', () => {
     process.stderr.write(`milens MCP server listening on http://127.0.0.1:${port}/mcp\n`);
   });
+
+  return () => {
+    process.removeListener('SIGINT', cleanup);
+    process.removeListener('SIGTERM', cleanup);
+    clearInterval(evictTimer);
+    if (watcher) watcher.stop();
+  };
 }
 
 function readBody(req: any): Promise<string> {

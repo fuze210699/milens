@@ -505,4 +505,48 @@ describe('enrichMetadata', () => {
       expect(hubFn.role).not.toBe('leaf'); // 3 in, 1 out → hub
     });
   });
+
+  describe('importance (audit2 #10: runtime callers outrank type-only references)', () => {
+    it('ranks a function with runtime callers above a datatype with only type references', () => {
+      const util = makeSym('u', 'UtilType', 'interface', 'src/util.ts', true);
+      const fn = makeSym('f', 'doWork', 'function', 'src/work.ts', true);
+
+      const symbols: CodeSymbol[] = [util, fn];
+      const links: SymbolLink[] = [];
+      // 6 files reference UtilType only as a type annotation
+      for (let i = 0; i < 6; i++) {
+        const caller = makeSym(`t${i}`, `consumer${i}`, 'function', `src/consumer${i}.ts`, true);
+        symbols.push(caller);
+        links.push(makeLink(`rl${i}`, caller.id, util.id, 'references'));
+      }
+      // 3 files actually call doWork at runtime
+      for (let i = 0; i < 3; i++) {
+        const caller = makeSym(`c${i}`, `runner${i}`, 'function', `src/runner${i}.ts`, true);
+        symbols.push(caller);
+        links.push(makeLink(`cl${i}`, caller.id, fn.id, 'calls'));
+      }
+
+      const result = enrichMetadata({ symbols, links });
+      const utilOut = result.symbols.find(s => s.id === 'u')!;
+      const fnOut = result.symbols.find(s => s.id === 'f')!;
+
+      expect(fnOut.importance).toBeGreaterThan(utilOut.importance!);
+      // Heat, which weights all edges equally, does NOT make this distinction:
+      expect(utilOut.heat!).toBeGreaterThanOrEqual(fnOut.heat!);
+    });
+
+    it('does not count test-file callers as runtime importance', () => {
+      const fn = makeSym('f', 'prod', 'function', 'src/prod.ts', true);
+      const prodCaller = makeSym('p', 'caller', 'function', 'src/other.ts', true);
+      const testCaller = makeSym('t', 'specCaller', 'function', 'test/prod.test.ts', false);
+      const symbols = [fn, prodCaller, testCaller];
+      const links = [
+        makeLink('l1', prodCaller.id, fn.id, 'calls'),
+        makeLink('l2', testCaller.id, fn.id, 'calls'),
+      ];
+      const result = enrichMetadata({ symbols, links });
+      const fnOut = result.symbols.find(s => s.id === 'f')!;
+      expect(fnOut.importance).toBeGreaterThan(0);
+    });
+  });
 });

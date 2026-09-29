@@ -154,20 +154,23 @@ const EXPECTED_TOOLS = [
   'query', 'grep', 'context', 'impact', 'status', 'domains', 'overview',
   'repos', 'detect_changes', 'explain_relationship', 'find_dead_code',
   'get_file_symbols', 'get_type_hierarchy', 'edit_check', 'trace', 'routes',
-  'smart_context', 'ast_explore', 'test_query', 'codebase_summary',
-  'review_pr', 'review_symbol', 'test_coverage_gaps', 'test_impact',
-  'test_plan', 'annotate', 'recall', 'session_start', 'session_context',
-  'session_end', 'handoff', 'pre_commit_check', 'hook_onFileChange',
+  'ast_explore', 'test_query', 'codebase_summary',
+  'review_pr', 'review_symbol', 'tests',
+  'annotate', 'recall', 'session_start', 'session_context',
+  'session_end', 'handoff', 'hook_onFileChange',
   'hook_preCompact', 'hook_postCompact', 'semantic_search', 'find_similar',
-  'compare_impact', 'orchestrate', 'fix_apply', 'test_generate', 'security_scan',
+  'compare_impact', 'orchestrate', 'security_scan',
   'generate_findings_report',
 ];
 
 describe('createMcpServer', () => {
   let db: Database;
   let registry: RepoRegistry;
+  let prevProfile: string | undefined;
 
   beforeAll(() => {
+    prevProfile = process.env.MILENS_PROFILE;
+    process.env.MILENS_PROFILE = 'full';
     if (existsSync(TEST_ROOT)) rmSync(TEST_ROOT, { recursive: true });
     db = createTestDb();
     registry = new RepoRegistry();
@@ -175,6 +178,8 @@ describe('createMcpServer', () => {
   });
 
   afterAll(() => {
+    if (prevProfile === undefined) delete process.env.MILENS_PROFILE;
+    else process.env.MILENS_PROFILE = prevProfile;
     try { db.close(); } catch { /* ok */ }
     registry.remove(TEST_ROOT);
     // DB files may still be locked by LazyDb instances inside createMcpServer.
@@ -261,10 +266,47 @@ describe('createMcpServer', () => {
 
       expect(tools).toBeDefined();
       const names = Object.keys(tools);
-      expect(names.length).toBeGreaterThanOrEqual(42);
+      expect(names.length).toBeGreaterThanOrEqual(EXPECTED_TOOLS.length);
 
       for (const toolName of EXPECTED_TOOLS) {
         expect(tools[toolName]).toBeDefined();
+      }
+    });
+
+    it('minimal profile does not register out-of-profile tools (AX-01)', () => {
+      const prev = process.env.MILENS_PROFILE;
+      process.env.MILENS_PROFILE = 'minimal';
+      try {
+        const server = createMcpServer(TEST_ROOT);
+        const tools = (server as any)._registeredTools as Record<string, unknown>;
+        const names = Object.keys(tools);
+        const allowed = new Set(['query', 'grep', 'context', 'impact', 'status', 'codebase_summary', 'edit_check', 'detect_changes', 'get_file_symbols', 'overview']);
+        for (const n of names) expect(allowed.has(n)).toBe(true);
+        expect(names.length).toBeLessThanOrEqual(allowed.size);
+        expect(names).not.toContain('security_scan');
+      } finally {
+        if (prev === undefined) delete process.env.MILENS_PROFILE;
+        else process.env.MILENS_PROFILE = prev;
+      }
+    });
+
+    it('defaults to the standard profile when MILENS_PROFILE is unset (reviewer #5)', () => {
+      const prev = process.env.MILENS_PROFILE;
+      delete process.env.MILENS_PROFILE;
+      try {
+        const server = createMcpServer(TEST_ROOT);
+        const tools = (server as any)._registeredTools as Record<string, unknown>;
+        const names = Object.keys(tools);
+        expect(names).toContain('overview');
+        expect(names).toContain('review_pr');
+        expect(names).toContain('tests');
+        expect(names).not.toContain('orchestrate');
+        expect(names).not.toContain('security_scan');
+        expect(names).not.toContain('annotate');
+        expect(names.length).toBeLessThan(EXPECTED_TOOLS.length);
+      } finally {
+        if (prev === undefined) delete process.env.MILENS_PROFILE;
+        else process.env.MILENS_PROFILE = prev;
       }
     });
 
@@ -277,10 +319,10 @@ describe('createMcpServer', () => {
       }
     });
 
-    it('all 43 tools registered plus security_scan', () => {
+    it('registers at least the full expected tool set', () => {
       const server = createMcpServer(TEST_ROOT);
       const tools = (server as any)._registeredTools as Record<string, unknown>;
-      expect(Object.keys(tools).length).toBeGreaterThanOrEqual(43);
+      expect(Object.keys(tools).length).toBeGreaterThanOrEqual(EXPECTED_TOOLS.length);
     });
   });
 
@@ -383,6 +425,19 @@ describe('createMcpServer', () => {
       const result = await handler({ name: 'login', repo: TEST_ROOT, detail: 'L1' });
       expect(result.content[0].text).toContain('login');
     });
+
+    it('caps edges at limit and shows a truncation notice for hub symbols (audit2 #7)', async () => {
+      const full = await handler({ name: 'AuthService', repo: TEST_ROOT, detail: 'L1' });
+      const fullText: string = full.content[0].text;
+      const outCount = (fullText.match(/^ {2}\w+: /gm) ?? []).length;
+      if (outCount <= 1) return;
+
+      const capped = await handler({ name: 'AuthService', repo: TEST_ROOT, detail: 'L1', limit: 1 });
+      const cappedText: string = capped.content[0].text;
+      expect(cappedText).toMatch(/… \+\d+ more (incoming|outgoing)/);
+      const cappedCount = (cappedText.match(/^ {2}\w+: /gm) ?? []).length;
+      expect(cappedCount).toBeLessThan(outCount);
+    });
   });
 
   // ── impact tool ──
@@ -456,6 +511,37 @@ describe('createMcpServer', () => {
       const result = await handler({ name: 'NonExistent', repo: TEST_ROOT, depth: 2, detail: 'L1' });
 
       expect(result.content[0].text).toContain('[grep]');
+    });
+
+    it('returns a focused intent-aware view when intent is passed (F15: folds smart_context)', async () => {
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'overview');
+      const result = await handler({ name: 'AuthService', repo: TEST_ROOT, intent: 'edit' });
+
+      const text = result.content[0].text;
+      expect(text).toContain('AuthService');
+      // Intent view is focused — it does NOT emit the combined-output section markers
+      expect(text).not.toContain('[grep]');
+      expect(text).not.toContain('[impact]');
+    });
+
+    it('no longer registers a separate smart_context tool (F15)', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools ?? {};
+      expect(tools['smart_context']).toBeUndefined();
+    });
+  });
+
+  describe('detect_changes precommit mode (F15: folds pre_commit_check)', () => {
+    it('returns a report for mode=precommit and no longer registers pre_commit_check', async () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools ?? {};
+      expect(tools['pre_commit_check']).toBeUndefined();
+
+      const handler = getToolHandler(server, 'detect_changes');
+      const result = await handler({ repo: TEST_ROOT, mode: 'precommit' });
+      expect(typeof result.content[0].text).toBe('string');
+      expect(result.content[0].text.length).toBeGreaterThan(0);
     });
   });
 
@@ -649,15 +735,31 @@ describe('createMcpServer', () => {
     });
   });
 
-  // ── test_coverage_gaps tool ──
+  // ── tests tool (F15: folds test_coverage_gaps/impact/plan/generate) ──
 
-  describe('test_coverage_gaps tool', () => {
-    it('returns coverage gaps summary', async () => {
+  describe('tests tool', () => {
+    it('mode=gaps returns coverage gaps summary', async () => {
       const server = createMcpServer(TEST_ROOT);
-      const handler = getToolHandler(server, 'test_coverage_gaps');
-      const result = await handler({ repo: TEST_ROOT, limit: 20 });
+      const handler = getToolHandler(server, 'tests');
+      const result = await handler({ repo: TEST_ROOT, mode: 'gaps', limit: 20 });
 
       expect(result.content[0].text).toContain('Test Coverage');
+    });
+
+    it('mode=plan requires a name', async () => {
+      const server = createMcpServer(TEST_ROOT);
+      const handler = getToolHandler(server, 'tests');
+      const result = await handler({ repo: TEST_ROOT, mode: 'plan' });
+      expect(result.content[0].text).toContain('requires');
+    });
+
+    it('no longer registers the individual test_* tools', () => {
+      const server = createMcpServer(TEST_ROOT);
+      const tools = (server as any)._registeredTools ?? {};
+      expect(tools['test_coverage_gaps']).toBeUndefined();
+      expect(tools['test_plan']).toBeUndefined();
+      expect(tools['test_impact']).toBeUndefined();
+      expect(tools['test_generate']).toBeUndefined();
     });
   });
 
@@ -831,10 +933,10 @@ describe('createMcpServer', () => {
       expect(typeof (tools['security_scan'] as any).handler).toBe('function');
     });
 
-    it('registers fix_apply tool on the server', () => {
+    it('no longer registers a separate fix_apply tool (F15: folded into security_scan mode=fix)', () => {
       const server = createMcpServer(TEST_ROOT);
       const tools = (server as any)._registeredTools as Record<string, unknown>;
-      expect(tools['fix_apply']).toBeDefined();
+      expect(tools['fix_apply']).toBeUndefined();
     });
 
     it('security_scan handler runs without throwing on valid input', async () => {
@@ -872,8 +974,9 @@ describe('createMcpServer', () => {
       writeFileSync(outsidePath, original, 'utf-8');
       try {
         const server = createMcpServer(TEST_ROOT);
-        const handler = getToolHandler(server, 'fix_apply');
+        const handler = getToolHandler(server, 'security_scan');
         const result = await handler({
+          mode: 'fix',
           ruleId: 'SEC-001',
           file: '../fix-apply-canary.txt',
           line: 1,
@@ -905,23 +1008,17 @@ describe('createMcpServer', () => {
   });
 
   describe('registerTestingTools', () => {
-    it('registers test_plan tool on the server', () => {
+    it('registers the consolidated tests tool on the server', () => {
       const server = createMcpServer(TEST_ROOT);
       const tools = (server as any)._registeredTools as Record<string, unknown>;
-      expect(tools['test_plan']).toBeDefined();
-      expect(typeof (tools['test_plan'] as any).handler).toBe('function');
+      expect(tools['tests']).toBeDefined();
+      expect(typeof (tools['tests'] as any).handler).toBe('function');
     });
 
-    it('registers test_coverage_gaps tool on the server', () => {
+    it('tests mode=plan handler returns a valid plan', async () => {
       const server = createMcpServer(TEST_ROOT);
-      const tools = (server as any)._registeredTools as Record<string, unknown>;
-      expect(tools['test_coverage_gaps']).toBeDefined();
-    });
-
-    it('test_plan handler returns a valid plan', async () => {
-      const server = createMcpServer(TEST_ROOT);
-      const handler = getToolHandler(server, 'test_plan');
-      const result = await handler({ name: 'AuthService', repo: TEST_ROOT });
+      const handler = getToolHandler(server, 'tests');
+      const result = await handler({ mode: 'plan', name: 'AuthService', repo: TEST_ROOT });
       expect(result.content[0].text).toBeDefined();
       expect(result.content[0].text.length).toBeGreaterThan(0);
     });

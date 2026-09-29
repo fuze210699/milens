@@ -332,7 +332,7 @@ For solo devs: all 43 tools are free forever. For teams: the GitHub App automate
 | `overview` | Combined context + impact + grep in one call |
 | `detect_changes` | Git diff → affected symbols + dependents |
 | `find_dead_code` | Exported symbols with zero incoming references |
-| `pre_commit_check` | Pre-commit risk: review_pr + dead code + coverage gaps |
+| `detect_changes (mode=precommit)` | Pre-commit risk: review_pr + dead code + coverage gaps |
 | `compare_impact` | Compare impact graph before/after edit |
 
 ### Review & Testing
@@ -342,10 +342,10 @@ For solo devs: all 43 tools are free forever. For teams: the GitHub App automate
 | `review_pr` | PR risk assessment: symbol-level diff via git show, cross-file impact |
 | `review_symbol` | Single symbol deep-dive: role, heat, dependents, test status, risk |
 | `codebase_summary` | Compact codebase overview: domains, top hubs, coverage |
-| `test_plan` | Dependency-aware test strategy: mocks, scenarios |
-| `test_generate` | Auto-generate test file with framework detection |
-| `test_coverage_gaps` | Untested exported symbols sorted by risk |
-| `test_impact` | Map code changes to which test files to run |
+| `tests (mode=plan)` | Dependency-aware test strategy: mocks, scenarios |
+| `tests (mode=generate)` | Auto-generate test file with framework detection |
+| `tests (mode=gaps)` | Untested exported symbols sorted by risk |
+| `tests (mode=impact)` | Map code changes to which test files to run |
 
 ### Orchestration
 
@@ -357,7 +357,7 @@ For solo devs: all 43 tools are free forever. For teams: the GitHub App automate
 
 | Tool | Description |
 |---|---|
-| `smart_context` | Intent-aware: understand/edit/debug/test |
+| `overview (intent=...)` | Intent-aware: understand/edit/debug/test |
 | `trace` | Execution flow: call chains from entrypoints to target |
 | `routes` | Detect framework routes/endpoints (Express, FastAPI, NestJS, etc.) |
 | `explain_relationship` | Shortest dependency path between two symbols |
@@ -379,7 +379,7 @@ For solo devs: all 43 tools are free forever. For teams: the GitHub App automate
 | Tool | Description |
 |---|---|
 | `security_scan` | Scan for vulnerabilities — 190 rules, 9 categories |
-| `fix_apply` | Apply security fix to a file (creates backup) |
+| `security_scan (mode=fix)` | Apply security fix to a file (creates backup) |
 
 ### Hooks
 
@@ -424,9 +424,10 @@ Each adapter is in the `adapters/` directory with ready-to-copy config files and
 ### Profile Selection
 
 ```bash
-MILENS_PROFILE=minimal milens serve          # 10 tools — lighter footprint
-MILENS_PROFILE=standard milens serve         # 25 tools — full daily coding
-milens serve --profile full                  # 43 tools — everything
+milens serve --profile minimal    # core tools only — lightest footprint
+milens serve --profile standard   # full daily coding toolkit (default)
+milens serve --profile full       # everything (opt-in)
+# Equivalent via env var: MILENS_PROFILE=minimal milens serve
 ```
 
 ---

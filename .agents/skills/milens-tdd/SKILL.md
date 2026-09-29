@@ -11,9 +11,9 @@ Identify untested symbols ranked by risk, generate targeted test strategies, imp
 
 | Tool | Purpose |
 |---|---|
-| `mcp_milens_test_coverage_gaps` | Find untested symbols sorted by risk |
-| `mcp_milens_test_plan` | Generate mock strategy and test scenarios for a symbol |
-| `mcp_milens_test_impact` | Identify affected test files after changes |
+| `mcp_milens_tests` | Find untested symbols sorted by risk |
+| `mcp_milens_tests` | Generate mock strategy and test scenarios for a symbol |
+| `mcp_milens_tests` | Identify affected test files after changes |
 | `mcp_milens_review_pr` | Post-change quality check for CRITICAL issues |
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root**.
@@ -25,7 +25,7 @@ Identify untested symbols ranked by risk, generate targeted test strategies, imp
 Start by finding symbols with no test coverage, sorted by risk (hotspots first).
 
 ```
-mcp_milens_test_coverage_gaps({repo: "<workspaceRoot>", limit: 10})
+mcp_milens_tests({mode: "gaps", repo: "<workspaceRoot>", limit: 10})
 ```
 
 Review the output:
@@ -38,7 +38,7 @@ Review the output:
 For each high-risk symbol identified in Step 1, request a test plan.
 
 ```
-mcp_milens_test_plan({name: "<symbolName>", repo: "<workspaceRoot>"})
+mcp_milens_tests({mode: "plan", name: "<symbolName>", repo: "<workspaceRoot>"})
 ```
 
 The test plan provides:
@@ -61,7 +61,7 @@ Write test files based on the test plan output:
 After writing tests, confirm which test files changed and should run.
 
 ```
-mcp_milens_test_impact({repo: "<workspaceRoot>"})
+mcp_milens_tests({mode: "impact", repo: "<workspaceRoot>"})
 ```
 
 This lists all test files affected by the current changes. Run those tests to validate.
@@ -88,7 +88,7 @@ Address any CRITICAL or HIGH findings before completing the cycle.
 
 **Step 1 — Find gaps:**
 ```
-mcp_milens_test_coverage_gaps({repo: "/home/user/project", limit: 10})
+mcp_milens_tests({mode: "gaps", repo: "/home/user/project", limit: 10})
 ```
 
 **Output:**
@@ -102,7 +102,7 @@ Coverage Gaps (untested exported symbols):
 
 **Step 2 — Test plan for high-risk:**
 ```
-mcp_milens_test_plan({name: "resolveLinks", repo: "/home/user/project"})
+mcp_milens_tests({mode: "plan", name: "resolveLinks", repo: "/home/user/project"})
 ```
 
 **Output:**
@@ -121,7 +121,7 @@ Test Plan for resolveLinks:
 
 **Step 4 — Verify:**
 ```
-mcp_milens_test_impact({repo: "/home/user/project"})
+mcp_milens_tests({mode: "impact", repo: "/home/user/project"})
 ```
 
 **Output:**
@@ -143,7 +143,7 @@ mcp_milens_review_pr({repo: "/home/user/project"})
 1. **Prioritize by risk, not alphabetically.** A HIGH-risk utility with 50 callers matters more than a LOW-risk getter nobody uses.
 2. **Don't test implementation details.** Follow the test plan's mock strategy — stub at module boundaries, not internal functions.
 3. **One behavior per test.** Each test should verify a single scenario (happy path, edge case, error) with a descriptive name.
-4. **Verify before commit.** Always run Step 4 (`test_impact`) and Step 5 (`review_pr`) before merging. Don't skip the quality gate.
+4. **Verify before commit.** Always run Step 4 (`tests (mode=impact)`) and Step 5 (`review_pr`) before merging. Don't skip the quality gate.
 5. **Re-check gaps after large refactors.** A refactor can move symbols from "tested" back to "untested."
 
 ## Quality Gate

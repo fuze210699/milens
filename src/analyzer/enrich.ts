@@ -1,5 +1,8 @@
 import { dirname } from 'node:path';
 import type { CodeSymbol, SymbolLink, SymbolRole } from '../types.js';
+import { isTestFile } from '../utils.js';
+
+const RUNTIME_LINK_TYPES = new Set(['calls', 'extends', 'implements']);
 
 /**
  * Phase 6 "Enrich" — compute role, heat, and zone metadata from the resolved graph.
@@ -29,10 +32,25 @@ export function enrichMetadata(input: EnrichInput): EnrichOutput {
   // Dedupe by (caller_file, callee_id): imports + calls from same file = 1 signal
   const seenPairs = new Set<string>();
 
+  const runtimeInFiles = new Map<string, Set<string>>();
+  const typeRefInFiles = new Map<string, Set<string>>();
+  const testInFiles = new Map<string, Set<string>>();
+  function addFanIn(map: Map<string, Set<string>>, toId: string, fromFile: string) {
+    let s = map.get(toId);
+    if (!s) { s = new Set(); map.set(toId, s); }
+    s.add(fromFile);
+  }
+
   for (const link of links) {
     if (link.type === 'contains') continue;
     const fromFile = symToFile.get(link.fromId);
     if (fromFile) {
+      if (RUNTIME_LINK_TYPES.has(link.type)) {
+        if (isTestFile(fromFile)) addFanIn(testInFiles, link.toId, fromFile);
+        else addFanIn(runtimeInFiles, link.toId, fromFile);
+      } else if (link.type === 'references') {
+        addFanIn(typeRefInFiles, link.toId, fromFile);
+      }
       const pairKey = `${fromFile}::${link.toId}`;
       if (seenPairs.has(pairKey)) continue;
       seenPairs.add(pairKey);
@@ -46,6 +64,12 @@ export function enrichMetadata(input: EnrichInput): EnrichOutput {
   for (const sym of symbols) {
     sym.role = classifyRole(sym, inCount.get(sym.id) ?? 0, outCount.get(sym.id) ?? 0);
     sym.heat = computeHeat(sym, inCount.get(sym.id) ?? 0, outCount.get(sym.id) ?? 0);
+    sym.importance = computeImportance(
+      sym,
+      runtimeInFiles.get(sym.id)?.size ?? 0,
+      typeRefInFiles.get(sym.id)?.size ?? 0,
+      testInFiles.get(sym.id)?.size ?? 0,
+    );
   }
 
   // ── Compute domains (graph-based clustering via link weights) ──
@@ -92,6 +116,16 @@ function computeHeat(sym: CodeSymbol, inDeg: number, outDeg: number): number {
   const exportBonus = sym.exported ? 10 : 0;
   const kindBonus = ['function', 'class', 'method'].includes(sym.kind) ? 5 : 0;
   return Math.min(fanInScore + fanOutScore + exportBonus + kindBonus, 100);
+}
+
+function computeImportance(sym: CodeSymbol, runtimeInFiles: number, typeRefInFiles: number, testInFiles: number): number {
+  const runtimeScore = Math.min(Math.log2(runtimeInFiles + 1) * 18, 55);
+  const typeRefScore = Math.min(Math.log2(typeRefInFiles + 1) * 4, 12);
+  const publicBoundary = sym.exported ? 12 : 0;
+  const kindSignal = ['function', 'method', 'class'].includes(sym.kind) ? 6 : 0;
+  const testSignal = testInFiles > 0 ? 8 : 0;
+  const entrypointSignal = sym.role === 'entrypoint' ? 7 : 0;
+  return Math.round(Math.min(runtimeScore + typeRefScore + publicBoundary + kindSignal + testSignal + entrypointSignal, 100));
 }
 
 function computeDomains(symbols: CodeSymbol[], links: SymbolLink[]): Map<string, string> {

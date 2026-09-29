@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SAFETY_TOOLS = ['impact', 'context', 'overview', 'guard_edit_check', 'edit_check', 'smart_context'];
+const SAFETY_TOOLS = ['impact', 'context', 'overview', 'guard_edit_check', 'edit_check'];
 
 interface Marker {
   lastCheckedAt: string;

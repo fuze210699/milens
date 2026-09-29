@@ -1,10 +1,10 @@
-import { readFileSync, statSync } from 'node:fs';
+import { statSync, existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { resolve, basename } from 'node:path';
+import { resolve, basename, join } from 'node:path';
 import { scanFiles, type ScannedFile } from './scanner.js';
 import { langForFile, supportedExtensions } from '../parser/languages.js';
 import { getParser, loadLanguage } from '../parser/loader.js';
-import { extractFromTree, clearQueryCache } from '../parser/extract.js';
+import { extractFromTree, clearQueryCache, createStableIdAllocator } from '../parser/extract.js';
 import { extractVueScript, extractVueTemplateRefs, extractVueCompositionApi, extractVueTemplateAst } from '../parser/lang-vue.js';
 import { extractHtmlScripts, extractHtmlRefs, extractHtmlLinks } from '../parser/lang-html.js';
 import { extractMarkdown } from '../parser/lang-md.js';
@@ -17,7 +17,7 @@ import { TfIdfProvider, EmbeddingStore, buildEmbeddingText } from '../store/vect
 import { ProgressPhase, type ProgressReporter } from '../ui/progress.js';
 import type { CodeSymbol, ExtractionResult, RawImport, RawCall, RawHeritage, RawReExport, RawTypeBinding, RawAssignmentBinding, RawReturnType, RawCallResultBinding, RawLocalBinding, AnalysisStats } from '../types.js';
 import type Parser from 'web-tree-sitter';
-import type { LangSpec } from '../parser/extract.js';
+import type { LangSpec, StableIdAllocator } from '../parser/extract.js';
 
 // ── Cross-phase Tree Cache ──
 // Caches parsed syntax trees between parse and resolution phases
@@ -136,6 +136,8 @@ function scanFilesWithFilter(rootPath: string, filePaths: string[], verbose = fa
   return results;
 }
 
+const ID_SCHEME = 'stable-v3';
+
 export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const t0 = Date.now();
   const rootPath = resolve(opts.rootPath);
@@ -143,11 +145,17 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const aliases = opts.aliases ?? {};
   const reporter = opts.onProgress;
 
+  const wholeRepoRun = !opts.files || opts.files.length === 0;
+  if (wholeRepoRun && db.getMeta('id_scheme') !== ID_SCHEME && !opts.force) {
+    opts = { ...opts, force: true };
+  }
+
   // Phase 1: Scan files (or use explicit file list for incremental)
   const files = opts.files && opts.files.length > 0
     ? scanFilesWithFilter(rootPath, opts.files, opts.verbose)
     : scanFiles(rootPath, opts.verbose);
   if (opts.verbose) console.error(`[scan] Found ${files.length} source files`);
+  const livePaths = new Set(files.map(f => f.relativePath));
 
   // Phase 2: Group files by language for cache-friendly processing
   const langGroups = new Map<string, FileWithSpec[]>();
@@ -178,8 +186,11 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const allLocalBindings: RawLocalBinding[] = [];
   const resolvedImportPaths = new Map<string, string>();
   const parsedFiles = new Set<string>();
+  const parsedSources = new Map<string, string>();
+  const parsedFacts = new Map<string, any>();
   const importCache = new ImportResolveCache();
   let filesParsed = 0;
+  let parseErrorFiles = 0;
 
   // Count total files for progress
   let totalToParse = 0;
@@ -215,7 +226,14 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
           }
         }
 
-        db.upsertFileHash(file.relativePath, source);
+        parsedFacts.set(file.relativePath, {
+          imports: result.imports,
+          calls: [], heritage: [], reExports: [], typeBindings: [],
+          assignmentBindings: [], returnTypes: [], callResultBindings: [], localBindings: [],
+          hasParseError: false,
+        });
+
+        parsedSources.set(file.relativePath, source);
         parsedFiles.add(file.relativePath);
         filesParsed++;
         reporter?.tick(file.relativePath);
@@ -235,8 +253,7 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
     // to bound peak memory for large repos
     for (const file of group) {
       try {
-        const stat = readFileSync(file.absolutePath).length;
-        file.size = stat;
+        file.size = statSync(file.absolutePath).size;
       } catch { file.size = 0; }
     }
     const chunks = buildChunks(group);
@@ -272,6 +289,19 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
           allCallResultBindings.push(...result.callResultBindings);
           allLocalBindings.push(...result.localBindings);
 
+          parsedFacts.set(file.relativePath, {
+            imports: result.imports,
+            calls: result.calls,
+            heritage: result.heritage,
+            reExports: result.reExports,
+            typeBindings: result.typeBindings,
+            assignmentBindings: result.assignmentBindings,
+            returnTypes: result.returnTypes,
+            callResultBindings: result.callResultBindings,
+            localBindings: result.localBindings,
+            hasParseError: Boolean(result.hasParseError),
+          });
+
           // Resolve import paths eagerly (cached)
           for (const imp of result.imports) {
             const resolved = importCache.resolve(file.spec, imp.modulePath, imp.filePath, rootPath, aliases);
@@ -289,11 +319,12 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
             }
           }
 
-          db.upsertFileHash(file.relativePath, source);
+          parsedSources.set(file.relativePath, source);
           parsedFiles.add(file.relativePath);
           filesParsed++;
+          if (result.hasParseError) parseErrorFiles++;
           reporter?.tick(file.relativePath);
-          if (opts.verbose) console.error(`[parse] ${file.relativePath}: ${result.symbols.length} symbols`);
+          if (opts.verbose) console.error(`[parse] ${file.relativePath}: ${result.symbols.length} symbols${result.hasParseError ? ' (⚠ parse errors)' : ''}`);
         } catch (err) {
           if (opts.verbose) console.error(`[error] ${file.relativePath}: ${err}`);
         }
@@ -304,17 +335,37 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
 
   reporter?.endPhase();
 
-  // Phase 4: Load unchanged files' symbols for cross-file resolution
-  if (!opts.force) {
-    for (const [, group] of langGroups) {
-      for (const file of group) {
-        if (!parsedFiles.has(file.relativePath)) {
-          const existing = db.getSymbolsByFile(file.relativePath);
-          if (existing.length > 0) {
-            symbolsByFile.set(file.relativePath, existing);
-            allSymbols.push(...existing);
-          }
-        }
+  // Phase 4: Load unchanged files' symbols AND facts from the store for complete resolution
+  const fullRebuild = opts.force && wholeRepoRun;
+  if (!fullRebuild) {
+    for (const [path, facts] of db.getAllFileFacts()) {
+      if (parsedFiles.has(path)) continue;
+      if (wholeRepoRun ? !livePaths.has(path) : !existsSync(join(rootPath, path))) continue;
+      const existing = db.getSymbolsByFile(path);
+      if (existing.length > 0) {
+        symbolsByFile.set(path, existing);
+        allSymbols.push(...existing);
+      }
+      if (!facts) continue;
+      if (facts.hasParseError) parseErrorFiles++;
+      if (facts.imports) allImports.push(...facts.imports);
+      if (facts.calls) allCalls.push(...facts.calls);
+      if (facts.heritage) allHeritage.push(...facts.heritage);
+      if (facts.reExports) allReExports.push(...facts.reExports);
+      if (facts.typeBindings) allTypeBindings.push(...facts.typeBindings);
+      if (facts.assignmentBindings) allAssignmentBindings.push(...facts.assignmentBindings);
+      if (facts.returnTypes) allReturnTypes.push(...facts.returnTypes);
+      if (facts.callResultBindings) allCallResultBindings.push(...facts.callResultBindings);
+      if (facts.localBindings) allLocalBindings.push(...facts.localBindings);
+      const spec = langForFile(path);
+      if (!spec) continue;
+      for (const imp of facts.imports ?? []) {
+        const resolved = importCache.resolve(spec, imp.modulePath, imp.filePath, rootPath, aliases);
+        if (resolved) resolvedImportPaths.set(`${imp.filePath}::${imp.modulePath}`, resolved);
+      }
+      for (const re of facts.reExports ?? []) {
+        const resolved = importCache.resolve(spec, re.modulePath, re.filePath, rootPath, aliases);
+        if (resolved) resolvedImportPaths.set(`${re.filePath}::${re.modulePath}`, resolved);
       }
     }
   }
@@ -455,29 +506,20 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
   const isFullScan = (!opts.files || opts.files.length === 0) &&
     (opts.force === true || (totalToParse > 0 && parsedFiles.size === totalToParse));
   db.transaction(() => {
-    if (opts.force) {
-      if (opts.files && opts.files.length > 0) {
-        db.clearFiles(opts.files);
-      } else {
-        db.clear();
-      }
+    if (fullRebuild) {
+      db.clear();
     } else {
       for (const fp of parsedFiles) db.deleteFileData(fp);
+      db.clearLinks();
     }
     for (const sym of allSymbols) {
-      if (opts.force || parsedFiles.has(sym.filePath)) db.insertSymbol(sym);
-    }
-    // Incremental: update role/heat for unchanged files (enrichment recomputes all)
-    if (!opts.force) {
-      for (const sym of allSymbols) {
-        if (!parsedFiles.has(sym.filePath)) {
-          db.updateSymbolMetadata(sym.id, sym.role ?? 'leaf', sym.heat ?? 0);
-        }
-      }
+      if (fullRebuild || parsedFiles.has(sym.filePath) || sym.filePath === '(external)') db.insertSymbol(sym);
     }
     for (const link of links) db.insertLink(link);
+    for (const [fp, src] of parsedSources) db.upsertFileHash(fp, src);
+    for (const [fp, facts] of parsedFacts) db.setFileFacts(fp, JSON.stringify(facts));
     for (const [filePath, zone] of enriched.zones) db.setFileZone(filePath, zone);
-    if (isFullScan) {
+    if (isFullScan || (!fullRebuild && parsedFiles.size > 0)) {
       db.setMeta('unresolved_imports', String(resolution.unresolvedImports));
       db.setMeta('unresolved_calls', String(resolution.unresolvedCalls));
       db.setMeta('external_imports', String(resolution.externalImports));
@@ -485,16 +527,48 @@ export async function analyze(opts: EngineOptions): Promise<AnalysisStats> {
       db.setMeta('test_files', String(testFiles.size));
       db.setMeta('tested_symbols', String(testedSymbolIds.size));
       db.setMeta('exported_production_symbols', String(exportedProduction.length));
+      db.setMeta('parse_error_files', String(parseErrorFiles));
+      db.setMeta('id_scheme', ID_SCHEME);
     }
-    db.rebuildSearch();
+    if (isFullScan) db.rebuildSearch();
   });
   reporter?.endPhase();
 
+  if (!fullRebuild) {
+    const fullSymbols = db.getAllSymbols();
+    const fullLinks = db.getAllLinks();
+    const reEnriched = enrichMetadata({ symbols: fullSymbols, links: fullLinks });
+    db.transaction(() => {
+      for (const sym of fullSymbols) {
+        db.updateSymbolMetadata(sym.id, sym.role ?? 'leaf', sym.heat ?? 0, sym.importance ?? 0);
+      }
+      for (const [filePath, zone] of reEnriched.zones) db.setFileZone(filePath, zone);
+    });
+  }
+
   // Prune stale file_hashes for deleted files (full-analyze self-healing only)
-  if (isFullScan) {
+  if (wholeRepoRun && files.length === 0) {
+    db.transaction(() => {
+      db.clear();
+      db.getRawDb().exec('DELETE FROM file_facts');
+      db.getRawDb().exec('DELETE FROM file_hashes');
+      db.pruneOrphanEmbeddings();
+    });
+  } else if (isFullScan) {
     const fileRelativePaths = files.map(f => f.relativePath);
     const prunedCount = db.pruneOrphanFileHashes(fileRelativePaths);
     if (opts.verbose && prunedCount > 0) console.error(`[prune] Removed ${prunedCount} stale file_hashes entries`);
+    const prunedFacts = db.pruneOrphanFileFacts(fileRelativePaths);
+    if (opts.verbose && prunedFacts > 0) console.error(`[prune] Removed ${prunedFacts} stale file_facts entries`);
+    const prunedEmbeddings = db.pruneOrphanEmbeddings();
+    if (opts.verbose && prunedEmbeddings > 0) console.error(`[prune] Removed ${prunedEmbeddings} orphaned embeddings`);
+  } else if (wholeRepoRun) {
+    const fileRelativePaths = files.map(f => f.relativePath);
+    const prunedSymbols = db.pruneFilesNotIn(fileRelativePaths);
+    db.pruneOrphanFileHashes(fileRelativePaths);
+    db.pruneOrphanFileFacts(fileRelativePaths);
+    db.pruneOrphanEmbeddings();
+    if (opts.verbose && prunedSymbols > 0) console.error(`[prune] Removed ${prunedSymbols} symbols from deleted files`);
   }
 
   // Phase 8: Generate embeddings (optional)
@@ -557,6 +631,7 @@ async function parseFile(
 ): Promise<ExtractionResult | null> {
   let code = source;
   let lineOffset = 0;
+  const idAlloc = createStableIdAllocator(filePath);
 
   // HTML: extract inline <script> blocks, parse as JS, merge refs
   if (spec.id === 'html') {
@@ -566,7 +641,7 @@ async function parseFile(
 
     // Parse HTML with tree-sitter to get calls (class refs, etc.)
     const htmlTree = parser.parse(source);
-    const treeResult = extractFromTree(htmlTree, lang, spec, filePath);
+    const treeResult = extractFromTree(htmlTree, lang, spec, filePath, idAlloc);
     result.symbols.push(...treeResult.symbols);
     result.calls.push(...treeResult.calls);
     result.imports.push(...treeResult.imports);
@@ -587,7 +662,7 @@ async function parseFile(
     const scripts = extractHtmlScripts(source);
     for (const script of scripts) {
       const tree = jsParser.parse(script.content);
-      const extracted = extractFromTree(tree, jsLang, jsSpec, filePath);
+      const extracted = extractFromTree(tree, jsLang, jsSpec, filePath, idAlloc);
 
       // Adjust line numbers for script offset
       for (const sym of extracted.symbols) {
@@ -657,7 +732,7 @@ async function parseFile(
 
   const tree = parser.parse(code);
   treeCache.set(filePath, tree);
-  const result = extractFromTree(tree, lang, spec, filePath);
+  const result = extractFromTree(tree, lang, spec, filePath, idAlloc);
 
   // Adjust line numbers for Vue offset
   if (lineOffset > 0) {
@@ -677,7 +752,7 @@ async function parseFile(
     // Try AST-based parsing with tree-sitter-html
     try {
       const htmlParser = await getParser('tree-sitter-html');
-      const astResult = extractVueTemplateAst(htmlParser, source, filePath);
+      const astResult = extractVueTemplateAst(htmlParser, source, filePath, idAlloc);
       templateCalls = astResult.calls;
       templateSymbols = astResult.symbols;
     } catch {
@@ -698,7 +773,7 @@ async function parseFile(
     // Synthesize a component symbol from filename (e.g. CalendarView.vue → CalendarView)
     const fileName = filePath.split('/').pop()?.replace(/\.vue$/, '');
     if (fileName) {
-      const componentId = `${filePath}#class:${fileName}:1`;
+      const componentId = idAlloc.make('class', fileName);
       const componentSym: CodeSymbol = {
         id: componentId,
         name: fileName,
@@ -719,7 +794,7 @@ async function parseFile(
     }
 
     // Extract Composition API symbols: defineProps child props, defineEmits event names
-    const compApiSyms = extractVueCompositionApi(code, filePath, lineOffset);
+    const compApiSyms = extractVueCompositionApi(code, filePath, lineOffset, idAlloc, result.symbols);
     if (compApiSyms.length > 0) {
       const existingIds = new Set(result.symbols.map(s => s.id));
       for (const sym of compApiSyms) {
@@ -730,7 +805,7 @@ async function parseFile(
     }
 
     // Extract CSS class/ID selectors from <style> blocks
-    const styleSymbols = extractVueStyles(source, filePath);
+    const styleSymbols = extractVueStyles(source, filePath, idAlloc);
     if (styleSymbols.length > 0) {
       const existingIds = new Set(result.symbols.map(s => s.id));
       for (const sym of styleSymbols) {
@@ -771,7 +846,7 @@ async function parseFile(
 
         for (const name of ac.names) {
           if (ac.type === 'attr_accessor' || ac.type === 'attr_reader') {
-            const id = `${filePath}#method:${name}:${ac.line}`;
+            const id = idAlloc.make('method', name);
             if (!result.symbols.some(s => s.id === id)) {
               result.symbols.push({
                 id,
@@ -787,7 +862,7 @@ async function parseFile(
           }
           if (ac.type === 'attr_accessor' || ac.type === 'attr_writer') {
             const writerName = `${name}=`;
-            const writerId = `${filePath}#method:${writerName}:${ac.line}`;
+            const writerId = idAlloc.make('method', writerName);
             if (!result.symbols.some(s => s.id === writerId)) {
               result.symbols.push({
                 id: writerId,
@@ -834,7 +909,7 @@ async function parseFile(
           s => (s.kind === 'class' || s.kind === 'module') &&
                s.startLine <= lineNum && s.endLine >= lineNum
         );
-        const scopeId = `${filePath}#method:${scopeName}:${lineNum}`;
+        const scopeId = idAlloc.make('method', scopeName);
         if (!result.symbols.some(s => s.id === scopeId)) {
           result.symbols.push({
             id: scopeId,
@@ -908,12 +983,12 @@ async function parseFile(
         const oldName = sym.name;
         const newName = `.${oldName}`;
         sym.name = newName;
-        sym.id = sym.id.replace(`#variable:${oldName}:`, `#variable:${newName}:`);
+        sym.id = sym.id.replace(`#variable:${oldName}`, `#variable:${newName}`);
       } else if (idNames.has(sym.name)) {
         const oldName = sym.name;
         const newName = `#${oldName}`;
         sym.name = newName;
-        sym.id = sym.id.replace(`#variable:${oldName}:`, `#variable:${newName}:`);
+        sym.id = sym.id.replace(`#variable:${oldName}`, `#variable:${newName}`);
       }
     }
   }
@@ -966,7 +1041,7 @@ function parseDocFile(source: string, filePath: string, spec: LangSpec): Extract
   return null;
 }
 
-function extractVueStyles(source: string, filePath: string): CodeSymbol[] {
+function extractVueStyles(source: string, filePath: string, alloc: StableIdAllocator): CodeSymbol[] {
   const symbols: CodeSymbol[] = [];
   const styleRe = /<style(\s+[^>]*)?>([\s\S]*?)<\/style>/gi;
   let m: RegExpExecArray | null;
@@ -986,7 +1061,7 @@ function extractVueStyles(source: string, filePath: string): CodeSymbol[] {
       const clsLine = lineOffset + content.slice(0, cm.index).split('\n').length - 1;
       const name = `.${cm[1]}`;
       symbols.push({
-        id: `${filePath}#variable:${name}:${clsLine}`,
+        id: alloc.make('variable', name),
         name,
         kind: 'variable',
         filePath,
@@ -1003,7 +1078,7 @@ function extractVueStyles(source: string, filePath: string): CodeSymbol[] {
       const idLine = lineOffset + content.slice(0, im.index).split('\n').length - 1;
       const name = `#${im[1]}`;
       symbols.push({
-        id: `${filePath}#variable:${name}:${idLine}`,
+        id: alloc.make('variable', name),
         name,
         kind: 'variable',
         filePath,

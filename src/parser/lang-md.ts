@@ -61,6 +61,13 @@ export function extractMarkdown(source: string, filePath: string): ExtractionRes
     }
   }
 
+  const sectionCounts = new Map<string, number>();
+  const sectionIds = headings.map(h => {
+    const n = (sectionCounts.get(h.name) ?? 0) + 1;
+    sectionCounts.set(h.name, n);
+    return n === 1 ? `${filePath}#section:${h.name}` : `${filePath}#section:${h.name}:${n}`;
+  });
+
   // Build symbols from headings with proper endLine and parentId
   for (let i = 0; i < headings.length; i++) {
     const h = headings[i];
@@ -78,13 +85,13 @@ export function extractMarkdown(source: string, filePath: string): ExtractionRes
     let parentId: string | undefined;
     for (let j = i - 1; j >= 0; j--) {
       if (headings[j].level < h.level) {
-        parentId = `${filePath}#section:${headings[j].name}:${headings[j].line}`;
+        parentId = sectionIds[j];
         break;
       }
     }
 
     symbols.push({
-      id: `${filePath}#section:${h.name}:${h.line}`,
+      id: sectionIds[i],
       name: h.name,
       kind: 'section',
       filePath,

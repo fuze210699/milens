@@ -191,14 +191,14 @@ describe('AnnotationStore', () => {
       expect(results.length).toBe(2);
     });
 
-    it('boosts confidence on recall', () => {
-      const ann = store.annotate('boostRecall', 'note', 'test recall boost');
+    it('recall is a pure read and does not mutate confidence', () => {
+      const ann = store.annotate('boostRecall', 'note', 'test recall purity');
       expect(ann.confidence).toBe(0.5);
 
       store.recall({ symbol: 'boostRecall', key: 'note' });
 
       const results = store.recall({ symbol: 'boostRecall', key: 'note' });
-      expect(results[0].confidence).toBeCloseTo(0.55, 5);
+      expect(results[0].confidence).toBe(0.5);
     });
   });
 

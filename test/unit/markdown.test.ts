@@ -112,12 +112,19 @@ describe('Markdown extractor', () => {
     expect(result.symbols.map(s => s.name)).toEqual(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
   });
 
-  it('generates correct symbol IDs', () => {
+  it('generates stable, line-independent symbol IDs', () => {
     const source = '# Title\n## Section\n';
     const result = extractMarkdown(source, 'docs/guide.md');
 
-    expect(result.symbols[0].id).toBe('docs/guide.md#section:Title:1');
-    expect(result.symbols[1].id).toBe('docs/guide.md#section:Section:2');
+    expect(result.symbols[0].id).toBe('docs/guide.md#section:Title');
+    expect(result.symbols[1].id).toBe('docs/guide.md#section:Section');
+  });
+
+  it('disambiguates duplicate headings by occurrence', () => {
+    const source = '# Overview\ntext\n# Overview\nmore\n';
+    const result = extractMarkdown(source, 'docs/guide.md');
+    const ids = result.symbols.filter(s => s.name === 'Overview').map(s => s.id);
+    expect(ids).toEqual(['docs/guide.md#section:Overview', 'docs/guide.md#section:Overview:2']);
   });
 
   it('does not extract links inside code blocks', () => {

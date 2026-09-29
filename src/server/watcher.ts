@@ -158,16 +158,19 @@ export class FileWatcher {
       await analyze({
         rootPath: this.rootPath,
         dbPath: config?.dbPath ?? this.dbPath,
-        force: true,
-        files,
+        force: false,
         verbose: false,
       });
 
-      this.log('info', `[milens:watcher] Index updated (${files.length} file(s))`);
+      this.log('info', `[milens:watcher] Index updated (${files.length} file(s) changed; fact-based incremental)`);
     } catch (err: any) {
       this.log('error', `[milens:watcher] Re-index failed: ${err.message}`);
     } finally {
       this.reindexing = false;
+      if (this.changedFiles.size > 0) {
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(() => this.triggerReindex(), this.debounceMs);
+      }
     }
   }
 }

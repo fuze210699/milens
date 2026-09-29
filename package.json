@@ -1,7 +1,7 @@
 {
   "name": "milens",
-  "version": "0.7.3",
-  "description": "AI-DOS: Code Intelligence Platform — knowledge graphs, security scanning, and closed-loop AI development. 43 MCP tools, 6 sub-agent prompts, 190 security rules, 7 CLI workflows.",
+  "version": "0.7.4",
+  "description": "AI-DOS: Code Intelligence Platform — knowledge graphs, security scanning, and closed-loop AI development via MCP tools, sub-agent prompts, security rules, and CLI workflows.",
   "type": "module",
   "bin": {
     "milens": "./dist/cli.js"
@@ -22,6 +22,9 @@
     "prelint": "node scripts/gen-build-info.mjs",
     "lint": "tsc --noEmit && node scripts/check-console.mjs",
     "version": "node scripts/sync-version.mjs",
+    "prepare": "husky",
+    "changelog": "git-cliff --config cliff.toml -o CHANGELOG.md",
+    "changelog:preview": "git-cliff --config cliff.toml --unreleased --strip header",
     "prepublishOnly": "npm run build && npm test && node scripts/check-console.mjs",
     "build:standalone": "node scripts/build-standalone.mjs",
     "build:standalone:all": "node scripts/build-standalone.mjs --target all",
@@ -68,16 +71,17 @@
     "tree-sitter-wasms": "^0.1.12",
     "web-tree-sitter": "^0.24.7"
   },
-  "optionalDependencies": {
-    "@xenova/transformers": "^2.17.2"
-  },
   "license": "MIT",
   "devDependencies": {
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
     "@types/better-sqlite3": "^7.0.0",
     "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^4.1.7",
     "@yao-pkg/pkg": "^6.14.2",
     "esbuild": "^0.25.12",
+    "git-cliff": "^2.14.2",
+    "husky": "^9.1.7",
     "tsx": "^4.0.0",
     "typescript": "^5.4.0",
     "vitest": "^4.0.0"

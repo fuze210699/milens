@@ -34,16 +34,13 @@ function isFixtureOrTest(file: string): boolean {
     /(^|[\/\\])fixtures[\/\\]/.test(file);
 }
 
+const SOURCE_CODE_EXT_RE = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|php|java|vue)$/i;
+
 function isNonSourceFile(file: string): boolean {
-  // Match "src/" as a path segment anywhere, not just a literal prefix —
-  // monorepos commonly nest it under a package dir (backend/src/, frontend/src/,
-  // packages/foo/src/), and a strict prefix check silently excluded every
-  // changed file in those layouts, making reviewPr report "no changes" even
-  // when real source files were modified.
-  if (!/(^|\/)src\//.test(file)) return true;
-  return /\.(md|json|lock|yml|yaml|toml)$/.test(file) ||
-    /\/\.milens\//.test(file) ||
-    /\/node_modules\//.test(file);
+  const norm = file.replace(/\\/g, '/');
+  if (/(^|\/)(node_modules|dist|build|coverage|__pycache__|\.venv|\.milens|\.git)\//.test(norm)) return true;
+  if (/\.(md|json|lock|yml|yaml|toml)$/.test(norm)) return true;
+  return !SOURCE_CODE_EXT_RE.test(norm);
 }
 
 // ── Git helpers ──

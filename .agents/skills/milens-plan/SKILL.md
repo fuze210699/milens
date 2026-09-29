@@ -14,12 +14,12 @@ Research the codebase end-to-end before writing code: understand structure, trac
 | `mcp_milens_codebase_summary` | High-level project overview (languages, file count, domain count) |
 | `mcp_milens_domains` | Module clusters showing logical groupings |
 | `mcp_milens_routes` | API endpoints inventory with handler mappings |
-| `mcp_milens_smart_context` | Intent-aware symbol analysis (edit intent) |
+| `mcp_milens_overview` | Intent-aware symbol analysis (edit intent) |
 | `mcp_milens_edit_check` | Pre-edit safety: callers, export status, re-export chains, warnings |
 | `mcp_milens_trace` | Execution flow from entrypoints to target |
 | `mcp_milens_impact` | Blast radius: what breaks if target changes |
-| `mcp_milens_test_plan` | Mock strategy + test scenarios for a symbol |
-| `mcp_milens_test_coverage_gaps` | Related untested symbols |
+| `mcp_milens_tests` | Mock strategy + test scenarios for a symbol |
+| `mcp_milens_tests` | Related untested symbols |
 
 > **CRITICAL:** All milens MCP tool calls MUST include the `repo` parameter set to the **absolute path of the workspace root**.
 
@@ -67,7 +67,7 @@ Useful when the change touches:
 Zoom in on the specific symbol to change.
 
 ```
-mcp_milens_smart_context({name: "<symbolName>", intent: "edit", repo: "<workspaceRoot>"})
+mcp_milens_overview({name: "<symbolName>", intent: "edit", repo: "<workspaceRoot>"})
 ```
 
 The `edit` intent returns: callers, export status, and immediate blast radius — only what matters for editing.
@@ -116,7 +116,7 @@ Shows all symbols that break if the target changes, up to the specified depth.
 Plan the testing approach.
 
 ```
-mcp_milens_test_plan({name: "<symbolName>", repo: "<workspaceRoot>"})
+mcp_milens_tests({mode: "plan", name: "<symbolName>", repo: "<workspaceRoot>"})
 ```
 
 Covers:
@@ -129,7 +129,7 @@ Covers:
 Check for related symbols that lack test coverage.
 
 ```
-mcp_milens_test_coverage_gaps({repo: "<workspaceRoot>", limit: 10})
+mcp_milens_tests({mode: "gaps", repo: "<workspaceRoot>", limit: 10})
 ```
 
 If neighboring symbols are untested, consider adding tests as part of the change.
@@ -172,7 +172,7 @@ mcp_milens_domains({repo: "/home/user/project"})
 
 **Step 4:**
 ```
-mcp_milens_smart_context({name: "loginHandler", intent: "edit", repo: "/home/user/project"})
+mcp_milens_overview({name: "loginHandler", intent: "edit", repo: "/home/user/project"})
 ```
 
 **Output:** 3 callers (Express route, rate limiter middleware, integration test), no re-exports.
@@ -200,7 +200,7 @@ mcp_milens_impact({target: "loginHandler", depth: 3, repo: "/home/user/project"}
 
 **Step 8:**
 ```
-mcp_milens_test_plan({name: "loginHandler", repo: "/home/user/project"})
+mcp_milens_tests({mode: "plan", name: "loginHandler", repo: "/home/user/project"})
 ```
 
 **Output:** Mock `tokenService`, `userStore`. 4 test scenarios: valid login, invalid password, rate limit exceeded, database failure.
@@ -210,7 +210,7 @@ mcp_milens_test_plan({name: "loginHandler", repo: "/home/user/project"})
 ## Best Practices
 
 1. **Never skip impact analysis.** Even a "small" change can ripple through re-export chains. `impact` catches what intuition misses.
-2. **Use `edit` intent for `smart_context`** when planning edits — it omits irrelevant detail and focuses on callers and blast radius.
+2. **Use `edit` intent for `overview (intent=...)`** when planning edits — it omits irrelevant detail and focuses on callers and blast radius.
 3. **Stop at depth-3 for impact.** Deeper assessment rarely changes the implementation strategy but adds noise.
 4. **Trace before planning.** Understanding the execution path prevents "add rate limiter after JWT decode" mistakes where ordering matters.
 5. **Write the plan before the code.** The structured plan from Step 10 is the deliverable. Implementation follows the plan — not the other way around.
@@ -220,8 +220,8 @@ mcp_milens_test_plan({name: "loginHandler", repo: "/home/user/project"})
 | Criteria | Pass | Fail |
 |---|---|---|
 | Codebase overview | All 3 overview tools succeed (summary, domains, routes) | Any tool fails or returns empty |
-| Target analysis | `smart_context` + `edit_check` both run | Either tool skipped for the target symbol |
+| Target analysis | `overview (intent=...)` + `edit_check` both run | Either tool skipped for the target symbol |
 | Impact assessment | `impact` at depth 3 completed, dependents counted | Impact not run or depth < 3 |
 | Blast radius check | < 5 depth-1 dependents OR user warned and confirmed | > 5 depth-1 dependents without user confirmation |
-| Test plan | `test_plan` covers happy path, edge cases, and errors | Less than 3 scenarios in the plan |
+| Test plan | `tests (mode=plan)` covers happy path, edge cases, and errors | Less than 3 scenarios in the plan |
 | Implementation plan | All 7 sections of the plan filled | Missing sections or incomplete analysis |

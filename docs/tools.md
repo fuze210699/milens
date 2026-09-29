@@ -21,7 +21,7 @@ Milens exposes **43 MCP tools** for AI coding agents. All tools accept an option
 | `detect_changes` | `{ref: "HEAD"}` | `[modified files] → only actually-changed symbols + dependents` |
 | `find_dead_code` | `{limit: 30}` | `[symbol] [kind] file:line — 0 references` |
 | `overview` | `{name: "Database"}` | `context + impact + grep — all in one call` |
-| `pre_commit_check` | `{repo}` | `Pre-commit risk: review_pr + dead code + coverage gaps` |
+| `detect_changes (mode=precommit)` | `{repo}` | `Pre-commit risk: review_pr + dead code + coverage gaps` |
 | `compare_impact` | `{name, action: "snapshot" | "compare"}` | `Before/after: new/removed dependents, heat changes` |
 
 ## Orchestration
@@ -34,7 +34,7 @@ Milens exposes **43 MCP tools** for AI coding agents. All tools accept an option
 
 | Tool | Input | Output |
 |---|---|---|
-| `smart_context` | `{name: "analyze", intent: "edit"}` | Intent-aware: callers + deps + risk + test status |
+| `overview (intent=...)` | `{name: "analyze", intent: "edit"}` | Intent-aware: callers + deps + risk + test status |
 | `trace` | `{to: "searchSymbols", depth: 8}` | `Entry → Router → Controller → Service → Target` |
 | `routes` | `{framework: "express"}` | `[GET/POST] /api/endpoint → handlerFunction` |
 | `explain_relationship` | `{from: "A", to: "B"}` | `A → X → Y → B (3 steps)` |
@@ -54,16 +54,16 @@ Milens exposes **43 MCP tools** for AI coding agents. All tools accept an option
 
 | Tool | Input | Output |
 |---|---|---|
-| `test_plan` | `{name: "createUser"}` | `mock strategy (stub/spy/fake) + suggested tests (3+ scenarios)` |
-| `test_generate` | `{symbol: "createUser"}` | `Generates test file with framework detection (vitest/jest/mocha/pytest)` |
-| `test_coverage_gaps` | `{limit: 20}` | `[untested symbol] [risk: CRITICAL/HIGH/MEDIUM/LOW]` |
-| `test_impact` | `{ref: "HEAD"}` | `[changed symbol] → [test files to run]` |
+| `tests (mode=plan)` | `{name: "createUser"}` | `mock strategy (stub/spy/fake) + suggested tests (3+ scenarios)` |
+| `tests (mode=generate)` | `{symbol: "createUser"}` | `Generates test file with framework detection (vitest/jest/mocha/pytest)` |
+| `tests (mode=gaps)` | `{limit: 20}` | `[untested symbol] [risk: CRITICAL/HIGH/MEDIUM/LOW]` |
+| `tests (mode=impact)` | `{ref: "HEAD"}` | `[changed symbol] → [test files to run]` |
 
 ## Automation
 
 | Tool | Input | Output |
 |---|---|---|
-| `fix_apply` | `{ruleId, file, line, confirm}` | `Applies security fix + creates backup in .milens/backups/` |
+| `security_scan (mode=fix)` | `{ruleId, file, line, confirm}` | `Applies security fix + creates backup in .milens/backups/` |
 
 ## Memory & Sessions
 

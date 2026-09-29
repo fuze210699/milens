@@ -14,19 +14,15 @@ function resolveInsideRoot(root: string, file: string): string | null {
   return fullPath;
 }
 
+function redactSecret(s: string): string {
+  if (s.length <= 8) return '****';
+  return `${s.slice(0, 2)}****${s.slice(-2)} [redacted]`;
+}
+
 export function registerSecurityTools(server: McpServer, deps: Deps): void {
   const { getDb } = deps;
 
-  server.tool(
-    'security_scan',
-    'Scan codebase for security vulnerabilities using 190+ built-in rules across 25 categories. Replaces multiple manual grep() calls. Categories: secrets, injection, rce, xss, deserialization, ssrf, xxe, path-traversal, file-upload, unicode, dangerous, config, data-leak, crypto, auth, jwt, cors-headers, dependency, cloud, docker, kubernetes, iac, business-logic, api-security, misc, file-access.',
-    {
-      scope: z.enum(['all', 'secrets', 'injection', 'rce', 'xss', 'deserialization', 'ssrf', 'xxe', 'path-traversal', 'file-upload', 'unicode', 'dangerous', 'config', 'data-leak', 'crypto', 'auth', 'jwt', 'cors-headers', 'dependency', 'cloud', 'docker', 'kubernetes', 'iac', 'business-logic', 'api-security', 'misc', 'file-access']).optional().default('all').describe('Scan scope'),
-      repo: z.string().optional().describe('Repository root path'),
-      severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional().describe('Minimum severity filter'),
-      limit: z.number().optional().default(50).describe('Max findings'),
-    },
-    async ({ scope, repo, severity, limit }) => {
+  const runScan = async ({ scope, repo, severity, limit }: { scope: string; repo?: string; severity?: string; limit: number }) => {
       const { db, root } = getDb(repo);
       const rules = loadRules();
 
@@ -75,37 +71,22 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
       const { resolve: resolvePath } = await import('node:path');
 
       const findings: any[] = [];
-      const byCategory: Record<string, number> = {};
-      const bySeverity: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+
+      const compiledRules = filtered.map(rule => ({
+        rule,
+        includeRes: rule.fileGlob ? rule.fileGlob.split(',').map(g => globToRegex(g.trim())) : [],
+        excludeRes: rule.excludeGlob ? rule.excludeGlob.split(',').map(g => globToRegex(g.trim())) : [],
+      }));
+      const matchesAny = (res: RegExp[], f: string): boolean => res.some(re => re.test(f) || re.test('/' + f));
 
       for (const file of files) {
         const fullPath = resolvePath(root, file);
         if (!es(fullPath)) continue;
 
-        // Apply excludeGlob from each rule's exclusion pattern
-        let shouldExclude = false;
-        for (const rule of filtered) {
-          if (rule.excludeGlob) {
-            const excludePatterns = rule.excludeGlob.split(',');
-            for (const pattern of excludePatterns) {
-              const regex = globToRegex(pattern.trim());
-              if (regex.test(file) || regex.test('/' + file)) {
-                shouldExclude = true;
-                break;
-              }
-            }
-          }
-          if (shouldExclude) break;
-        }
-        if (shouldExclude) continue;
-
-        // Skip files that don't match rule fileGlobs (simple check)
-        const applicableRules = filtered.filter(r => {
-          if (!r.fileGlob) return true;
-          // Simple glob: just check extension
-          const ext = r.fileGlob.replace('**/*.', '').replace('**/*', '');
-          return file.endsWith(ext) || r.fileGlob === '**/*';
-        });
+        const applicableRules = compiledRules
+          .filter(c => !matchesAny(c.excludeRes, file))
+          .filter(c => c.includeRes.length === 0 || matchesAny(c.includeRes, file))
+          .map(c => c.rule);
 
         if (applicableRules.length === 0) continue;
 
@@ -145,6 +126,8 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
                   context = context.slice(0, MAX_CONTEXT_LEN) + '... [truncated]';
                 }
 
+                const isSecret = rule.category === 'secrets';
+                const rawMatch = match[0];
                 findings.push({
                   ruleId: rule.id,
                   category: rule.category,
@@ -152,13 +135,12 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
                   owasp: rule.owasp,
                   file,
                   line: lineNum,
-                  match: match[0].length > 100 ? match[0].slice(0, 97) + '...' : match[0],
-                  context,
+                  match: isSecret
+                    ? redactSecret(rawMatch)
+                    : (rawMatch.length > 100 ? rawMatch.slice(0, 97) + '...' : rawMatch),
+                  context: isSecret ? '[redacted]' : context,
                   fix: rule.fix,
                 });
-
-                byCategory[rule.category] = (byCategory[rule.category] || 0) + 1;
-                bySeverity[rule.severity] = (bySeverity[rule.severity] || 0) + 1;
               }
             }
           }
@@ -167,13 +149,27 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
         }
       }
 
-      // Calculate security score (100 - deductions)
-      const deduction = findings.filter((f: any) => f.severity === 'CRITICAL').length * 5 +
-        findings.filter((f: any) => f.severity === 'HIGH').length * 2 +
-        findings.filter((f: any) => f.severity === 'MEDIUM').length * 0.5;
+      const SEV_ORDER: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+      const seenKeys = new Set<string>();
+      const deduped: any[] = [];
+      for (const f of findings) {
+        const key = `${f.category}|${f.file}|${f.line}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        deduped.push(f);
+      }
+      deduped.sort((a, b) => (SEV_ORDER[b.severity] || 0) - (SEV_ORDER[a.severity] || 0));
+
+      const byCategory: Record<string, number> = {};
+      const bySeverity: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+      for (const f of deduped) {
+        byCategory[f.category] = (byCategory[f.category] || 0) + 1;
+        bySeverity[f.severity] = (bySeverity[f.severity] || 0) + 1;
+      }
+      const deduction = bySeverity.CRITICAL * 5 + bySeverity.HIGH * 2 + bySeverity.MEDIUM * 0.5;
       const score = Math.max(0, Math.round(100 - deduction));
 
-      const limited = findings.slice(0, limit);
+      const limited = deduped.slice(0, limit);
 
       return {
         content: [{
@@ -181,7 +177,7 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
           text: JSON.stringify({
             summary: {
               totalScanned: files.length,
-              findings: findings.length,
+              findings: deduped.length,
               byCategory,
               bySeverity,
               score,
@@ -190,20 +186,9 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
           }, null, 2),
         }],
       };
-    },
-  );
+  };
 
-  server.tool(
-    'fix_apply',
-    'Apply a security fix suggestion to a file. Creates a backup before modifying. CRITICAL rules require confirm: true.',
-    {
-      ruleId: z.string().describe('Security rule ID (e.g. "hardcoded_secret")'),
-      file: z.string().describe('File path relative to repo root'),
-      line: z.number().describe('Line number where the issue was found'),
-      confirm: z.boolean().optional().default(false).describe('Confirmation required for CRITICAL rules'),
-      repo: z.string().optional(),
-    },
-    async ({ ruleId, file, line, confirm, repo }) => {
+  const runFix = async ({ ruleId, file, line, confirm, repo }: { ruleId: string; file: string; line: number; confirm: boolean; repo?: string }) => {
       const { root } = getDb(repo);
       const rules = loadRules();
       const rule = rules.find(r => r.id === ruleId);
@@ -240,6 +225,30 @@ export function registerSecurityTools(server: McpServer, deps: Deps): void {
       writeFileSync(fullPath, newContent, 'utf-8');
 
       return { content: [{ type: 'text' as const, text: `Fix comment added for rule "${ruleId}" at ${file}:${line}\nSeverity: ${rule.severity}\nBackup: ${relative(root, backupPath)}\nSuggestion: ${rule.fix ?? 'Manual review needed'}\n\nAdded fix annotation above line ${line}. Original line is preserved below — replace manually following the suggestion.` }] };
+  };
+
+  server.tool(
+    'security_scan',
+    'Scan codebase for security vulnerabilities using 190+ built-in rules across 25 categories. Replaces multiple manual grep() calls. Pass `mode: "fix"` with {ruleId,file,line} to apply a fix (backs up first; CRITICAL needs confirm:true). Scan categories: secrets, injection, rce, xss, deserialization, ssrf, xxe, path-traversal, file-upload, unicode, dangerous, config, data-leak, crypto, auth, jwt, cors-headers, dependency, cloud, docker, kubernetes, iac, business-logic, api-security, misc, file-access.',
+    {
+      mode: z.enum(['scan', 'fix']).optional().default('scan').describe('scan=find vulnerabilities; fix=apply a fix suggestion'),
+      scope: z.enum(['all', 'secrets', 'injection', 'rce', 'xss', 'deserialization', 'ssrf', 'xxe', 'path-traversal', 'file-upload', 'unicode', 'dangerous', 'config', 'data-leak', 'crypto', 'auth', 'jwt', 'cors-headers', 'dependency', 'cloud', 'docker', 'kubernetes', 'iac', 'business-logic', 'api-security', 'misc', 'file-access']).optional().default('all').describe('Scan scope (mode=scan)'),
+      severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).optional().describe('Minimum severity filter (mode=scan)'),
+      limit: z.number().optional().default(50).describe('Max findings (mode=scan)'),
+      ruleId: z.string().optional().describe('Security rule ID (mode=fix)'),
+      file: z.string().optional().describe('File path relative to repo root (mode=fix)'),
+      line: z.number().optional().describe('Line number of the issue (mode=fix)'),
+      confirm: z.boolean().optional().default(false).describe('Confirmation for CRITICAL rules (mode=fix)'),
+      repo: z.string().optional(),
+    },
+    async ({ mode, scope, severity, limit, ruleId, file, line, confirm, repo }) => {
+      if (mode === 'fix') {
+        if (!ruleId || !file || line == null) {
+          return { content: [{ type: 'text' as const, text: 'mode=fix requires `ruleId`, `file`, and `line`.' }] };
+        }
+        return runFix({ ruleId, file, line, confirm: confirm ?? false, repo });
+      }
+      return runScan({ scope: scope ?? 'all', severity, limit: limit ?? 50, repo });
     },
   );
 }
